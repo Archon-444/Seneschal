@@ -1,6 +1,7 @@
 import type { EvidenceType, ScopeType } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, require_, scope } from "../authz";
+import { resolveClientScopeIds, scopeMatchClauses } from "./clientScope";
 
 // Evidence timeline reads (T8.2). Writes go only through recordEvidence (T8.1).
 
@@ -45,9 +46,21 @@ export interface EvidenceFilters {
 
 export async function listEvidence(ctx: AuthzContext, filters?: EvidenceFilters) {
   require_(ctx, "evidence.read");
+  // CLIENT_VIEWER: evidence is scope-polymorphic — constrain to events whose
+  // propertyId/tenancyId or scopeType/scopeId resolve to the viewer's client.
+  let clientOr = null;
+  if (ctx.clientPrincipalId) {
+    const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId);
+    clientOr = [
+      { propertyId: { in: ids.propertyIds } },
+      { tenancyId: { in: ids.tenancyIds } },
+      ...scopeMatchClauses(ids),
+    ];
+  }
   return prisma.evidenceEvent.findMany({
     where: {
       ...scope(ctx),
+      ...(clientOr ? { OR: clientOr } : {}),
       ...(filters?.scopeType ? { scopeType: filters.scopeType } : {}),
       ...(filters?.scopeId ? { scopeId: filters.scopeId } : {}),
       ...(filters?.propertyId ? { propertyId: filters.propertyId } : {}),

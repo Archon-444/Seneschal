@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, require_, scope } from "../authz";
+import { allScopeIds, resolveClientScopeIds } from "./clientScope";
 import { recordEvidence } from "../evidence";
 import { formatDubaiDate, todayInDubai } from "../calculators/dates";
 
@@ -69,9 +70,13 @@ export async function buildClientReport(
     ),
   );
 
+  // The report is per-client: proof requests and risk flags are scope-polymorphic,
+  // so constrain both to scopes resolving to this client (T1.4 class of leak).
+  const clientIds = await resolveClientScopeIds(ctx.workspaceId, clientPrincipalId);
   const proofRequests = await prisma.proofRequest.findMany({
     where: {
       workspaceId: ctx.workspaceId,
+      id: { in: clientIds.proofRequestIds },
       status: { notIn: ["APPROVED", "CLOSED"] },
     },
     orderBy: { createdAt: "desc" },
@@ -80,7 +85,7 @@ export async function buildClientReport(
   const riskFlags = await prisma.riskFlag.findMany({
     where: { workspaceId: ctx.workspaceId, status: { in: ["OPEN", "ACKNOWLEDGED"] } },
   });
-  const clientFlagScopes = new Set([...tenancyIds, ...properties.map((p) => p.id)]);
+  const clientFlagScopes = new Set(allScopeIds(clientIds));
 
   const missingDocuments: string[] = [];
   for (const p of properties) {

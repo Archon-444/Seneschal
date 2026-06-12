@@ -1,6 +1,7 @@
 import type { DocAccessAction, DocumentKind, ScopeType } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, assertSameWorkspace, require_, scope } from "../authz";
+import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
+import { resolveClientScopeIds, scopeBelongsToClient, scopeMatchClauses } from "./clientScope";
 import { sha256Hex } from "../crypto";
 import { newStorageKey, signedFileUrl, storage } from "../storage";
 import { recordEvidence } from "../evidence";
@@ -102,9 +103,15 @@ export async function listDocuments(
   opts?: { scopeType?: ScopeType; scopeId?: string; kind?: DocumentKind; includeArchived?: boolean },
 ) {
   require_(ctx, "documents.read");
+  // CLIENT_VIEWER: documents are scope-polymorphic, so workspace filtering is
+  // not enough — restrict to scopes resolving to the viewer's client.
+  const clientClauses = ctx.clientPrincipalId
+    ? scopeMatchClauses(await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId))
+    : null;
   return prisma.document.findMany({
     where: {
       ...scope(ctx),
+      ...(clientClauses ? { OR: clientClauses } : {}),
       ...(opts?.scopeType ? { scopeType: opts.scopeType } : {}),
       ...(opts?.scopeId ? { scopeId: opts.scopeId } : {}),
       ...(opts?.kind ? { kind: opts.kind } : {}),
@@ -118,6 +125,12 @@ export async function getDocument(ctx: AuthzContext, id: string) {
   require_(ctx, "documents.read");
   const doc = await prisma.document.findUnique({ where: { id } });
   assertSameWorkspace(ctx, doc);
+  if (ctx.clientPrincipalId) {
+    const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId);
+    if (!scopeBelongsToClient(ids, doc!.scopeType, doc!.scopeId)) {
+      throw new AuthzError("Not found", 404); // never confirm existence outside the client scope
+    }
+  }
   return doc;
 }
 
