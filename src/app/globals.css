@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  /* Seneschal palette: premium, calm, trustworthy */
+  --color-ivory-50: #fdfcf8;
+  --color-ivory-100: #f8f5ec;
+  --color-ivory-200: #efe9d9;
+  --color-ivory-300: #e3dac2;
+
+  --color-navy-50: #eef1f6;
+  --color-navy-100: #d5dce8;
+  --color-navy-300: #7d8db0;
+  --color-navy-500: #3b4d77;
+  --color-navy-700: #243254;
+  --color-navy-800: #1a2540;
+  --color-navy-900: #111a30;
+
+  --color-gold-300: #e3c882;
+  --color-gold-500: #c9a44c;
+  --color-gold-700: #a07f2e;
+
+  --color-verde-100: #e1efe5;
+  --color-verde-500: #3d7a52;
+  --color-verde-700: #2a5a3a;
+
+  --color-claret-100: #f7e4e1;
+  --color-claret-500: #a4392f;
+  --color-claret-700: #7d2920;
+
+  --font-display: "Georgia", "Times New Roman", serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+}
+
+body {
+  background-color: var(--color-ivory-50);
+  color: var(--color-navy-900);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* money and dates render in monospace per design language */
+.figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
