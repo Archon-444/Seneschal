@@ -1,0 +1,127 @@
+{
+  "version": "1.0",
+  "notes": "Ground truth for seneschal-fixtures-documents.md. Dates ISO, computed in Asia/Dubai. Harness asserts field equality; confidence thresholds per T6.3.",
+  "fixtures": [
+    {
+      "id": "fixture-1-contract-marina",
+      "documentKind": "TENANCY_CONTRACT",
+      "expected": {
+        "landlordName": "Al Noor Properties LLC",
+        "tenantName": "Ricardo Fernandes",
+        "community": "Dubai Marina",
+        "building": "Marina Heights Tower",
+        "unitNo": "1204",
+        "propertyType": "Apartment",
+        "bedrooms": 1,
+        "ejariNo": "2025/118402",
+        "startDate": "2025-09-16",
+        "endDate": "2026-09-15",
+        "annualRent": 72000,
+        "depositAmount": 5000,
+        "noticePeriodDays": 90,
+        "noticePeriodSource": "default_no_override_clause",
+        "paymentItems": [
+          {"seq": 1, "dueDate": "2025-09-16", "amount": 18000, "instrument": "CHEQUE", "chequeNo": "000451", "bank": "Emirates NBD"},
+          {"seq": 2, "dueDate": "2025-12-16", "amount": 18000, "instrument": "CHEQUE", "chequeNo": "000452", "bank": "Emirates NBD"},
+          {"seq": 3, "dueDate": "2026-03-16", "amount": 18000, "instrument": "CHEQUE", "chequeNo": "000453", "bank": "Emirates NBD"},
+          {"seq": 4, "dueDate": "2026-06-16", "amount": 18000, "instrument": "CHEQUE", "chequeNo": "000454", "bank": "Emirates NBD"}
+        ]
+      },
+      "derived": {
+        "noticeGateAt": "2026-06-17",
+        "renewalDate": "2026-09-16",
+        "chequeTotalMatchesAnnualRent": true
+      },
+      "expectedRiskFlags": []
+    },
+    {
+      "id": "fixture-2-contract-bayview-override",
+      "documentKind": "TENANCY_CONTRACT",
+      "expected": {
+        "landlordName": "Lumina Real Estate Investments FZ-LLC",
+        "tenantName": "Amal & Mazen Haddad",
+        "community": "Business Bay",
+        "building": "Bayview Residence",
+        "unitNo": "803",
+        "ejariNo": null,
+        "startDate": "2025-11-01",
+        "endDate": "2026-10-31",
+        "annualRent": 110000,
+        "depositAmount": 8000,
+        "noticePeriodDays": 60,
+        "noticePeriodSource": "contract_clause_9",
+        "paymentItems": [
+          {"seq": 1, "dueDate": "2025-11-01", "amount": 55000, "instrument": "CHEQUE", "bank": "RAKBANK"},
+          {"seq": 2, "dueDate": "2026-05-01", "amount": 55000, "instrument": "CHEQUE", "bank": "RAKBANK"}
+        ]
+      },
+      "derived": {
+        "noticeGateAt": "2026-09-01",
+        "renewalDate": "2026-11-01",
+        "chequeTotalMatchesAnnualRent": true
+      },
+      "expectedRiskFlags": ["MISSING_EJARI"]
+    },
+    {
+      "id": "fixture-3-ejari-certificate",
+      "documentKind": "EJARI_CERTIFICATE",
+      "expected": {
+        "certificateNo": "2025/118402",
+        "startDate": "2025-09-16",
+        "endDate": "2026-09-15",
+        "annualRent": 72000,
+        "building": "Marina Heights Tower",
+        "unitNo": "1204",
+        "usage": "Residential",
+        "landlordName": "AL NOOR PROPERTIES LLC",
+        "tenantName": "RICARDO FERNANDES",
+        "issueDate": "2025-09-18"
+      },
+      "crossCheck": {
+        "matchesFixture": "fixture-1-contract-marina",
+        "fields": ["ejariNo", "startDate", "endDate", "annualRent"]
+      }
+    },
+    {
+      "id": "fixture-4-cheque-schedule",
+      "documentKind": "RECEIPT",
+      "expected": {
+        "tenancyRef": "TC-2025-118402",
+        "items": [
+          {"chequeNo": "000451", "dueDate": "2025-09-16", "amount": 18000, "status": "CLEARED", "clearedDate": "2025-09-17"},
+          {"chequeNo": "000452", "dueDate": "2025-12-16", "amount": 18000, "status": "CLEARED", "clearedDate": "2025-12-18"},
+          {"chequeNo": "000453", "dueDate": "2026-03-16", "amount": 18000, "status": "CLEARED", "clearedDate": "2026-03-17"},
+          {"chequeNo": "000454", "dueDate": "2026-06-16", "amount": 18000, "status": "SCHEDULED"}
+        ]
+      }
+    },
+    {
+      "id": "fixture-5-quotation",
+      "documentKind": "QUOTATION",
+      "expected": {
+        "vendorName": "CoolAir Technical Services LLC",
+        "quoteRef": "Q-2026-0331",
+        "date": "2026-06-02",
+        "amount": 850,
+        "currency": "AED",
+        "propertyHint": "Unit 1204, Marina Heights Tower"
+      }
+    },
+    {
+      "id": "fixture-6-invoice-mismatch",
+      "documentKind": "INVOICE",
+      "expected": {
+        "vendorName": "CoolAir Technical Services LLC",
+        "invoiceRef": "INV-2026-0512",
+        "date": "2026-06-09",
+        "amount": 1050,
+        "currency": "AED",
+        "quoteRef": "Q-2026-0331"
+      },
+      "crossCheck": {
+        "matchesFixture": "fixture-5-quotation",
+        "assertion": "invoice.amount != quote.amount → surface delta in review; never auto-approve"
+      }
+    }
+  ]
+}

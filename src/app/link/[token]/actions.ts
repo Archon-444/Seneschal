@@ -1,0 +1,47 @@
+"use server";
+
+import { headers } from "next/headers";
+import { validateLinkToken, consumeLinkUse } from "@/server/services/secureLinks";
+import { submitProofViaLink } from "@/server/services/proofs";
+
+export type SubmitState =
+  | { status: "idle" }
+  | { status: "done" }
+  | { status: "error"; message: string };
+
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
+
+export async function submitProofAction(_prev: SubmitState, formData: FormData): Promise<SubmitState> {
+  const token = String(formData.get("token") ?? "");
+  const validation = await validateLinkToken(token);
+  if (!validation.ok) {
+    return { status: "error", message: "This link is no longer available." };
+  }
+
+  const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) return { status: "error", message: "Choose at least one file." };
+  for (const f of files) {
+    if (f.size > MAX_FILE_BYTES) {
+      return { status: "error", message: `${f.name} is larger than 15 MB.` };
+    }
+  }
+
+  const h = await headers();
+  await submitProofViaLink(
+    validation.link,
+    await Promise.all(
+      files.map(async (f) => ({
+        fileName: f.name,
+        mime: f.type || "application/octet-stream",
+        data: Buffer.from(await f.arrayBuffer()),
+      })),
+    ),
+    String(formData.get("note") ?? "") || undefined,
+    {
+      ip: h.get("x-forwarded-for") ?? undefined,
+      device: h.get("user-agent") ?? undefined,
+    },
+  );
+  await consumeLinkUse(validation.link.id);
+  return { status: "done" };
+}

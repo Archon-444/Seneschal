@@ -1,0 +1,896 @@
+// Seneschal — Prisma schema v1.0
+// Derived from spec v2 (§6) + v2.1 patch (P2,P3,P5,P6,P8,P9,P10) + v2.2 decisions (D12,D13,D15)
+// Conventions: UUID PKs, workspaceId on every scoped table, archive (not delete),
+// EvidenceEvent / AuditEvent / DocumentAccessLog / NotificationMessage are INSERT-ONLY (enforced in app layer + DB grants).
+// Stage tags: [1A] build now · [1B] schema now, UI later · [S2] deferred, do not migrate yet (commented at end).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Identity & access [1A]
+
+model Workspace {
+  id          String   @id @default(uuid())
+  name        String
+  type        WorkspaceType
+  createdAt   DateTime @default(now())
+  archivedAt  DateTime?
+  memberships Membership[]
+  @@index([type])
+}
+
+enum WorkspaceType {
+  OWNER
+  FIDUCIARY
+  OPERATOR
+  INTERNAL
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  phone       String?  @unique
+  name        String
+  locale      String   @default("en")
+  isStaff     Boolean  @default(false)
+  waOptInAt   DateTime?
+  createdAt   DateTime @default(now())
+  memberships Membership[]
+}
+
+model Membership {
+  id                String  @id @default(uuid())
+  workspaceId       String
+  userId            String
+  role              Role
+  clientPrincipalId String?          // required when role = CLIENT_VIEWER (scopes to one client)
+  createdAt         DateTime @default(now())
+  revokedAt         DateTime?
+  workspace         Workspace @relation(fields: [workspaceId], references: [id])
+  user              User      @relation(fields: [userId], references: [id])
+  @@unique([workspaceId, userId, role])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+enum Role {
+  WORKSPACE_ADMIN
+  MANAGER
+  FIDUCIARY
+  CLIENT_VIEWER
+  AGENT
+  LICENSED_PARTNER
+  VENDOR
+  AUDITOR
+}
+// Staff is NOT a membership role: staff access goes through the audited admin service path only (User.isStaff).
+
+// ───────────────────────────── Core records [1A]
+
+model ClientPrincipal {
+  id          String   @id @default(uuid())
+  workspaceId String
+  displayName String
+  contactInfo Json?
+  notes       String?
+  createdAt   DateTime @default(now())
+  archivedAt  DateTime?            // D12: archive lifecycle, never hard delete
+  @@index([workspaceId])
+}
+
+model Contact {
+  id          String      @id @default(uuid())
+  workspaceId String
+  kind        ContactKind
+  name        String
+  phone       String?
+  email       String?
+  company     String?
+  notes       String?
+  createdAt   DateTime    @default(now())
+  archivedAt  DateTime?
+  @@index([workspaceId, kind])
+}
+
+enum ContactKind {
+  OWNER
+  TENANT
+  AGENT
+  VENDOR
+  CONTRACTOR
+  CLIENT
+  PARTNER
+  BUILDING_MANAGEMENT
+  ACCOUNTANT
+  LAWYER
+  OTHER
+}
+
+model Property {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  clientPrincipalId String?
+  community         String
+  building          String?
+  unitNo            String?
+  emirate           String   @default("Dubai")
+  propertyType      String?          // apartment, villa, office...
+  bedrooms          Int?
+  sizeSqft          Int?
+  assignedAgentId   String?          // Contact
+  serviceChargeInfo Json?
+  riskStatus        String?
+  notes             String?
+  createdAt         DateTime @default(now())
+  archivedAt        DateTime?
+  tenancies         Tenancy[]
+  @@index([workspaceId, clientPrincipalId])
+}
+// TODO [later]: optional Unit entity under Property for multi-unit assets.
+
+model Tenancy {
+  id               String        @id @default(uuid())
+  workspaceId      String
+  propertyId       String
+  landlordContactId String?
+  tenantContactId  String?
+  ejariNo          String?
+  startDate        DateTime      // date-only semantics; compute in Asia/Dubai, store UTC midnight
+  endDate          DateTime
+  annualRent       Decimal       @db.Decimal(12, 2)
+  depositAmount    Decimal?      @db.Decimal(12, 2)
+  paymentTermsNote String?
+  noticePeriodDays Int           @default(90)   // contract override supported (fixture: 60-day clause)
+  noticeGateAt     DateTime?     // cached; authoritative rows live in Deadline
+  status           TenancyStatus @default(ACTIVE)
+  source           RecordSource  @default(MANUAL)
+  contractDocId    String?
+  createdAt        DateTime      @default(now())
+  archivedAt       DateTime?
+  property         Property      @relation(fields: [propertyId], references: [id])
+  paymentItems     PaymentItem[]
+  deadlines        Deadline[]
+  @@index([workspaceId, propertyId])
+  @@index([workspaceId, endDate])
+}
+
+enum TenancyStatus {
+  ACTIVE
+  RENEWAL_DUE
+  NOTICE_SERVED
+  NEGOTIATING
+  RENEWED
+  ENDING
+  DISPUTED
+  ARCHIVED
+}
+enum RecordSource {
+  OCR
+  EXCEL
+  MANUAL
+}
+
+// ───────────────────────────── Deadlines & calendar [1A]
+
+model Deadline {
+  id           String       @id @default(uuid())
+  workspaceId  String
+  tenancyId    String?
+  propertyId   String?
+  kind         DeadlineKind
+  dueAt        DateTime
+  status       DeadlineStatus @default(OPEN)
+  computedFrom Json?          // { rule: "notice_gate_v1", inputs: {...} } — calculator version citation
+  createdAt    DateTime     @default(now())
+  tenancy      Tenancy?     @relation(fields: [tenancyId], references: [id])
+  @@index([workspaceId, dueAt])
+  @@index([workspaceId, status, kind])
+}
+
+enum DeadlineKind {
+  NOTICE_GATE
+  CONTRACT_EXPIRY
+  RENEWAL_DATE
+  CHEQUE_DUE
+  CHEQUE_FOLLOWUP
+  SERVICE_CHARGE_DUE
+  INSURANCE_EXPIRY
+  DOCUMENT_EXPIRY
+  APPROVAL_DUE
+  TENANT_RESPONSE_DUE
+  EJARI_RENEWAL
+  CUSTOM
+}
+enum DeadlineStatus {
+  OPEN
+  DONE
+  MISSED
+  CANCELLED
+}
+
+// ───────────────────────────── Payments register [1A] — record-keeping only, no custody
+
+model PaymentItem {
+  id            String        @id @default(uuid())
+  workspaceId   String
+  tenancyId     String
+  seq           Int
+  dueDate       DateTime
+  amount        Decimal       @db.Decimal(12, 2)
+  instrument    Instrument    @default(CHEQUE)
+  chequeNo      String?
+  bank          String?
+  status        PaymentStatus @default(SCHEDULED)
+  proofDocId    String?
+  confirmedById String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  tenancy       Tenancy       @relation(fields: [tenancyId], references: [id])
+  @@unique([tenancyId, seq])
+  @@index([workspaceId, dueDate])
+  @@index([workspaceId, status])
+}
+
+enum Instrument {
+  CHEQUE
+  TRANSFER
+  DDS
+}
+enum PaymentStatus {
+  SCHEDULED
+  REQUESTED
+  RECEIVED
+  DEPOSITED
+  CLEARED
+  LATE
+  BOUNCED
+  CANCELLED
+}
+
+// ───────────────────────────── Documents [1A]
+
+model Document {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  scopeType    ScopeType
+  scopeId      String?
+  kind         DocumentKind
+  fileName     String
+  mime         String
+  sizeBytes    Int
+  storageKey   String   @unique
+  sha256       String                 // integrity hash at ingest
+  uploadedById String?                // null when via secure link
+  secureLinkId String?
+  createdAt    DateTime @default(now())
+  archivedAt   DateTime?
+  @@index([workspaceId, scopeType, scopeId])
+  @@index([sha256])
+}
+
+enum ScopeType {
+  WORKSPACE
+  CLIENT
+  PROPERTY
+  TENANCY
+  PAYMENT_ITEM
+  PROOF_REQUEST
+  MAINTENANCE_CASE
+  IMPORT_BATCH
+  REPORT
+  TASK
+}
+enum DocumentKind {
+  TENANCY_CONTRACT
+  EJARI_CERTIFICATE
+  TITLE_DEED
+  ID_DOCUMENT
+  CHEQUE_IMAGE
+  RECEIPT
+  BANK_CONFIRMATION
+  INVOICE
+  QUOTATION
+  MAINTENANCE_PHOTO
+  HANDOVER_REPORT
+  NOTICE
+  ACKNOWLEDGEMENT
+  APPROVAL
+  SERVICE_CHARGE_STATEMENT
+  POA_NOC
+  OTHER
+}
+
+model DocumentAccessLog {            // P6: dedicated, insert-only — never buried in AuditEvent
+  id           String   @id @default(uuid())
+  workspaceId  String
+  documentId   String
+  actorUserId  String?
+  secureLinkId String?
+  partnerOrgId String?
+  action       DocAccessAction
+  ip           String?
+  device       String?
+  createdAt    DateTime @default(now())
+  @@index([workspaceId, documentId])
+  @@index([documentId, createdAt])
+}
+
+enum DocAccessAction {
+  VIEWED
+  DOWNLOADED
+  UPLOADED
+  DELETED
+  EXPORTED
+  SHARED
+}
+
+// ───────────────────────────── Intake: OCR-first [1A thin] + Excel fallback [1A]
+
+model ExtractionJob {                // D13: thin pipeline in 1A — upload → extract → review → commit
+  id           String   @id @default(uuid())
+  workspaceId  String
+  documentId   String
+  status       ExtractionStatus @default(PENDING)
+  model        String?
+  rawOutput    Json?                  // proposed fields
+  confidence   Json?                  // per-field confidence
+  reviewedById String?
+  reviewedAt   DateTime?
+  importBatchId String?               // commits flow through the same batch machinery as Excel
+  createdAt    DateTime @default(now())
+  @@index([workspaceId, status])
+}
+
+enum ExtractionStatus {
+  PENDING
+  EXTRACTED
+  REVIEWING
+  COMMITTED
+  REJECTED
+  FAILED
+}
+
+model ImportBatch {                  // P8: nothing writes to trusted records until commit
+  id          String      @id @default(uuid())
+  workspaceId String
+  source      ImportSource
+  fileDocId   String?
+  mappingJson Json?
+  status      ImportStatus @default(UPLOADED)
+  reviewerId  String?
+  committedAt DateTime?
+  rolledBackAt DateTime?
+  createdAt   DateTime    @default(now())
+  rows        ImportRow[]
+  @@index([workspaceId, status])
+}
+
+enum ImportSource {
+  EXCEL
+  DOCUMENTS
+}
+enum ImportStatus {
+  UPLOADED
+  MAPPED
+  REVIEWING
+  COMMITTED
+  ROLLED_BACK
+}
+
+model ImportRow {
+  id                String        @id @default(uuid())
+  workspaceId       String
+  batchId           String
+  rawJson           Json
+  mappedJson        Json?
+  status            ImportRowStatus @default(PENDING)
+  conflictReason    String?        // duplicate ejariNo, overlapping tenancy dates — blocks ROW not batch
+  createdRecordRefs Json?          // [{type, id}] for rollback-as-archive
+  batch             ImportBatch   @relation(fields: [batchId], references: [id])
+  @@index([batchId, status])
+}
+
+enum ImportRowStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CONFLICT
+}
+
+// ───────────────────────────── Proof requests & secure links [1A] — the core verb
+
+model ProofRequest {
+  id                String      @id @default(uuid())
+  workspaceId       String
+  scopeType         ScopeType
+  scopeId           String?
+  title             String
+  requiredEvidence  String
+  assignedContactId String
+  dueAt             DateTime?
+  status            ProofStatus @default(OPEN)
+  decisionById      String?
+  decisionAt        DateTime?
+  decisionNote      String?
+  createdById       String
+  createdAt         DateTime    @default(now())
+  @@index([workspaceId, status])
+  @@index([workspaceId, assignedContactId])
+}
+
+enum ProofStatus {
+  OPEN
+  SENT
+  WAITING_PROOF
+  SUBMITTED
+  APPROVED
+  REJECTED
+  OVERDUE
+  CLOSED
+}
+
+model SecureLink {
+  id          String        @id @default(uuid())
+  workspaceId String
+  purpose     LinkPurpose
+  scopeType   ScopeType
+  scopeId     String
+  contactId   String?
+  tokenHash   String        @unique   // NEVER store raw token
+  expiresAt   DateTime
+  maxUses     Int?
+  useCount    Int           @default(0)
+  revokedAt   DateTime?
+  createdById String
+  createdAt   DateTime      @default(now())
+  @@index([workspaceId, purpose])
+}
+
+enum LinkPurpose {
+  PROOF_UPLOAD
+  DOCUMENT_SHARE
+  APPROVAL
+  TENANT_OFFER
+} // TENANT_OFFER activates Stage 2
+
+model ConsentRecord {                // P5
+  id            String        @id @default(uuid())
+  workspaceId   String
+  contactId     String
+  purpose       ConsentPurpose
+  source        ConsentSource
+  noticeVersion String
+  secureLinkId  String?
+  grantedAt     DateTime      @default(now())
+  revokedAt     DateTime?
+  @@index([workspaceId, contactId])
+}
+
+enum ConsentPurpose {
+  PROCESSING
+  MESSAGING
+  DOCUMENT_STORAGE
+  LINK_INTERACTION
+}
+enum ConsentSource {
+  SECURE_LINK
+  WHATSAPP_OPTIN
+  FORM
+  CONTRACT
+}
+
+// ───────────────────────────── Tasks & workflow instances [1A minimal]
+
+model Task {
+  id          String     @id @default(uuid())
+  workspaceId String
+  scopeType   ScopeType
+  scopeId     String?
+  title       String
+  assigneeUserId String?
+  assigneeContactId String?
+  dueAt       DateTime?
+  priority    Int        @default(0)
+  status      TaskStatus @default(OPEN)
+  proofDocId  String?
+  workflowInstanceId String?
+  createdAt   DateTime   @default(now())
+  @@index([workspaceId, status])
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_PROOF
+  SUBMITTED
+  APPROVED
+  REJECTED
+  OVERDUE
+  CLOSED
+}
+
+model WorkflowInstance {             // P3: config-defined templates, NOT a builder
+  id              String   @id @default(uuid())
+  workspaceId     String
+  templateCode    String   // e.g. cheque_followup_v1, proof_request_v1
+  templateVersion Int
+  scopeType       ScopeType
+  scopeId         String
+  state           Json?
+  createdAt       DateTime @default(now())
+  @@index([workspaceId, templateCode])
+}
+
+// ───────────────────────────── Approvals [1A]
+
+model Approval {
+  id              String         @id @default(uuid())
+  workspaceId     String
+  subjectType     String         // offer | notice | terms | job | import_batch | report
+  subjectId       String
+  requestedOfUserId String?
+  requestedOfContactId String?
+  payloadHash     String         // hash of exactly what was approved
+  channel         Channel?
+  decision        ApprovalDecision?
+  decidedAt       DateTime?
+  createdAt       DateTime       @default(now())
+  @@index([workspaceId, subjectType, subjectId])
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+// ───────────────────────────── Notifications [1A email · 1B whatsapp]
+
+model NotificationMessage {          // insert-only message log; doubles as evidence source
+  id          String    @id @default(uuid())
+  workspaceId String
+  channel     Channel
+  direction   Direction
+  toUserId    String?
+  toContactId String?
+  templateCode String?
+  subject     String?
+  bodyRef     String?              // storage key or inline ref
+  providerRef String?              // wa_message_id / email provider id
+  status      MessageStatus @default(QUEUED)
+  relatedType ScopeType?
+  relatedId   String?
+  createdAt   DateTime  @default(now())
+  @@index([workspaceId, channel, createdAt])
+}
+
+enum Channel {
+  EMAIL
+  WHATSAPP
+  SMS
+  INAPP
+}
+enum Direction {
+  OUTBOUND
+  INBOUND
+}
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RECEIVED
+}
+
+model Outbox {                       // §7: no business logic in webhook handlers; all side effects via outbox
+  id          String   @id @default(uuid())
+  topic       String
+  payload     Json
+  status      String   @default("pending") // pending | dispatched | failed
+  attempts    Int      @default(0)
+  availableAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  @@index([status, availableAt])
+}
+
+// ───────────────────────────── Evidence, audit, risk [1A]
+
+model EvidenceEvent {                // P9 taxonomy; insert-only; corrections are new events referencing old
+  id           String        @id @default(uuid())
+  workspaceId  String
+  type         EvidenceType
+  actorType    ActorType
+  actorId      String?
+  onBehalfOfId String?
+  scopeType    ScopeType
+  scopeId      String?
+  propertyId   String?
+  tenancyId    String?
+  payload      Json?
+  payloadHash  String?
+  supersedesId String?
+  createdAt    DateTime      @default(now())
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, scopeType, scopeId])
+  @@index([workspaceId, tenancyId])
+}
+
+enum ActorType {
+  USER
+  STAFF
+  SYSTEM
+  PARTNER
+  TENANT_LINK
+  VENDOR_LINK
+}
+
+enum EvidenceType {
+  DOCUMENT_UPLOADED
+  DOCUMENT_VIEWED
+  FIELD_EXTRACTED
+  FIELD_CONFIRMED
+  FIELD_CORRECTED
+  IMPORT_COMMITTED
+  IMPORT_ROLLED_BACK
+  REMINDER_SENT
+  MESSAGE_RECEIVED
+  WHATSAPP_DELIVERY_STATUS
+  TASK_ASSIGNED
+  TASK_COMPLETED
+  PROOF_REQUESTED
+  PROOF_UPLOADED
+  PROOF_APPROVED
+  PROOF_REJECTED
+  CHEQUE_DUE
+  CHEQUE_RECEIVED
+  CHEQUE_DEPOSITED
+  CHEQUE_CLEARED
+  CHEQUE_BOUNCED
+  MAINTENANCE_REPORTED
+  MAINTENANCE_QUOTE_UPLOADED
+  MAINTENANCE_APPROVED
+  MAINTENANCE_COMPLETED
+  TENANT_CONFIRMED
+  APPROVAL_REQUESTED
+  APPROVAL_GRANTED
+  APPROVAL_REJECTED
+  REPORT_GENERATED
+  REPORT_EXPORTED
+  EVIDENCE_PACK_EXPORTED
+  RENEWAL_ASSESSMENT_CREATED
+  INDEX_CAPTURED
+  NOTICE_GENERATED
+  NOTICE_APPROVED
+  NOTICE_SERVED
+  OFFER_PROPOSED
+  OFFER_COUNTERED
+  OFFER_ACCEPTED
+  TENANT_ACKNOWLEDGED
+  PARTNER_CASE_ASSIGNED
+  PARTNER_TASK_COMPLETED
+  CONSENT_GRANTED
+  CONSENT_REVOKED
+  RISK_FLAG_RAISED
+  RISK_FLAG_CLEARED
+}
+
+model AuditEvent {                   // security/admin log; insert-only; hash chain in v1.1 (D6)
+  id           String   @id @default(uuid())
+  workspaceId  String?
+  actorType    ActorType
+  actorId      String?
+  onBehalfOfId String?
+  verb         String                // workspace.update, membership.create, securelink.revoke, import.rollback...
+  objectType   String
+  objectId     String?
+  payloadHash  String?
+  ip           String?
+  createdAt    DateTime @default(now())
+  @@index([workspaceId, createdAt])
+}
+
+model RiskFlag {                     // P10: deterministic rules raise; agent may only PROPOSE
+  id          String       @id @default(uuid())
+  workspaceId String
+  scopeType   ScopeType
+  scopeId     String
+  code        RiskCode
+  severity    Severity
+  raisedBy    RaisedBy
+  ruleVersion String?
+  status      FlagStatus   @default(OPEN)
+  raisedAt    DateTime     @default(now())
+  clearedAt   DateTime?
+  clearedById String?
+  @@index([workspaceId, status])
+  @@unique([workspaceId, scopeType, scopeId, code, status]) // one open flag per code per scope
+}
+
+enum RiskCode {
+  MISSING_EJARI
+  MISSING_END_DATE
+  CHEQUE_TOTAL_MISMATCH
+  NOTICE_GATE_WITHIN_30D
+  PROOF_OVERDUE
+  AGENT_UNRESPONSIVE
+  PAYMENT_LATE
+  INVOICE_WITHOUT_QUOTE
+  MAINTENANCE_DONE_WITHOUT_TENANT_CONFIRMATION
+  DOCUMENT_EXPIRED
+  APPROVAL_PENDING_TOO_LONG
+  TENANCY_OVERLAP
+}
+enum Severity {
+  INFO
+  WARN
+  CRITICAL
+}
+enum RaisedBy {
+  RULE
+  AGENT_PROPOSED
+  STAFF
+}
+enum FlagStatus {
+  OPEN
+  ACKNOWLEDGED
+  CLEARED
+}
+
+// ───────────────────────────── Entitlements & billing [1A schema, gating minimal] (P2)
+
+model Plan {
+  id        String  @id @default(uuid())
+  code      String  @unique          // fiduciary_client_pack_v1 (per-client/year, D11)
+  name      String
+  features  Json
+  limits    Json
+  createdAt DateTime @default(now())
+}
+
+model Subscription {
+  id          String   @id @default(uuid())
+  workspaceId String
+  planId      String
+  status      String   @default("active")
+  period      String                 // YEAR (D8) | MONTH
+  startedAt   DateTime @default(now())
+  endsAt      DateTime?
+  @@index([workspaceId])
+}
+
+model WorkspaceEntitlement {
+  id          String @id @default(uuid())
+  workspaceId String
+  featureKey  String
+  value       Json
+  source      String @default("plan") // plan | override
+  @@unique([workspaceId, featureKey])
+}
+
+model UsageCounter {
+  id          String @id @default(uuid())
+  workspaceId String
+  metric      String                  // properties | cases | exports
+  period      String
+  count       Int    @default(0)
+  @@unique([workspaceId, metric, period])
+}
+
+model BillingEvent {
+  id          String   @id @default(uuid())
+  workspaceId String
+  kind        String
+  amount      Decimal? @db.Decimal(12, 2)
+  currency    String   @default("AED")
+  stripeRef   String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  @@index([workspaceId])
+}
+
+// ───────────────────────────── Maintenance [1B — schema now, UI later]
+
+model MaintenanceCase {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  propertyId      String
+  tenantContactId String?
+  category        String?
+  description     String?
+  status          MaintStatus @default(REPORTED)
+  assignedContactId String?
+  approvalId      String?
+  createdAt       DateTime @default(now())
+  closedAt        DateTime?
+  @@index([workspaceId, status])
+}
+
+enum MaintStatus {
+  REPORTED
+  ASSIGNED
+  QUOTE_REQUESTED
+  QUOTE_RECEIVED
+  AWAITING_APPROVAL
+  APPROVED
+  SCHEDULED
+  COMPLETED
+  TENANT_CONFIRMED
+  CLOSED
+  DISPUTED
+}
+
+model Quote {
+  id          String  @id @default(uuid())
+  workspaceId String
+  caseId      String
+  vendorContactId String?
+  amount      Decimal @db.Decimal(12, 2)
+  documentId  String?
+  createdAt   DateTime @default(now())
+  @@index([workspaceId, caseId])
+}
+
+model Invoice {
+  id          String  @id @default(uuid())
+  workspaceId String
+  caseId      String?
+  vendorContactId String?
+  amount      Decimal @db.Decimal(12, 2)
+  quoteId     String?               // null → INVOICE_WITHOUT_QUOTE risk flag
+  documentId  String?
+  createdAt   DateTime @default(now())
+  @@index([workspaceId, caseId])
+}
+
+// ───────────────────────────── Reporting [1A]
+
+model Report {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  kind              String                 // client_monthly | property_status | cheque_status ...
+  clientPrincipalId String?
+  params            Json?
+  documentId        String?
+  generatedById     String
+  createdAt         DateTime @default(now())
+  @@index([workspaceId, clientPrincipalId])
+}
+
+// ───────────────────────────── Stage 2 — DO NOT MIGRATE YET
+// RenewalCase, Offer, Notice, IndexCapture, PartnerOrg per spec v2 §6.
+// EvidenceType and LinkPurpose already reserve their values so Stage 2 adds tables without enum churn.
+
+// ───────────────────────────── Auth [1A — ADDITION to schema v1.0]
+// Reason: handoff allows "Supabase Auth (or clean auth abstraction)". We implement the
+// abstraction with email OTP (backlog T1.1) which needs OTP + session persistence.
+// These tables are auth-infrastructure only; swapping to Supabase removes them without
+// touching any scoped business table.
+
+model AuthOtp {
+  id        String   @id @default(uuid())
+  email     String
+  codeHash  String                    // never store the raw code
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  @@index([email, expiresAt])
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String
+  tokenHash  String   @unique         // never store the raw session token
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  ip         String?
+  device     String?
+  createdAt  DateTime @default(now())
+  @@index([userId])
+}

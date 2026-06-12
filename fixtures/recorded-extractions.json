@@ -1,0 +1,109 @@
+[
+  {
+    "fixtureId": "fixture-1-contract-marina",
+    "fields": {
+      "landlordName": { "value": "Al Noor Properties LLC", "confidence": 0.98, "source": "LANDLORD: Al Noor Properties LLC, P.O. Box 112233, Dubai" },
+      "tenantName": { "value": "Ricardo Fernandes", "confidence": 0.98, "source": "TENANT: Ricardo Fernandes, Passport P-BR-4471122" },
+      "community": { "value": "Dubai Marina", "confidence": 0.97, "source": "Unit 1204, Marina Heights Tower, Dubai Marina, Dubai" },
+      "building": { "value": "Marina Heights Tower", "confidence": 0.97, "source": "Unit 1204, Marina Heights Tower" },
+      "unitNo": { "value": "1204", "confidence": 0.97, "source": "PREMISES: Unit 1204" },
+      "propertyType": { "value": "Apartment", "confidence": 0.95, "source": "Type: Apartment, 1 Bedroom" },
+      "bedrooms": { "value": 1, "confidence": 0.95, "source": "Type: Apartment, 1 Bedroom" },
+      "ejariNo": { "value": "2025/118402", "confidence": 0.96, "source": "Ejari Registration No: 2025/118402" },
+      "startDate": { "value": "2025-09-16", "confidence": 0.97, "source": "TERM: From 16 September 2025" },
+      "endDate": { "value": "2026-09-15", "confidence": 0.97, "source": "to 15 September 2026" },
+      "annualRent": { "value": 72000, "confidence": 0.97, "source": "ANNUAL RENT: AED 72,000" },
+      "depositAmount": { "value": 5000, "confidence": 0.96, "source": "SECURITY DEPOSIT: AED 5,000" },
+      "noticePeriodDays": { "value": 90, "confidence": 0.88, "source": "(No clause varies the statutory notice arrangements.)" },
+      "noticePeriodSource": { "value": "default_no_override_clause", "confidence": 0.88, "source": "(No clause varies the statutory notice arrangements.)" },
+      "paymentItems": {
+        "value": [
+          { "seq": 1, "dueDate": "2025-09-16", "amount": 18000, "instrument": "CHEQUE", "chequeNo": "000451", "bank": "Emirates NBD" },
+          { "seq": 2, "dueDate": "2025-12-16", "amount": 18000, "instrument": "CHEQUE", "chequeNo": "000452", "bank": "Emirates NBD" },
+          { "seq": 3, "dueDate": "2026-03-16", "amount": 18000, "instrument": "CHEQUE", "chequeNo": "000453", "bank": "Emirates NBD" },
+          { "seq": 4, "dueDate": "2026-06-16", "amount": 18000, "instrument": "CHEQUE", "chequeNo": "000454", "bank": "Emirates NBD" }
+        ],
+        "confidence": 0.95,
+        "source": "PAYMENT: Rent payable in four (4) cheques as follows"
+      }
+    }
+  },
+  {
+    "fixtureId": "fixture-2-contract-bayview-override",
+    "fields": {
+      "landlordName": { "value": "Lumina Real Estate Investments FZ-LLC", "confidence": 0.97, "source": "Parties: Lumina Real Estate Investments FZ-LLC (Landlord)" },
+      "tenantName": { "value": "Amal & Mazen Haddad", "confidence": 0.96, "source": "and Amal & Mazen Haddad (Tenants)" },
+      "community": { "value": "Business Bay", "confidence": 0.96, "source": "Unit 803, Bayview Residence, Business Bay, Dubai" },
+      "building": { "value": "Bayview Residence", "confidence": 0.96, "source": "Unit 803, Bayview Residence" },
+      "unitNo": { "value": "803", "confidence": 0.97, "source": "Premises: Unit 803" },
+      "ejariNo": { "value": null, "confidence": 0.85, "source": "No Ejari registration number present in the document" },
+      "startDate": { "value": "2025-11-01", "confidence": 0.97, "source": "Term: 01 November 2025" },
+      "endDate": { "value": "2026-10-31", "confidence": 0.97, "source": "to 31 October 2026" },
+      "annualRent": { "value": 110000, "confidence": 0.97, "source": "Annual Rent: AED 110,000" },
+      "depositAmount": { "value": 8000, "confidence": 0.96, "source": "Deposit: AED 8,000" },
+      "noticePeriodDays": { "value": 60, "confidence": 0.92, "source": "no less than SIXTY (60) days prior to the expiry of the Term" },
+      "noticePeriodSource": { "value": "contract_clause_9", "confidence": 0.92, "source": "Clause 9 — Renewal and Notices" },
+      "paymentItems": {
+        "value": [
+          { "seq": 1, "dueDate": "2025-11-01", "amount": 55000, "instrument": "CHEQUE", "bank": "RAKBANK" },
+          { "seq": 2, "dueDate": "2026-05-01", "amount": 55000, "instrument": "CHEQUE", "bank": "RAKBANK" }
+        ],
+        "confidence": 0.94,
+        "source": "Clause 10 — Payment: Rent payable in two (2) instalments"
+      }
+    }
+  },
+  {
+    "fixtureId": "fixture-3-ejari-certificate",
+    "fields": {
+      "certificateNo": { "value": "2025/118402", "confidence": 0.97, "source": "Certificate No: 2025/118402" },
+      "startDate": { "value": "2025-09-16", "confidence": 0.96, "source": "Contract Start: 16/09/2025" },
+      "endDate": { "value": "2026-09-15", "confidence": 0.96, "source": "Contract End: 15/09/2026" },
+      "annualRent": { "value": 72000, "confidence": 0.96, "source": "Annual Rent: AED 72,000" },
+      "building": { "value": "Marina Heights Tower", "confidence": 0.96, "source": "Property: Marina Heights Tower, Unit 1204" },
+      "unitNo": { "value": "1204", "confidence": 0.96, "source": "Unit 1204, Dubai Marina" },
+      "usage": { "value": "Residential", "confidence": 0.95, "source": "Usage: Residential" },
+      "landlordName": { "value": "AL NOOR PROPERTIES LLC", "confidence": 0.96, "source": "Landlord: AL NOOR PROPERTIES LLC" },
+      "tenantName": { "value": "RICARDO FERNANDES", "confidence": 0.96, "source": "Tenant: RICARDO FERNANDES" },
+      "issueDate": { "value": "2025-09-18", "confidence": 0.95, "source": "Issue Date: 18/09/2025" }
+    }
+  },
+  {
+    "fixtureId": "fixture-4-cheque-schedule",
+    "fields": {
+      "tenancyRef": { "value": "TC-2025-118402", "confidence": 0.95, "source": "Tenancy: Unit 1204 Marina Heights / R. Fernandes / TC-2025-118402" },
+      "items": {
+        "value": [
+          { "chequeNo": "000451", "dueDate": "2025-09-16", "amount": 18000, "status": "CLEARED", "clearedDate": "2025-09-17" },
+          { "chequeNo": "000452", "dueDate": "2025-12-16", "amount": 18000, "status": "CLEARED", "clearedDate": "2025-12-18" },
+          { "chequeNo": "000453", "dueDate": "2026-03-16", "amount": 18000, "status": "CLEARED", "clearedDate": "2026-03-17" },
+          { "chequeNo": "000454", "dueDate": "2026-06-16", "amount": 18000, "status": "SCHEDULED" }
+        ],
+        "confidence": 0.94,
+        "source": "Cheque Register Extract table"
+      }
+    }
+  },
+  {
+    "fixtureId": "fixture-5-quotation",
+    "fields": {
+      "vendorName": { "value": "CoolAir Technical Services LLC", "confidence": 0.97, "source": "CoolAir Technical Services LLC — TRN 100-2244-5566" },
+      "quoteRef": { "value": "Q-2026-0331", "confidence": 0.96, "source": "QUOTATION Q-2026-0331" },
+      "date": { "value": "2026-06-02", "confidence": 0.95, "source": "Date: 02 June 2026" },
+      "amount": { "value": 850, "confidence": 0.96, "source": "Amount: AED 850 (incl. VAT)" },
+      "currency": { "value": "AED", "confidence": 0.97, "source": "Amount: AED 850" },
+      "propertyHint": { "value": "Unit 1204, Marina Heights Tower", "confidence": 0.93, "source": "Property: Unit 1204, Marina Heights Tower, Dubai Marina" }
+    }
+  },
+  {
+    "fixtureId": "fixture-6-invoice-mismatch",
+    "fields": {
+      "vendorName": { "value": "CoolAir Technical Services LLC", "confidence": 0.97, "source": "CoolAir Technical Services LLC — TRN 100-2244-5566" },
+      "invoiceRef": { "value": "INV-2026-0512", "confidence": 0.96, "source": "TAX INVOICE INV-2026-0512" },
+      "date": { "value": "2026-06-09", "confidence": 0.95, "source": "Date: 09 June 2026" },
+      "amount": { "value": 1050, "confidence": 0.96, "source": "Amount: AED 1,050 (incl. VAT)" },
+      "currency": { "value": "AED", "confidence": 0.97, "source": "Amount: AED 1,050" },
+      "quoteRef": { "value": "Q-2026-0331", "confidence": 0.94, "source": "Ref Quotation: Q-2026-0331" }
+    }
+  }
+]
