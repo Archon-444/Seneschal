@@ -144,9 +144,19 @@ export async function archiveDocumentAction(formData: FormData) {
 
 export async function createProofRequestAction(formData: FormData) {
   const ctx = await requireCtx();
+  // the form posts a combined "TYPE:id" scope; explicit fields win if present
+  const combined = opt(formData, "scope");
+  const [scopeTypeFromCombined, scopeIdFromCombined] = combined?.split(":") ?? [];
+  const scopeType =
+    (opt(formData, "scopeType") as ScopeType | undefined) ??
+    (scopeTypeFromCombined as ScopeType | undefined);
+  const scopeId = opt(formData, "scopeId") ?? scopeIdFromCombined;
+  if (!scopeType || !scopeId) {
+    throw new Error("Proof requests must be related to a client, property or tenancy");
+  }
   const request = await proofs.createProofRequest(ctx, {
-    scopeType: (opt(formData, "scopeType") as ScopeType) ?? "WORKSPACE",
-    scopeId: opt(formData, "scopeId"),
+    scopeType,
+    scopeId,
     title: s(formData, "title"),
     requiredEvidence: s(formData, "requiredEvidence"),
     assignedContactId: s(formData, "assignedContactId"),

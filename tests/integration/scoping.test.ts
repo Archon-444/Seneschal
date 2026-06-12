@@ -280,6 +280,27 @@ describe("CLIENT_VIEWER scoping", () => {
     expect(proofList.map((r) => r.id)).toContain(a.proofRequestId);
     await expect(proofs.getProofRequest(viewer.ctx, siblingProof.id)).rejects.toThrow();
 
+    // UI default path (Codex P2 on PR #2): a CLIENT-scoped request — what the
+    // /proofs form now creates — is visible to the client's viewer
+    const clientScoped = await proofs.createProofRequest(A.ctx, {
+      scopeType: "CLIENT",
+      scopeId: a.clientId,
+      title: "Client-scoped proof",
+      requiredEvidence: "anything",
+      assignedContactId: a.contactId,
+    });
+    expect((await proofs.listProofRequests(viewer.ctx)).map((r) => r.id)).toContain(clientScoped.id);
+    await expect(proofs.getProofRequest(viewer.ctx, clientScoped.id)).resolves.toBeTruthy();
+    // and a scoped request without a target id is rejected at creation
+    await expect(
+      proofs.createProofRequest(A.ctx, {
+        scopeType: "TENANCY",
+        title: "scope-less",
+        requiredEvidence: "x",
+        assignedContactId: a.contactId,
+      }),
+    ).rejects.toThrow();
+
     // risk flags: sibling MISSING_EJARI invisible
     const flags = await risk.listRiskFlags(viewer.ctx);
     expect(flags.map((f) => f.scopeId)).not.toContain(siblingTenancy.id);
