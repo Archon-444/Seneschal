@@ -46,7 +46,7 @@ export async function buildClientReport(
   const properties = await collectProperties(ctx.workspaceId, clientPrincipalId);
   const tenancyIds = properties.flatMap((p) => p.tenancies.map((t) => t.id));
   const propertyName = (id: string) => {
-    const p = properties.find((x) => x.tenancies.some((t) => t.propertyId === x.id) || x.id === id);
+    const p = properties.find((x) => x.id === id);
     return p ? `${p.community}${p.building ? ` · ${p.building}` : ""}${p.unitNo ? ` · ${p.unitNo}` : ""}` : id;
   };
 

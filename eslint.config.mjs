@@ -13,13 +13,14 @@ const config = [
     // T1.2 guard: no raw Prisma outside the service layer.
     files: ["src/app/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-imports": [
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           paths: [
             {
               name: "@prisma/client",
               message: "Routes must call services (src/server/services), never Prisma directly.",
+              allowTypeImports: true,
             },
             {
               name: "@/server/db",
