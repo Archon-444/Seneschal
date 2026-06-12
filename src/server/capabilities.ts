@@ -1,0 +1,95 @@
+import type { Role } from "@prisma/client";
+
+// Role × capability map (T1.3) — the spec §3 access matrix as a code table.
+// Frontend filtering is never enforcement; this table is.
+
+export const CAPABILITIES = [
+  "workspace.manage",
+  "members.manage",
+  "clients.read",
+  "clients.write",
+  "contacts.read",
+  "contacts.write",
+  "properties.read",
+  "properties.write",
+  "tenancies.read",
+  "tenancies.write",
+  "payments.read",
+  "payments.write",
+  "deadlines.read",
+  "documents.read",
+  "documents.write",
+  "imports.manage",
+  "proofs.read",
+  "proofs.write",
+  "proofs.decide",
+  "evidence.read",
+  "riskflags.read",
+  "riskflags.ack",
+  "reports.generate",
+  "reports.read",
+  "notifications.read",
+] as const;
+
+export type Capability = (typeof CAPABILITIES)[number];
+
+const ALL = [...CAPABILITIES] as Capability[];
+
+const READ_PORTFOLIO: Capability[] = [
+  "clients.read",
+  "contacts.read",
+  "properties.read",
+  "tenancies.read",
+  "payments.read",
+  "deadlines.read",
+  "documents.read",
+  "proofs.read",
+  "evidence.read",
+  "riskflags.read",
+  "reports.read",
+];
+
+export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
+  WORKSPACE_ADMIN: ALL,
+  FIDUCIARY: ALL.filter((c) => c !== "workspace.manage" && c !== "members.manage"),
+  MANAGER: [
+    ...READ_PORTFOLIO,
+    "clients.write",
+    "contacts.write",
+    "properties.write",
+    "tenancies.write",
+    "payments.write",
+    "documents.write",
+    "imports.manage",
+    "proofs.write",
+    "proofs.decide",
+    "riskflags.ack",
+    "reports.generate",
+    "notifications.read",
+  ],
+  // CLIENT_VIEWER is additionally scoped to a single ClientPrincipal in authz.
+  CLIENT_VIEWER: READ_PORTFOLIO,
+  AGENT: [
+    "contacts.read",
+    "properties.read",
+    "tenancies.read",
+    "deadlines.read",
+    "proofs.read",
+    "documents.read",
+  ],
+  LICENSED_PARTNER: [
+    "properties.read",
+    "tenancies.read",
+    "deadlines.read",
+    "proofs.read",
+    "proofs.write",
+    "documents.read",
+    "documents.write",
+  ],
+  VENDOR: ["proofs.read", "documents.write"],
+  AUDITOR: [...READ_PORTFOLIO, "notifications.read"],
+};
+
+export function roleHas(role: Role, capability: Capability): boolean {
+  return ROLE_CAPABILITIES[role].includes(capability);
+}
