@@ -222,6 +222,73 @@ describe("CLIENT_VIEWER scoping", () => {
   it("client-viewer membership without client scope is rejected", async () => {
     await expect(addMember(A.workspaceId, "CLIENT_VIEWER")).rejects.toThrow();
   });
+
+  // Regression for the scope-polymorphic tables (Codex review on PR #1):
+  // Document, EvidenceEvent, ProofRequest and RiskFlag carry scopeType/scopeId,
+  // so workspace filtering alone leaked sibling clients' rows to CLIENT_VIEWER.
+  it("cannot see sibling clients' documents, evidence, proofs, flags, or report rows", async () => {
+    const sibling = await clients.createClient(A.ctx, { displayName: "Leak Sibling" });
+    const siblingProperty = await properties.createProperty(A.ctx, {
+      clientPrincipalId: sibling.id,
+      community: "Palm Jumeirah",
+      unitNo: "77",
+    });
+    const siblingTenancy = await tenancies.createTenancy(A.ctx, {
+      propertyId: siblingProperty.id,
+      startDate: new Date("2025-01-01"),
+      endDate: new Date("2025-12-31"),
+      annualRent: 99000,
+      // no ejariNo → raises MISSING_EJARI flag scoped to the sibling tenancy
+    });
+    const siblingDoc = await documents.uploadDocument(A.ctx, {
+      scopeType: "TENANCY",
+      scopeId: siblingTenancy.id,
+      kind: "TENANCY_CONTRACT",
+      fileName: "sibling-secret.txt",
+      mime: "text/plain",
+      data: Buffer.from("sibling client contract"),
+    });
+    const siblingProof = await proofs.createProofRequest(A.ctx, {
+      scopeType: "TENANCY",
+      scopeId: siblingTenancy.id,
+      title: "Sibling-only proof",
+      requiredEvidence: "secret",
+      assignedContactId: a.contactId,
+    });
+
+    const viewer = await addMember(A.workspaceId, "CLIENT_VIEWER", a.clientId);
+
+    // documents: list excludes, direct read + signed-URL mint refused
+    const docs = await documents.listDocuments(viewer.ctx);
+    expect(docs.map((d) => d.id)).not.toContain(siblingDoc.id);
+    expect(docs.map((d) => d.id)).toContain(a.documentId); // own docs still visible
+    await expect(documents.getDocument(viewer.ctx, siblingDoc.id)).rejects.toThrow();
+    await expect(documents.getDocumentUrl(viewer.ctx, siblingDoc.id)).rejects.toThrow();
+
+    // evidence: no sibling tenancy/property/scope events
+    const events = await evidenceQuery.listEvidence(viewer.ctx);
+    expect(events.length).toBeGreaterThan(0);
+    for (const e of events) {
+      expect(e.tenancyId).not.toBe(siblingTenancy.id);
+      expect(e.propertyId).not.toBe(siblingProperty.id);
+      expect(e.scopeId).not.toBe(siblingProof.id);
+    }
+
+    // proof requests: list excludes, direct read refused; own request visible
+    const proofList = await proofs.listProofRequests(viewer.ctx);
+    expect(proofList.map((r) => r.id)).not.toContain(siblingProof.id);
+    expect(proofList.map((r) => r.id)).toContain(a.proofRequestId);
+    await expect(proofs.getProofRequest(viewer.ctx, siblingProof.id)).rejects.toThrow();
+
+    // risk flags: sibling MISSING_EJARI invisible
+    const flags = await risk.listRiskFlags(viewer.ctx);
+    expect(flags.map((f) => f.scopeId)).not.toContain(siblingTenancy.id);
+
+    // fiduciary's per-client report contains no sibling proof titles
+    const report = await reports.buildClientReport(A.ctx, a.clientId);
+    expect(report.proofRequests.map((r) => r.title)).not.toContain("Sibling-only proof");
+    expect(report.riskFlags.length + report.proofRequests.length).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe("defense in depth", () => {

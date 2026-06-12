@@ -1,6 +1,7 @@
 import type { Prisma, RiskCode, ScopeType, Severity } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, require_, scope } from "../authz";
+import { allScopeIds, resolveClientScopeIds } from "./clientScope";
 import { recordEvidence } from "../evidence";
 import { daysBetween, todayInDubai } from "../calculators/dates";
 
@@ -255,9 +256,14 @@ export async function evaluateWorkspaceRisk(workspaceId: string) {
 
 export async function listRiskFlags(ctx: AuthzContext, opts?: { includeCleared?: boolean }) {
   require_(ctx, "riskflags.read");
+  // CLIENT_VIEWER: flags are scope-polymorphic — restrict to the client's scopes.
+  const clientIds = ctx.clientPrincipalId
+    ? allScopeIds(await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId))
+    : null;
   return prisma.riskFlag.findMany({
     where: {
       ...scope(ctx),
+      ...(clientIds ? { scopeId: { in: clientIds } } : {}),
       ...(opts?.includeCleared ? {} : { status: { in: ["OPEN", "ACKNOWLEDGED"] } }),
     },
     orderBy: { raisedAt: "desc" },

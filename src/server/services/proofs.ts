@@ -6,6 +6,7 @@ import { notify } from "../notify";
 import { ingestDocument, logDocumentAccess } from "./documents";
 import { createSecureLink } from "./secureLinks";
 import { raiseProofOverdue, clearProofOverdue } from "./risk";
+import { resolveClientScopeIds } from "./clientScope";
 import { todayInDubai } from "../calculators/dates";
 
 // Proof requests (E7) — the core verb: ask an external party for evidence,
@@ -94,13 +95,24 @@ export async function getProofRequest(ctx: AuthzContext, id: string) {
   require_(ctx, "proofs.read");
   const request = await prisma.proofRequest.findUnique({ where: { id } });
   assertSameWorkspace(ctx, request);
+  if (ctx.clientPrincipalId) {
+    const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId);
+    if (!ids.proofRequestIds.includes(request!.id)) throw new AuthzError("Not found", 404);
+  }
   return request!;
 }
 
 export async function listProofRequests(ctx: AuthzContext) {
   require_(ctx, "proofs.read");
+  // CLIENT_VIEWER sees only proof requests whose scope resolves to their client.
+  const clientIds = ctx.clientPrincipalId
+    ? await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId)
+    : null;
   return prisma.proofRequest.findMany({
-    where: scope(ctx),
+    where: {
+      ...scope(ctx),
+      ...(clientIds ? { id: { in: clientIds.proofRequestIds } } : {}),
+    },
     orderBy: { createdAt: "desc" },
   });
 }
