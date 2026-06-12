@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runSeed } from "@/server/seed";
+import { normalizeAdminEmail, runSeed } from "@/server/seed";
 
 // One-time bootstrap for serverless deployments: runs the idempotent Farina
 // seed inside the deployment, so no database credential ever leaves the
@@ -18,9 +18,14 @@ export async function POST(req: NextRequest) {
   let adminEmail: string | undefined;
   try {
     const body = (await req.json()) as { adminEmail?: string };
-    adminEmail = body.adminEmail;
-  } catch {
-    // empty body is fine
+    if (body.adminEmail !== undefined) {
+      adminEmail = normalizeAdminEmail(String(body.adminEmail));
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("adminEmail")) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    // empty/non-JSON body is fine
   }
   const result = await runSeed({ adminEmail });
   return NextResponse.json({
