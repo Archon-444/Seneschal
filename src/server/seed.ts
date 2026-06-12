@@ -21,7 +21,7 @@ export interface SeedResult {
   proofLinkUrl: string | null;
 }
 
-export async function runSeed(): Promise<SeedResult> {
+export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResult> {
   let proofLinkUrl: string | null = null;
   // ── Plan + workspace + users
   const plan = await prisma.plan.upsert({
@@ -63,6 +63,28 @@ export async function runSeed(): Promise<SeedResult> {
     update: {},
     create: { workspaceId: workspace.id, userId: farina.id, role: "FIDUCIARY" },
   });
+
+  // optional real-login user: farina@example.com cannot receive OTP email, so
+  // production bootstrap can attach an actual operator address as FIDUCIARY
+  if (opts?.adminEmail) {
+    const email = opts.adminEmail.trim().toLowerCase();
+    const admin = await prisma.user.upsert({
+      where: { email },
+      update: {},
+      create: { email, name: "Pilot Operator" },
+    });
+    await prisma.membership.upsert({
+      where: {
+        workspaceId_userId_role: {
+          workspaceId: workspace.id,
+          userId: admin.id,
+          role: "FIDUCIARY",
+        },
+      },
+      update: {},
+      create: { workspaceId: workspace.id, userId: admin.id, role: "FIDUCIARY" },
+    });
+  }
 
   await findOrCreate(
     () => prisma.subscription.findFirst({ where: { workspaceId: workspace.id, planId: plan.id } }),
