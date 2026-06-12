@@ -118,6 +118,33 @@ and `pnpm worker` running:
 10. **Security suite green** — `pnpm test:integration` (T1.4 cross-workspace
     suite + the rest) and `pnpm test` all green; CI runs the same.
 
+## Deploy (Vercel)
+
+The repo is serverless-ready: `vercel-build` runs `prisma migrate deploy` before
+`next build`, `vercel.json` schedules the daily job pass at 03:00 UTC (07:00
+Dubai) against `/api/v1/jobs/run`, and user-facing sends (OTP, proof links) flush
+the outbox inline with the cron as retry backstop. `pnpm worker` remains the
+local-dev runner.
+
+| Env var | Value |
+| --- | --- |
+| `DATABASE_URL` | from the Neon (Vercel marketplace) integration |
+| `APP_SECRET` | `openssl rand -hex 32` |
+| `APP_BASE_URL` | `https://<your-domain>` (used in emails + secure links) |
+| `EMAIL_PROVIDER` / `RESEND_API_KEY` / `EMAIL_FROM` | `resend` + your key + verified sender |
+| `STORAGE_DRIVER` / `BLOB_READ_WRITE_TOKEN` | `blob` + token from the attached Blob store |
+| `CRON_SECRET` | `openssl rand -hex 32` (auth for the cron route) |
+| `EXTRACTION_PROVIDER` | `mock` (or `anthropic` + `ANTHROPIC_API_KEY`) |
+
+After the first deploy, seed once from any machine:
+`DATABASE_URL=<neon-url> APP_BASE_URL=<https-url> pnpm db:seed` — idempotent, and
+it prints the live external proof-upload link.
+
+**Storage caveat (pilot):** Vercel Blob URLs are public-but-unguessable. The URL
+lives only in `Document.storageKey` and is never rendered; client downloads go
+exclusively through the signed, logged `/api/v1/files` route with the SHA-256
+re-verified. A strictly private bucket driver (S3/Supabase) is the 1B upgrade.
+
 ## Non-goals (1A)
 
 No marketplace/listings/brokerage flows, no payment processing or custody, no

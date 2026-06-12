@@ -57,8 +57,7 @@ export async function ingestDocument(args: {
   secureLinkId?: string;
 }) {
   const sha256 = sha256Hex(args.data);
-  const storageKey = newStorageKey(args.workspaceId, args.fileName);
-  await storage().put(storageKey, args.data);
+  const storageKey = await storage().put(newStorageKey(args.workspaceId, args.fileName), args.data);
   return prisma.document.create({
     data: {
       workspaceId: args.workspaceId,

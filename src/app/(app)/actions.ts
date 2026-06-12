@@ -16,6 +16,8 @@ import * as imports from "@/server/services/imports";
 import * as extraction from "@/server/services/extraction";
 import * as risk from "@/server/services/risk";
 import * as reports from "@/server/services/reports";
+import { dispatchPending } from "@/server/outbox";
+import { handlers } from "@/server/outbox/runner";
 
 // Server actions: thin glue from forms to the service layer. No Prisma here.
 
@@ -151,6 +153,8 @@ export async function createProofRequestAction(formData: FormData) {
     dueAt: opt(formData, "dueAt") ? new Date(s(formData, "dueAt")) : undefined,
   });
   await proofs.sendProofRequest(ctx, request.id);
+  // serverless: flush so the secure-link email leaves now; cron is the backstop
+  await dispatchPending(handlers);
   redirect(`/proofs/${request.id}`);
 }
 
@@ -170,6 +174,7 @@ export async function resendProofAction(formData: FormData) {
   const ctx = await requireCtx();
   const id = s(formData, "id");
   await proofs.sendProofRequest(ctx, id);
+  await dispatchPending(handlers);
   revalidatePath(`/proofs/${id}`);
 }
 

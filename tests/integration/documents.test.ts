@@ -62,6 +62,23 @@ describe("upload pipeline (T5.1)", () => {
   });
 });
 
+describe("storage driver contract", () => {
+  it("ingestDocument persists the canonical key returned by put()", async () => {
+    const doc = await documents.uploadDocument(W.ctx, {
+      scopeType: "WORKSPACE",
+      kind: "OTHER",
+      fileName: "key-contract.txt",
+      mime: "text/plain",
+      data: Buffer.from("x"),
+    });
+    // local driver echoes the generated key (workspaceId/uuid.ext); the blob
+    // driver returns a URL — either way storageKey must round-trip through get()
+    expect(doc.storageKey.startsWith(W.workspaceId + "/")).toBe(true);
+    const { storage } = await import("@/server/storage");
+    expect((await storage().get(doc.storageKey)).toString()).toBe("x");
+  });
+});
+
 describe("access logging (T5.2)", () => {
   it("upload and view are logged with actor", async () => {
     const doc = await documents.uploadDocument(W.ctx, {

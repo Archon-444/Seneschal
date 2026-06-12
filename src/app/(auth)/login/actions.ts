@@ -15,8 +15,9 @@ export async function requestOtpAction(_prev: LoginState, formData: FormData): P
   const email = String(formData.get("email") ?? "").trim();
   if (!email) return { step: "email", error: "Enter your email." };
   await requestOtp(email);
-  // dev convenience: flush the outbox so the console email appears immediately
-  if (process.env.NODE_ENV !== "production") await dispatchPending(handlers);
+  // No resident worker on serverless: flush the outbox inline so the OTP email
+  // leaves immediately. The cron route re-dispatches anything that fails here.
+  await dispatchPending(handlers);
   return { step: "code", email };
 }
 

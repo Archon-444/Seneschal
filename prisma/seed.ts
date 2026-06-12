@@ -311,8 +311,10 @@ async function main() {
     const content = Buffer.from(
       "FIXTURE — Tenancy Contract TC-2025-118402, Unit 1204 Marina Heights Tower. See /fixtures for the PDF rendering.",
     );
-    const storageKey = newStorageKey(workspace.id, "marina-tenancy-contract.txt");
-    await storage().put(storageKey, content);
+    const storageKey = await storage().put(
+      newStorageKey(workspace.id, "marina-tenancy-contract.txt"),
+      content,
+    );
     sampleDoc = await prisma.document.create({
       data: {
         workspaceId: workspace.id,
