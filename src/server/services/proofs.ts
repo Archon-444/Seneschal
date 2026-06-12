@@ -28,6 +28,10 @@ export async function createProofRequest(
   require_(ctx, "proofs.write");
   const contact = await prisma.contact.findUnique({ where: { id: args.assignedContactId } });
   assertSameWorkspace(ctx, contact);
+  // a scoped request without a target id is invisible to client-scoped viewers
+  if (args.scopeType !== "WORKSPACE" && !args.scopeId) {
+    throw new AuthzError(`scopeId required for ${args.scopeType}-scoped proof requests`, 422);
+  }
 
   const request = await prisma.proofRequest.create({
     data: {

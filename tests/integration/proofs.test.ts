@@ -22,7 +22,7 @@ beforeEach(async () => {
 
 async function makeRequestWithLink() {
   const request = await proofs.createProofRequest(W.ctx, {
-    scopeType: "TENANCY",
+    scopeType: "WORKSPACE",
     title: "Upload cheque proof",
     requiredEvidence: "Deposit slip photo",
     assignedContactId: contactId,
@@ -113,7 +113,7 @@ describe("proof request lifecycle", () => {
 
   it("overdue sweep flags and is idempotent", async () => {
     const request = await proofs.createProofRequest(W.ctx, {
-      scopeType: "TENANCY",
+      scopeType: "WORKSPACE",
       title: "Old request",
       requiredEvidence: "x",
       assignedContactId: contactId,

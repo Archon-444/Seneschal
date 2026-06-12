@@ -345,6 +345,9 @@ async function main() {
   }
 
   // ── Proof request + live secure link
+  const cheque4 = await prisma.paymentItem.findUnique({
+    where: { tenancyId_seq: { tenancyId: marinaTenancy.id, seq: 4 } },
+  });
   const proof = await findOrCreate(
     () =>
       prisma.proofRequest.findFirst({
@@ -355,7 +358,7 @@ async function main() {
         data: {
           workspaceId: workspace.id,
           scopeType: "PAYMENT_ITEM",
-          scopeId: null,
+          scopeId: cheque4!.id,
           title: "Upload proof: Marina cheque 4 received",
           requiredEvidence: "Photo or scan of cheque 000454 deposit slip or bank confirmation.",
           assignedContactId: samir.id,
@@ -365,6 +368,10 @@ async function main() {
         },
       }),
   );
+  // earlier seeds left the scope target null — repair so client scoping resolves it
+  if (!proof.scopeId && cheque4) {
+    await prisma.proofRequest.update({ where: { id: proof.id }, data: { scopeId: cheque4.id } });
+  }
 
   const existingLink = await prisma.secureLink.findFirst({
     where: { workspaceId: workspace.id, scopeType: "PROOF_REQUEST", scopeId: proof.id, revokedAt: null },

@@ -13,11 +13,11 @@
     "test:integration": "vitest run tests/integration --no-file-parallelism",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "tsx --env-file-if-exists=.env prisma/seed.ts",
     "fixtures:render": "tsx scripts/render-fixtures.ts",
-    "worker": "tsx src/server/outbox/runner.ts",
+    "worker": "tsx --env-file-if-exists=.env src/server/outbox/runner.ts",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma generate && prisma migrate deploy && next build"
+    "vercel-build": "node scripts/check-deploy-env.mjs && prisma generate && prisma migrate deploy && next build"
   },
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
@@ -51,7 +51,7 @@
   },
   "private": true,
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx --env-file-if-exists=.env prisma/seed.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

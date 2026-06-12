@@ -2,13 +2,20 @@ import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { listProofRequests } from "@/server/services/proofs";
 import { listContacts } from "@/server/services/contacts";
+import { listClients } from "@/server/services/clients";
+import { listProperties } from "@/server/services/properties";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, Button, Card, EmptyState, Field, inputClass, PageHeader, Table, Td } from "@/components/ui";
 import { createProofRequestAction } from "../actions";
 
 export default async function ProofsPage() {
   const ctx = await requireCtx();
-  const [requests, contacts] = await Promise.all([listProofRequests(ctx), listContacts(ctx)]);
+  const [requests, contacts, clients, properties] = await Promise.all([
+    listProofRequests(ctx),
+    listContacts(ctx),
+    listClients(ctx),
+    listProperties(ctx),
+  ]);
   const contactName = (id: string) => contacts.find((c) => c.id === id)?.name ?? "—";
 
   return (
@@ -43,6 +50,21 @@ export default async function ProofsPage() {
             </Field>
             <Field label="Required evidence">
               <textarea name="requiredEvidence" required rows={2} className={inputClass} placeholder="Photo of deposit slip or bank confirmation" />
+            </Field>
+            <Field label="Related to">
+              {/* every proof request carries a resolvable scope so client-scoped
+                  viewers and reports can see it (Codex P2 on PR #2) */}
+              <select name="scope" required className={inputClass}>
+                <option value="">Select…</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={`CLIENT:${c.id}`}>Client — {c.displayName}</option>
+                ))}
+                {properties.map((p) => (
+                  <option key={p.id} value={`PROPERTY:${p.id}`}>
+                    Property — {p.community}{p.unitNo ? ` · ${p.unitNo}` : ""}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Assign to contact">
               <select name="assignedContactId" required className={inputClass}>
