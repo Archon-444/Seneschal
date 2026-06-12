@@ -66,6 +66,8 @@ export async function sendProofRequest(ctx: AuthzContext, proofRequestId: string
     scopeId: proofRequestId,
     contactId: contact.id,
   });
+  const token = url.slice(url.lastIndexOf("/") + 1);
+  const { intakeAddress } = await import("./emailIntake");
   await notify({
     workspaceId: ctx.workspaceId,
     channel: "EMAIL",
@@ -75,7 +77,8 @@ export async function sendProofRequest(ctx: AuthzContext, proofRequestId: string
       `You have been asked to provide evidence.\n\n` +
       `Request: ${request.title}\nRequired: ${request.requiredEvidence}\n` +
       (request.dueAt ? `Due: ${request.dueAt.toISOString().slice(0, 10)}\n` : "") +
-      `\nUpload here (no account needed): ${url}\n`,
+      `\nUpload here (no account needed): ${url}\n` +
+      `Or reply with the file attached to: ${intakeAddress(token)}\n`,
     toContactId: contact.id,
     relatedType: "PROOF_REQUEST",
     relatedId: proofRequestId,
