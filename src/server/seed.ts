@@ -17,6 +17,19 @@ async function findOrCreate<T>(find: () => Promise<T | null>, create: () => Prom
   return (await find()) ?? (await create());
 }
 
+/**
+ * Normalize and validate an operator email before it becomes a login-capable
+ * FIDUCIARY user. A blank or malformed value would create an account that can
+ * never receive its OTP, so reject it loudly instead.
+ */
+export function normalizeAdminEmail(raw: string): string {
+  const email = raw.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error(`adminEmail is not a valid email address: "${raw}"`);
+  }
+  return email;
+}
+
 export interface SeedResult {
   proofLinkUrl: string | null;
 }
@@ -66,8 +79,8 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
 
   // optional real-login user: farina@example.com cannot receive OTP email, so
   // production bootstrap can attach an actual operator address as FIDUCIARY
-  if (opts?.adminEmail) {
-    const email = opts.adminEmail.trim().toLowerCase();
+  if (opts?.adminEmail !== undefined) {
+    const email = normalizeAdminEmail(opts.adminEmail);
     const admin = await prisma.user.upsert({
       where: { email },
       update: {},
