@@ -17,7 +17,7 @@
     "fixtures:render": "tsx scripts/render-fixtures.ts",
     "worker": "tsx --env-file-if-exists=.env src/server/outbox/runner.ts",
     "postinstall": "prisma generate",
-    "vercel-build": "node scripts/check-deploy-env.mjs && prisma generate && prisma migrate deploy && next build"
+    "vercel-build": "node scripts/check-deploy-env.mjs && prisma generate && prisma migrate deploy && tsx scripts/seed-on-deploy.ts && next build"
   },
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
