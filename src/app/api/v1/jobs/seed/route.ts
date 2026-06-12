@@ -13,10 +13,19 @@ export async function POST(req: NextRequest) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const result = await runSeed();
+  // optional body: { "adminEmail": "you@yourdomain" } — added as FIDUCIARY in
+  // the Farina workspace so a real inbox can receive the sign-in OTP
+  let adminEmail: string | undefined;
+  try {
+    const body = (await req.json()) as { adminEmail?: string };
+    adminEmail = body.adminEmail;
+  } catch {
+    // empty body is fine
+  }
+  const result = await runSeed({ adminEmail });
   return NextResponse.json({
     ok: true,
     proofLinkUrl: result.proofLinkUrl, // null when a live link already exists
-    signInAs: "farina@example.com",
+    signInAs: adminEmail ?? "farina@example.com",
   });
 }
