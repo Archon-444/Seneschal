@@ -6,12 +6,15 @@ import * as tenancies from "@/server/services/tenancies";
 import {
   acceptOffer,
   captureRentIndex,
+  getOfferForLink,
   getRenewalRisk,
   listRenewalPipeline,
   openRenewalCase,
   proposeOffer,
+  respondToOfferViaLink,
   serveNotice,
 } from "@/server/services/renewals";
+import { createSecureLink, validateLinkToken } from "@/server/services/secureLinks";
 
 let W: TestActor;
 let clientId: string;
@@ -190,5 +193,69 @@ describe("renewal negotiation", () => {
     });
     const agent = await addMember(W.workspaceId, "AGENT"); // read-only on renewals
     await expect(acceptOffer(agent.ctx, o.id)).rejects.toThrow();
+  });
+});
+
+describe("tenant secure-response link", () => {
+  async function landlordOffer() {
+    const rc = await openRenewalCase(W.ctx, tenancyId);
+    const offer = await proposeOffer(W.ctx, {
+      renewalCaseId: rc.id,
+      party: "LANDLORD",
+      annualRent: 79_200,
+      paymentSchedule: "4 cheques",
+    });
+    return { rc, offer };
+  }
+
+  it("lets a tenant counter via the link — a real versioned TENANT offer", async () => {
+    const { rc, offer } = await landlordOffer();
+    const { linkId } = await createSecureLink(W.ctx, { purpose: "TENANT_OFFER", scopeType: "OFFER", scopeId: offer.id });
+    const link = await prisma.secureLink.findUnique({ where: { id: linkId } });
+
+    const view = await getOfferForLink(link!);
+    expect(view?.proposedRent).toBe(79_200);
+    expect(view?.currentRent).toBe(72_000);
+
+    await respondToOfferViaLink(link!, { action: "COUNTER", annualRent: 77_000, paymentSchedule: "2 cheques" });
+    const offers = await prisma.offer.findMany({ where: { renewalCaseId: rc.id }, orderBy: { version: "asc" } });
+    expect(offers).toHaveLength(2);
+    expect(offers[1].party).toBe("TENANT");
+    expect(offers[1].viaSecureLinkId).toBe(linkId);
+    expect(offers[0].status).toBe("SUPERSEDED");
+    expect(
+      await prisma.evidenceEvent.findFirst({ where: { type: "OFFER_COUNTERED", actorType: "TENANT_LINK" } }),
+    ).toBeTruthy();
+    expect((await prisma.secureLink.findUnique({ where: { id: linkId } }))!.useCount).toBe(1);
+  });
+
+  it("lets a tenant accept via the link — case AGREED and tenancy RENEWED", async () => {
+    const { rc, offer } = await landlordOffer();
+    const { linkId } = await createSecureLink(W.ctx, { purpose: "TENANT_OFFER", scopeType: "OFFER", scopeId: offer.id });
+    const link = await prisma.secureLink.findUnique({ where: { id: linkId } });
+
+    await respondToOfferViaLink(link!, { action: "ACCEPT" });
+    expect((await prisma.renewalCase.findUnique({ where: { id: rc.id } }))!.status).toBe("AGREED");
+    expect((await prisma.tenancy.findUnique({ where: { id: tenancyId } }))!.status).toBe("RENEWED");
+    expect(
+      await prisma.evidenceEvent.findFirst({ where: { type: "OFFER_ACCEPTED", actorType: "TENANT_LINK" } }),
+    ).toBeTruthy();
+  });
+
+  it("rejects an expired token and a wrong-purpose link", async () => {
+    const { offer } = await landlordOffer();
+    const { linkId, url } = await createSecureLink(W.ctx, { purpose: "TENANT_OFFER", scopeType: "OFFER", scopeId: offer.id });
+    const token = url.split("/").pop()!;
+    await prisma.secureLink.update({ where: { id: linkId }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    const v = await validateLinkToken(token);
+    expect(v.ok).toBe(false);
+
+    const { linkId: proofLinkId } = await createSecureLink(W.ctx, {
+      purpose: "PROOF_UPLOAD",
+      scopeType: "PROOF_REQUEST",
+      scopeId: "nope",
+    });
+    const proofLink = await prisma.secureLink.findUnique({ where: { id: proofLinkId } });
+    await expect(respondToOfferViaLink(proofLink!, { action: "ACCEPT" })).rejects.toThrow();
   });
 });

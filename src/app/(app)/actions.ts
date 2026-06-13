@@ -146,6 +146,12 @@ export async function serveNoticeAction(formData: FormData) {
   revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
 }
 
+export async function sendOfferToTenantAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await renewals.sendOfferToTenant(ctx, s(formData, "offerId"));
+  revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
+}
+
 /** Combined Ejari onboarding: landlord + tenant + asset + tenancy in one submit. */
 export async function onboardTenancyAction(formData: FormData) {
   const ctx = await requireCtx();

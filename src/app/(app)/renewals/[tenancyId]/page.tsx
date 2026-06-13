@@ -9,6 +9,7 @@ import {
   captureIndexAction,
   openRenewalCaseAction,
   proposeOfferAction,
+  sendOfferToTenantAction,
   serveNoticeAction,
 } from "../../actions";
 
@@ -183,13 +184,24 @@ export default async function RenewalReportPage({
                   <Td><Badge value={o.status} /></Td>
                   <Td>
                     {(o.status === "SENT" || o.status === "COUNTERED") && (
-                      <form action={acceptOfferAction}>
-                        <input type="hidden" name="offerId" value={o.id} />
-                        <input type="hidden" name="tenancyId" value={tenancyId} />
-                        <button className="text-xs text-navy-500 underline-offset-2 hover:text-verde-700 hover:underline">
-                          Accept
-                        </button>
-                      </form>
+                      <div className="flex gap-3">
+                        <form action={acceptOfferAction}>
+                          <input type="hidden" name="offerId" value={o.id} />
+                          <input type="hidden" name="tenancyId" value={tenancyId} />
+                          <button className="text-xs text-navy-500 underline-offset-2 hover:text-verde-700 hover:underline">
+                            Accept
+                          </button>
+                        </form>
+                        {o.party === "LANDLORD" && (
+                          <form action={sendOfferToTenantAction}>
+                            <input type="hidden" name="offerId" value={o.id} />
+                            <input type="hidden" name="tenancyId" value={tenancyId} />
+                            <button className="text-xs text-navy-500 underline-offset-2 hover:text-gold-700 hover:underline">
+                              Send to tenant
+                            </button>
+                          </form>
+                        )}
+                      </div>
                     )}
                   </Td>
                 </tr>
@@ -222,11 +234,69 @@ export default async function RenewalReportPage({
         </Card>
       )}
 
+      {/* Partner desk */}
+      {risk!.renewalCase && (
+        <Card className="mb-6">
+          <h2 className="font-display mb-1 text-lg text-navy-900">Partner desk</h2>
+          <p className="mb-4 text-xs text-muted">
+            Seneschal owns the software, workflow and record. Regulated execution is performed by a
+            licensed partner office under its own licence.
+          </p>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Case progress</h3>
+              <ul className="space-y-1.5 text-sm">
+                <Task done={!!risk!.latestIndex} label="Index captured & lawful position computed" />
+                <Task done label="Renewal case opened" />
+                <Task done={risk!.offers.some((o) => o.party === "LANDLORD")} label="Proposal prepared" />
+                <Task done={risk!.offers.some((o) => o.party === "TENANT")} label="Tenant responded" />
+                <Task done={risk!.renewalCase.status === "AGREED"} label="Terms agreed" />
+              </ul>
+            </div>
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Who does what</h3>
+              <Table headers={["Layer", "Owner"]}>
+                <WhoRow layer="Risk scan & index capture" owner="Seneschal" />
+                <WhoRow layer="Workflow, documents & evidence" owner="Seneschal" />
+                <WhoRow layer="Tenant coordination & notice service" owner="Licensed partner" />
+                <WhoRow layer="Ejari submission (where in scope)" owner="Licensed partner" />
+              </Table>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted">
+            Regulated scope, fees and licence boundaries are confirmed with the licensed partner before
+            action. No specific licence is represented here.
+          </p>
+        </Card>
+      )}
+
       <p className="text-xs text-muted">
         Decree No. (43) of 2013 figures are estimates anchored to the captured index. Seneschal provides
         software and a record — it is not a broker or legal adviser. Review official sources before acting.
       </p>
     </>
+  );
+}
+
+function Task({ done, label }: { done?: boolean; label: string }) {
+  return (
+    <li className="flex items-center gap-2">
+      <span
+        className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${done ? "bg-verde-100 text-verde-700" : "border border-dashed border-line text-muted"}`}
+      >
+        {done ? "✓" : ""}
+      </span>
+      <span className={done ? "text-navy-900" : "text-muted"}>{label}</span>
+    </li>
+  );
+}
+
+function WhoRow({ layer, owner }: { layer: string; owner: string }) {
+  return (
+    <tr>
+      <Td>{layer}</Td>
+      <Td className={owner === "Seneschal" ? "font-medium text-navy-900" : "font-medium text-verde-700"}>{owner}</Td>
+    </tr>
   );
 }
 

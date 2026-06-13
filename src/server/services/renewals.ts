@@ -1,9 +1,11 @@
-import { Prisma, type OfferParty, type RenewalStatus, type TenancyStatus } from "@prisma/client";
+import { Prisma, type OfferParty, type RenewalStatus, type SecureLink, type TenancyStatus } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
+import { notify } from "../notify";
 import { resolveClientScopeIds } from "./clientScope";
+import { createSecureLink, consumeLinkUse } from "./secureLinks";
 import { getTenancy, setTenancyStatus } from "./tenancies";
 import { decree43, type RentPositionResult } from "../calculators/rent";
 import {
@@ -479,4 +481,196 @@ export async function serveNotice(
     objectId: renewalCaseId,
   });
   return updated;
+}
+
+// ── Tenant secure-response link (no login; token-authenticated)
+
+/** Issue a secure link to the tenant and email the proposal. */
+export async function sendOfferToTenant(ctx: AuthzContext, offerId: string) {
+  require_(ctx, "renewals.write");
+  const offer = await prisma.offer.findUnique({ where: { id: offerId } });
+  assertSameWorkspace(ctx, offer);
+  const tenancy = await getTenancy(ctx, offer!.tenancyId); // enforces client scope
+
+  const link = await createSecureLink(ctx, {
+    purpose: "TENANT_OFFER",
+    scopeType: "OFFER",
+    scopeId: offerId,
+    contactId: tenancy!.tenantContactId ?? undefined,
+    maxUses: 5,
+  });
+  const unit = [tenancy!.property.community, tenancy!.property.unitNo].filter(Boolean).join(" · ");
+  await notify({
+    workspaceId: ctx.workspaceId,
+    channel: "EMAIL",
+    templateCode: "renewal_offer_v1",
+    toContactId: tenancy!.tenantContactId ?? undefined,
+    subject: `Renewal proposal — ${unit || "your tenancy"}`,
+    body: `Your landlord has shared a renewal proposal of AED ${Number(offer!.annualRent).toLocaleString("en-AE")}/yr. View it and respond (accept, counter, or ask a question): ${link.url}`,
+    relatedType: "OFFER",
+    relatedId: offerId,
+  });
+  await recordAudit({
+    workspaceId: ctx.workspaceId,
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    verb: "renewal.send_offer",
+    objectType: "Offer",
+    objectId: offerId,
+  });
+  return link;
+}
+
+export interface TenantOfferView {
+  offerId: string;
+  version: number;
+  proposedRent: number;
+  paymentSchedule: string;
+  paymentMethod: string | null;
+  termMonths: number | null;
+  note: string | null;
+  status: string;
+  unit: string;
+  currentRent: number;
+  marketRentAvg: number | null;
+}
+
+/** Public — render data for a tenant-offer secure link. No AuthzContext. */
+export async function getOfferForLink(link: SecureLink): Promise<TenantOfferView | null> {
+  if (link.purpose !== "TENANT_OFFER") return null;
+  const offer = await prisma.offer.findUnique({ where: { id: link.scopeId } });
+  if (!offer) return null;
+  const tenancy = await prisma.tenancy.findUnique({
+    where: { id: offer.tenancyId },
+    include: { property: true },
+  });
+  if (!tenancy) return null;
+  const index = await prisma.rentIndexCapture.findFirst({
+    where: { tenancyId: offer.tenancyId },
+    orderBy: { capturedAt: "desc" },
+  });
+  return {
+    offerId: offer.id,
+    version: offer.version,
+    proposedRent: Number(offer.annualRent),
+    paymentSchedule: offer.paymentSchedule,
+    paymentMethod: offer.paymentMethod,
+    termMonths: offer.termMonths,
+    note: offer.note,
+    status: offer.status,
+    unit: [tenancy.property.community, tenancy.property.building, tenancy.property.unitNo].filter(Boolean).join(" · "),
+    currentRent: Number(tenancy.annualRent),
+    marketRentAvg: index ? Number(index.marketRentAvg) : null,
+  };
+}
+
+const RENEW_FROM = new Set<TenancyStatus>(["RENEWAL_DUE", "NOTICE_SERVED", "NEGOTIATING"]);
+
+export interface TenantResponseInput {
+  action: "ACCEPT" | "COUNTER" | "ASK";
+  annualRent?: number;
+  paymentSchedule?: string;
+  paymentMethod?: string;
+  note?: string;
+}
+
+/** Public — record a tenant's response to an offer via secure link. No AuthzContext. */
+export async function respondToOfferViaLink(link: SecureLink, input: TenantResponseInput) {
+  if (link.purpose !== "TENANT_OFFER") throw new AuthzError("Wrong link purpose", 400);
+  const offer = await prisma.offer.findUnique({ where: { id: link.scopeId } });
+  if (!offer) throw new AuthzError("Offer not found", 404);
+  const renewalCase = await prisma.renewalCase.findUnique({ where: { id: offer.renewalCaseId } });
+  const workspaceId = link.workspaceId;
+  const tenancyId = offer.tenancyId;
+  const propertyId = renewalCase?.propertyId;
+
+  if (input.action === "COUNTER") {
+    if (!(input.annualRent && input.annualRent > 0) || !input.paymentSchedule) {
+      throw new AuthzError("A counter needs a rent and a payment schedule", 422);
+    }
+    await prisma.offer.updateMany({
+      where: { renewalCaseId: offer.renewalCaseId, status: { in: ["SENT", "COUNTERED"] } },
+      data: { status: "SUPERSEDED" },
+    });
+    const last = await prisma.offer.findFirst({
+      where: { renewalCaseId: offer.renewalCaseId },
+      orderBy: { version: "desc" },
+    });
+    const created = await prisma.offer.create({
+      data: {
+        workspaceId,
+        renewalCaseId: offer.renewalCaseId,
+        tenancyId,
+        version: (last?.version ?? 0) + 1,
+        party: "TENANT",
+        annualRent: new Prisma.Decimal(input.annualRent),
+        paymentSchedule: input.paymentSchedule,
+        paymentMethod: input.paymentMethod ?? null,
+        note: input.note ?? null,
+        status: "COUNTERED",
+        viaSecureLinkId: link.id,
+      },
+    });
+    await prisma.renewalCase.update({ where: { id: offer.renewalCaseId }, data: { status: "NEGOTIATING" } });
+    await recordEvidence({
+      workspaceId,
+      type: "OFFER_COUNTERED",
+      actorType: "TENANT_LINK",
+      scopeType: "OFFER",
+      scopeId: created.id,
+      tenancyId,
+      propertyId,
+      payload: { version: created.version, annualRent: input.annualRent, paymentSchedule: input.paymentSchedule, viaLink: true },
+    });
+  } else if (input.action === "ACCEPT") {
+    await prisma.offer.updateMany({
+      where: { renewalCaseId: offer.renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offer.id } },
+      data: { status: "SUPERSEDED" },
+    });
+    await prisma.offer.update({ where: { id: offer.id }, data: { status: "ACCEPTED" } });
+    await prisma.renewalCase.update({
+      where: { id: offer.renewalCaseId },
+      data: { status: "AGREED", decidedOfferId: offer.id },
+    });
+    const tenancy = await prisma.tenancy.findUnique({ where: { id: tenancyId } });
+    if (tenancy && RENEW_FROM.has(tenancy.status)) {
+      await prisma.tenancy.update({ where: { id: tenancyId }, data: { status: "RENEWED" } });
+      await recordEvidence({
+        workspaceId,
+        type: "FIELD_CORRECTED",
+        actorType: "TENANT_LINK",
+        scopeType: "TENANCY",
+        scopeId: tenancyId,
+        tenancyId,
+        propertyId,
+        payload: { field: "status", from: tenancy.status, to: "RENEWED" },
+      });
+    }
+    await recordEvidence({
+      workspaceId,
+      type: "OFFER_ACCEPTED",
+      actorType: "TENANT_LINK",
+      scopeType: "OFFER",
+      scopeId: offer.id,
+      tenancyId,
+      propertyId,
+      payload: { version: offer.version, viaLink: true },
+    });
+  } else {
+    // ASK — log the tenant's question against the case record.
+    await recordEvidence({
+      workspaceId,
+      type: "TENANT_ACKNOWLEDGED",
+      actorType: "TENANT_LINK",
+      scopeType: "OFFER",
+      scopeId: offer.id,
+      tenancyId,
+      propertyId,
+      payload: { question: input.note ?? "", viaLink: true },
+    });
+  }
+
+  await consumeLinkUse(link.id);
+  return { ok: true as const };
 }
