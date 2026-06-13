@@ -9,11 +9,10 @@ import { signPayload, verifySignature } from "../crypto";
 //
 // Drivers:
 //  - local (dev/test): writes under .storage/
-//  - blob  (production on Vercel): Vercel Blob. Blob URLs are public-but-
-//    unguessable; the URL is stored only in Document.storageKey and never
-//    rendered to clients — downloads still flow through the signed route with
-//    the SHA-256 re-verified. Declared pilot tradeoff vs a strictly private
-//    bucket; an S3/Supabase private-bucket driver is the 1B upgrade path.
+//  - blob  (production on Vercel): Vercel Blob, configured as a PRIVATE store.
+//    Bytes are reachable only via the SDK with BLOB_READ_WRITE_TOKEN — the
+//    stored url is not publicly fetchable. Clients still download solely through
+//    the signed, access-logged /api/v1/files route with SHA-256 re-verified.
 
 export interface StorageDriver {
   /** Store bytes; returns the canonical storage key to persist on the Document row. */
@@ -47,7 +46,7 @@ const blobDriver: StorageDriver = {
   async put(key, data) {
     const { put } = await import("@vercel/blob");
     const blob = await put(key, data, {
-      access: "public", // unguessable URL; treated as a server-side secret
+      access: "private", // store is private; bytes reachable only via the token
       addRandomSuffix: true,
       contentType: "application/octet-stream",
     });
@@ -55,9 +54,12 @@ const blobDriver: StorageDriver = {
   },
   async get(key) {
     if (!/^https:\/\//.test(key)) throw new Error("Invalid blob storage key");
-    const res = await fetch(key);
-    if (!res.ok) throw new Error(`Blob fetch failed: ${res.status}`);
-    return Buffer.from(await res.arrayBuffer());
+    const { get } = await import("@vercel/blob");
+    const result = await get(key, { access: "private", useCache: false });
+    if (!result || result.statusCode !== 200 || !result.stream) {
+      throw new Error(`Blob get failed for ${key}`);
+    }
+    return Buffer.from(await new Response(result.stream).arrayBuffer());
   },
 };
 
