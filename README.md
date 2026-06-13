@@ -140,10 +140,11 @@ After the first deploy, seed once from any machine:
 `DATABASE_URL=<neon-url> APP_BASE_URL=<https-url> pnpm db:seed` — idempotent, and
 it prints the live external proof-upload link.
 
-**Storage caveat (pilot):** Vercel Blob URLs are public-but-unguessable. The URL
-lives only in `Document.storageKey` and is never rendered; client downloads go
-exclusively through the signed, logged `/api/v1/files` route with the SHA-256
-re-verified. A strictly private bucket driver (S3/Supabase) is the 1B upgrade.
+**Storage:** the Vercel Blob store is **private** — bytes are reachable only via the
+SDK with `BLOB_READ_WRITE_TOKEN`, the stored url is not publicly fetchable, and client
+downloads go exclusively through the signed, logged `/api/v1/files` route with the
+SHA-256 re-verified. An S3/Supabase driver remains an optional alternative behind the
+same `StorageDriver` interface.
 
 ## Non-goals (1A)
 
