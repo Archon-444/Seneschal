@@ -1,7 +1,9 @@
 import type { DeadlineKind, Prisma } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, clientScope, require_, scope } from "../authz";
-import { chequeDue, contractExpiry, noticeGate, renewalDate, type CalcResult } from "../calculators/dates";
+import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
+import { recordAudit } from "../audit";
+import { resolveClientScopeIds } from "./clientScope";
+import { chequeDue, contractExpiry, noticeGate, renewalDate, toUtcDateOnly, type CalcResult } from "../calculators/dates";
 
 // Deadline generation (T3.2): regenerated on every tenancy create/update and
 // payment schedule change. Upsert semantics — never a duplicate open deadline;
@@ -120,7 +122,15 @@ export interface DeadlineFilters {
 
 export async function listDeadlines(ctx: AuthzContext, filters?: DeadlineFilters) {
   require_(ctx, "deadlines.read");
-  const client = clientScope(ctx);
+  // Scope to a client (CLIENT_VIEWER, or an explicit filter) by the deadline's
+  // own property/tenancy — so manual, standalone deadlines (no tenancy) are
+  // included instead of being filtered out by a required tenancy relation.
+  const clientId = ctx.clientPrincipalId ?? filters?.clientPrincipalId;
+  let clientWhere: Prisma.DeadlineWhereInput = {};
+  if (clientId) {
+    const ids = await resolveClientScopeIds(ctx.workspaceId, clientId);
+    clientWhere = { OR: [{ propertyId: { in: ids.propertyIds } }, { tenancyId: { in: ids.tenancyIds } }] };
+  }
   return prisma.deadline.findMany({
     where: {
       ...scope(ctx),
@@ -130,14 +140,79 @@ export async function listDeadlines(ctx: AuthzContext, filters?: DeadlineFilters
       ...(filters?.from || filters?.to
         ? { dueAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) } }
         : {}),
-      tenancy: {
-        property: {
-          ...(client.clientPrincipalId ? { clientPrincipalId: client.clientPrincipalId } : {}),
-          ...(filters?.clientPrincipalId ? { clientPrincipalId: filters.clientPrincipalId } : {}),
-        },
-      },
+      ...clientWhere,
     },
     orderBy: { dueAt: "asc" },
     include: { tenancy: { include: { property: true } } },
   });
+}
+
+/** Display label for a deadline — manual entries carry a title in computedFrom. */
+export function deadlineLabel(d: { kind: DeadlineKind; computedFrom: unknown }): string {
+  const cf = d.computedFrom as { rule?: string; title?: string } | null;
+  if (cf?.title) return cf.title;
+  return d.kind.replace(/_/g, " ");
+}
+
+export interface ManualDeadlineInput {
+  title: string;
+  dueAt: Date;
+  kind?: DeadlineKind;
+  propertyId?: string;
+  tenancyId?: string;
+  note?: string;
+}
+
+/** Manual calendar entry (T3.3). Stored as a Deadline; title/note in computedFrom. */
+export async function createManualDeadline(ctx: AuthzContext, input: ManualDeadlineInput) {
+  require_(ctx, "deadlines.write");
+  let propertyId = input.propertyId ?? null;
+  if (input.tenancyId) {
+    const tenancy = await prisma.tenancy.findUnique({ where: { id: input.tenancyId } });
+    assertSameWorkspace(ctx, tenancy);
+    propertyId = propertyId ?? tenancy!.propertyId;
+  } else if (propertyId) {
+    const property = await prisma.property.findUnique({ where: { id: propertyId } });
+    assertSameWorkspace(ctx, property);
+  }
+  const deadline = await prisma.deadline.create({
+    data: {
+      workspaceId: ctx.workspaceId,
+      kind: input.kind ?? "CUSTOM",
+      dueAt: toUtcDateOnly(input.dueAt),
+      status: "OPEN",
+      propertyId,
+      tenancyId: input.tenancyId ?? null,
+      computedFrom: { rule: "manual", title: input.title, note: input.note ?? null } as Prisma.InputJsonValue,
+    },
+  });
+  await recordAudit({
+    workspaceId: ctx.workspaceId,
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    verb: "deadline.create",
+    objectType: "Deadline",
+    objectId: deadline.id,
+  });
+  return deadline;
+}
+
+/** Mark a calendar entry done or cancelled (T3.3). */
+export async function setDeadlineStatus(ctx: AuthzContext, id: string, status: "DONE" | "CANCELLED") {
+  require_(ctx, "deadlines.write");
+  const deadline = await prisma.deadline.findUnique({ where: { id } });
+  assertSameWorkspace(ctx, deadline);
+  if (deadline!.status !== "OPEN") throw new AuthzError("Deadline is not open", 422);
+  const updated = await prisma.deadline.update({ where: { id }, data: { status } });
+  await recordAudit({
+    workspaceId: ctx.workspaceId,
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    verb: status === "DONE" ? "deadline.complete" : "deadline.cancel",
+    objectType: "Deadline",
+    objectId: id,
+  });
+  return updated;
 }
