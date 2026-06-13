@@ -154,6 +154,11 @@ export function deadlineLabel(d: { kind: DeadlineKind; computedFrom: unknown }):
   return d.kind.replace(/_/g, " ");
 }
 
+/** A manual calendar entry (as opposed to a tenancy/Ejari-derived deadline). */
+export function isManualDeadline(d: { computedFrom: unknown }): boolean {
+  return (d.computedFrom as { rule?: string } | null)?.rule === "manual";
+}
+
 export interface ManualDeadlineInput {
   title: string;
   dueAt: Date;
@@ -203,6 +208,12 @@ export async function setDeadlineStatus(ctx: AuthzContext, id: string, status: "
   require_(ctx, "deadlines.write");
   const deadline = await prisma.deadline.findUnique({ where: { id } });
   assertSameWorkspace(ctx, deadline);
+  // Only manual entries can be completed by hand. Tenancy/Ejari-derived
+  // deadlines are owned by their contract lifecycle — regeneration would
+  // otherwise resurrect a "done" computed deadline on the next routine edit.
+  if (!isManualDeadline(deadline!)) {
+    throw new AuthzError("Only manual calendar entries can be completed here", 422);
+  }
   if (deadline!.status !== "OPEN") throw new AuthzError("Deadline is not open", 422);
   const updated = await prisma.deadline.update({ where: { id }, data: { status } });
   await recordAudit({

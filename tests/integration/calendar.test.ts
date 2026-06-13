@@ -67,6 +67,21 @@ describe("manual calendar entries (T3.3)", () => {
     expect(seen).not.toContain(workspaceWide.id);
   });
 
+  it("refuses to complete a tenancy/Ejari-derived deadline (would resurrect on regen)", async () => {
+    const derived = await prisma.deadline.create({
+      data: {
+        workspaceId: W.workspaceId,
+        kind: "CONTRACT_EXPIRY",
+        dueAt: new Date("2026-07-01"),
+        status: "OPEN",
+        computedFrom: { rule: "contract_expiry_v1" },
+      },
+    });
+    await expect(setDeadlineStatus(W.ctx, derived.id, "DONE")).rejects.toThrow();
+    const still = await prisma.deadline.findUnique({ where: { id: derived.id } });
+    expect(still?.status).toBe("OPEN");
+  });
+
   it("rejects a tenancy/property from another workspace", async () => {
     const other = await makeWorkspace("Other", { type: "OWNER" });
     const p = await properties.createProperty(other.ctx, { community: "X", unitNo: "1" });

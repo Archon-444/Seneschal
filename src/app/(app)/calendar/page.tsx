@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
-import { listDeadlines, deadlineLabel } from "@/server/services/deadlines";
+import { listDeadlines, deadlineLabel, isManualDeadline } from "@/server/services/deadlines";
 import { listProperties } from "@/server/services/properties";
 import { formatDubaiDate, isoDate, todayInDubai } from "@/server/calculators/dates";
 import { Badge, Button, Card, EmptyState, Field, inputClass, PageHeader, Table, Td } from "@/components/ui";
@@ -53,8 +53,7 @@ export default async function CalendarPage({
   const next = mon === 12 ? `${year + 1}-01` : `${year}-${String(mon + 1).padStart(2, "0")}`;
   const monthLabel = monthStart.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 
-  const isManual = (d: (typeof all)[number]) =>
-    (d.computedFrom as { rule?: string } | null)?.rule === "manual";
+  const isManual = (d: (typeof all)[number]) => isManualDeadline(d);
 
   return (
     <>
@@ -142,7 +141,7 @@ export default async function CalendarPage({
                   <Td className="figure whitespace-nowrap font-semibold text-claret-700">{formatDubaiDate(d.dueAt)}</Td>
                   <Td><Badge value={deadlineLabel(d)} /></Td>
                   <Td>{propertyLabel(d)}</Td>
-                  <Td><DoneButton id={d.id} /></Td>
+                  <Td>{isManual(d) ? <DoneButton id={d.id} /> : null}</Td>
                 </tr>
               ))}
             </Table>
@@ -159,7 +158,7 @@ export default async function CalendarPage({
                   <Td className="figure whitespace-nowrap">{formatDubaiDate(d.dueAt)}</Td>
                   <Td><Badge value={deadlineLabel(d)} /></Td>
                   <Td>{propertyLabel(d)}</Td>
-                  <Td><DoneButton id={d.id} /></Td>
+                  <Td>{isManual(d) ? <DoneButton id={d.id} /> : null}</Td>
                 </tr>
               ))}
             </Table>
