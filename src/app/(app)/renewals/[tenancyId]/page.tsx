@@ -106,11 +106,19 @@ export default async function RenewalReportPage({
 
         {pos ? (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <LawfulScale
+              current={pos.currentRent}
+              ceiling={pos.ceiling}
+              bandPct={pos.bandPct}
+              markers={risk!.offers
+                .filter((o) => o.status === "SENT" || o.status === "COUNTERED" || o.status === "ACCEPTED")
+                .map((o) => ({ label: `AED ${o.annualRent.toLocaleString("en-AE")}`, value: o.annualRent, party: o.party }))}
+            />
+            <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Fact label="Index average market rent" value={<Money amount={pos.marketRentAvg} />} />
               <Fact label="Your rent vs market" value={`${Math.round(pos.gapPct * 100)}% below`} />
               <Fact label="Decree 43 band" value={`${pos.bandPct}%`} />
-              <Fact label="Lawful ceiling" value={<Money amount={pos.ceiling} />} />
+              <Fact label="Value at risk / yr" value={<Money amount={pos.valueAtRisk} />} />
             </div>
             <div className="mt-4 flex items-start gap-3 rounded-lg bg-white/70 p-3 text-sm text-navy-700">
               <span className="mt-0.5 rounded-full bg-navy-900 px-2 py-0.5 text-xs font-bold text-ivory-50">
@@ -179,7 +187,10 @@ export default async function RenewalReportPage({
                 <tr key={o.id} className={o.status === "ACCEPTED" ? "bg-verde-100/40" : ""}>
                   <Td className="figure">{o.version}</Td>
                   <Td><Badge value={o.party} /></Td>
-                  <Td><Money amount={o.annualRent} /></Td>
+                  <Td>
+                    <Money amount={o.annualRent} />
+                    <div className="text-[11px] text-muted">{deltaOnCurrent(o.annualRent, Number(t.annualRent))}</div>
+                  </Td>
                   <Td>{o.paymentSchedule}{o.paymentMethod ? ` · ${o.paymentMethod}` : ""}</Td>
                   <Td><Badge value={o.status} /></Td>
                   <Td>
@@ -315,6 +326,66 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
     <div>
       <div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div>
       <div className="figure mt-0.5 text-lg text-navy-900">{value}</div>
+    </div>
+  );
+}
+
+function deltaOnCurrent(rent: number, current: number): string {
+  if (!(current > 0)) return "";
+  const pct = Math.round((rent / current - 1) * 100);
+  return `${pct >= 0 ? "+" : ""}${pct}% on current`;
+}
+
+/** The decision signature: where current rent, the offers on the table, and the
+ *  lawful Decree 43 ceiling sit on one axis — the negotiating room, at a glance. */
+function LawfulScale({
+  current,
+  ceiling,
+  bandPct,
+  markers,
+}: {
+  current: number;
+  ceiling: number;
+  bandPct: number;
+  markers: { label: string; value: number; party: "LANDLORD" | "TENANT" }[];
+}) {
+  if (bandPct === 0 || ceiling <= current) {
+    return (
+      <div className="rounded-lg border border-line bg-white/60 p-4 text-sm text-navy-700">
+        No lawful increase applies this renewal — the rent already sits within the top market band.
+      </div>
+    );
+  }
+  const span = ceiling - current;
+  const at = (v: number) => Math.min(100, Math.max(0, ((v - current) / span) * 100));
+  return (
+    <div className="px-1 pt-8 pb-1">
+      <div className="relative h-2 rounded-full bg-gradient-to-r from-verde-100 to-gold-100">
+        {/* lawful ceiling cap */}
+        <div className="absolute right-0 -top-1.5 h-5 w-0.5 bg-claret-500" />
+        {markers.map((m, i) => (
+          <div key={i} className="absolute top-1/2" style={{ left: `${at(m.value)}%` }}>
+            <span
+              className={`figure absolute -top-7 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold ${m.party === "TENANT" ? "text-gold-700" : "text-navy-900"}`}
+            >
+              {m.label}
+            </span>
+            <span
+              className={`absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white ${m.party === "TENANT" ? "bg-gold-500" : "bg-navy-900"}`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="figure mt-3 flex justify-between text-[11px] text-muted">
+        <span>current · AED {current.toLocaleString("en-AE")}</span>
+        <span className="text-claret-700">lawful ceiling · AED {ceiling.toLocaleString("en-AE")}</span>
+      </div>
+      {markers.length > 0 && (
+        <div className="mt-2 flex gap-4 text-[10px] text-muted">
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-navy-900" /> landlord</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-gold-500" /> tenant</span>
+        </div>
+      )}
     </div>
   );
 }
