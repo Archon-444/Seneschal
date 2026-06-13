@@ -6,13 +6,18 @@ import { recordAudit } from "../audit";
 // ClientPrincipal CRUD + archive (T2.1). Archive hides from default lists,
 // keeps evidence intact; no hard delete exists anywhere in this module.
 
-export async function listClients(ctx: AuthzContext, opts?: { includeArchived?: boolean }) {
+export async function listClients(
+  ctx: AuthzContext,
+  opts?: { includeArchived?: boolean; q?: string },
+) {
   require_(ctx, "clients.read");
+  const q = opts?.q?.trim();
   return prisma.clientPrincipal.findMany({
     where: {
       ...scope(ctx),
       ...(ctx.clientPrincipalId ? { id: ctx.clientPrincipalId } : {}),
       ...(opts?.includeArchived ? {} : { archivedAt: null }),
+      ...(q ? { displayName: { contains: q, mode: "insensitive" } } : {}),
     },
     orderBy: { displayName: "asc" },
   });

@@ -40,6 +40,13 @@ export default async function PropertyDetailPage({
   const tenancyFull = tenancy
     ? await import("@/server/services/tenancies").then((m) => m.getTenancy(ctx, tenancy.id))
     : null;
+  const { getContact } = await import("@/server/services/contacts");
+  const landlord = tenancyFull?.landlordContactId
+    ? await getContact(ctx, tenancyFull.landlordContactId).catch(() => null)
+    : null;
+  const tenant = tenancyFull?.tenantContactId
+    ? await getContact(ctx, tenancyFull.tenantContactId).catch(() => null)
+    : null;
 
   const title = `${property!.community}${property!.building ? ` · ${property!.building}` : ""}${property!.unitNo ? ` · ${property!.unitNo}` : ""}`;
 
@@ -93,6 +100,16 @@ export default async function PropertyDetailPage({
                 {tenancyFull.noticePeriodDays !== 90 && (
                   <span className="ml-1 text-xs text-gold-700">(contract override)</span>
                 )}
+              </Detail>
+              <Detail label="Landlord">
+                {landlord ? (
+                  <Link href={`/contacts/${landlord.id}`} className="hover:underline">{landlord.name}</Link>
+                ) : "—"}
+              </Detail>
+              <Detail label="Tenant">
+                {tenant ? (
+                  <Link href={`/contacts/${tenant.id}`} className="hover:underline">{tenant.name}</Link>
+                ) : "—"}
               </Detail>
             </div>
             <h3 className="font-display mt-6 mb-2 text-lg text-navy-900">Open deadlines</h3>

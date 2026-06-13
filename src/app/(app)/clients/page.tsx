@@ -2,20 +2,22 @@ import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { listClients } from "@/server/services/clients";
 import { listProperties } from "@/server/services/properties";
-import { Button, Card, EmptyState, Field, inputClass, PageHeader, Table, Td } from "@/components/ui";
+import { Button, Card, EmptyState, Field, inputClass, PageHeader, SearchForm, Table, Td } from "@/components/ui";
 import { createClientAction, generateReportAction } from "../actions";
 
-export default async function ClientsPage() {
+export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams;
   const ctx = await requireCtx();
-  const [clients, properties] = await Promise.all([listClients(ctx), listProperties(ctx)]);
+  const [clients, properties] = await Promise.all([listClients(ctx, { q }), listProperties(ctx)]);
 
   return (
     <>
       <PageHeader title="Clients" subtitle="Principals under fiduciary oversight" />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
+          <SearchForm q={q} placeholder="Search clients…" />
           {clients.length === 0 ? (
-            <EmptyState message="No clients yet." />
+            <EmptyState message={q ? `No clients match “${q}”.` : "No clients yet."} />
           ) : (
             <Table headers={["Client", "Properties", "Monthly report"]}>
               {clients.map((c) => (

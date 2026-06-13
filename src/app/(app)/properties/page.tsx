@@ -3,11 +3,12 @@ import { requireCtx } from "@/server/auth/request";
 import { listProperties } from "@/server/services/properties";
 import { listClients } from "@/server/services/clients";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, EmptyState, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, EmptyState, LinkButton, Money, PageHeader, SearchForm, Table, Td } from "@/components/ui";
 
-export default async function PropertiesPage() {
+export default async function PropertiesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams;
   const ctx = await requireCtx();
-  const [properties, clients] = await Promise.all([listProperties(ctx), listClients(ctx)]);
+  const [properties, clients] = await Promise.all([listProperties(ctx, { q }), listClients(ctx)]);
   const clientName = (id: string | null) => clients.find((c) => c.id === id)?.displayName ?? "—";
 
   return (
@@ -22,8 +23,9 @@ export default async function PropertiesPage() {
           </>
         }
       />
+      <SearchForm q={q} placeholder="Search community, building, unit, Ejari…" />
       {properties.length === 0 ? (
-        <EmptyState message="No properties yet. Add one manually or import from a contract." />
+        <EmptyState message={q ? `No properties match “${q}”.` : "No properties yet. Add one manually or import from a contract."} />
       ) : (
         <Table headers={["Property", "Client", "Current tenancy", "Rent", "Ends"]}>
           {properties.map((p) => {
