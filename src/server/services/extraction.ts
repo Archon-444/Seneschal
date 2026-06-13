@@ -31,6 +31,10 @@ async function provider(): Promise<ExtractionProvider> {
     const { anthropicProvider } = await import("../extraction/anthropic");
     return anthropicProvider();
   }
+  if (process.env.EXTRACTION_PROVIDER === "gemini") {
+    const { geminiProvider } = await import("../extraction/gemini");
+    return geminiProvider();
+  }
   const { mockProvider } = await import("../extraction/mock");
   return mockProvider();
 }

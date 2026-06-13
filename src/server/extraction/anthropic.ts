@@ -1,17 +1,9 @@
 import type { ExtractionFields, ExtractionProvider } from "../services/extraction";
+import { EXTRACTION_PROMPT } from "./prompt";
 
 // LLM vision extraction provider (D13). Sends the document to the Claude API
 // with a structured-output prompt; returns per-field value + confidence +
 // source snippet. AI proposes — only the human review screen commits (P11).
-
-const EXTRACTION_PROMPT = `You are extracting structured fields from a Dubai tenancy document (contract, Ejari certificate, cheque schedule, invoice, or quotation). Mixed Arabic/English headers are common.
-
-Return STRICT JSON of shape:
-{"fields": {"<fieldName>": {"value": <value>, "confidence": <0..1>, "source": "<short verbatim snippet from the document>"}}}
-
-Field names to use where applicable: landlordName, tenantName, community, building, unitNo, propertyType, bedrooms, ejariNo, startDate, endDate, annualRent, depositAmount, noticePeriodDays, noticePeriodSource, paymentItems (array of {seq,dueDate,amount,instrument,chequeNo,bank}), certificateNo, usage, issueDate, vendorName, quoteRef, invoiceRef, amount, currency, date.
-
-Dates as ISO yyyy-mm-dd. Amounts as numbers without separators. If a field is absent use value null with the confidence of that judgement. Never invent values.`;
 
 export function anthropicProvider(): ExtractionProvider {
   return {

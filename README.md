@@ -134,7 +134,7 @@ local-dev runner.
 | `EMAIL_PROVIDER` / `RESEND_API_KEY` / `EMAIL_FROM` | `resend` + your key + verified sender |
 | `STORAGE_DRIVER` / `BLOB_READ_WRITE_TOKEN` | `blob` + token from the attached Blob store |
 | `CRON_SECRET` | `openssl rand -hex 32` (auth for the cron route) |
-| `EXTRACTION_PROVIDER` | `mock` (or `anthropic` + `ANTHROPIC_API_KEY`) |
+| `EXTRACTION_PROVIDER` | `mock`, or `gemini` + `GEMINI_API_KEY`, or `anthropic` + `ANTHROPIC_API_KEY` |
 
 After the first deploy, seed once from any machine:
 `DATABASE_URL=<neon-url> APP_BASE_URL=<https-url> pnpm db:seed` — idempotent, and
