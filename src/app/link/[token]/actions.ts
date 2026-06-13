@@ -3,11 +3,44 @@
 import { headers } from "next/headers";
 import { validateLinkToken, consumeLinkUse } from "@/server/services/secureLinks";
 import { submitProofViaLink } from "@/server/services/proofs";
+import { respondToOfferViaLink } from "@/server/services/renewals";
 
 export type SubmitState =
   | { status: "idle" }
   | { status: "done" }
   | { status: "error"; message: string };
+
+export type OfferResponseState =
+  | { status: "idle" }
+  | { status: "done"; action: "ACCEPT" | "COUNTER" | "ASK" }
+  | { status: "error"; message: string };
+
+export async function respondToOfferAction(
+  _prev: OfferResponseState,
+  formData: FormData,
+): Promise<OfferResponseState> {
+  const token = String(formData.get("token") ?? "");
+  const validation = await validateLinkToken(token);
+  if (!validation.ok) return { status: "error", message: "This link is no longer available." };
+
+  const action = String(formData.get("action") ?? "") as "ACCEPT" | "COUNTER" | "ASK";
+  if (!["ACCEPT", "COUNTER", "ASK"].includes(action)) {
+    return { status: "error", message: "Choose accept, counter, or ask." };
+  }
+  const rent = String(formData.get("annualRent") ?? "").trim();
+  try {
+    await respondToOfferViaLink(validation.link, {
+      action,
+      annualRent: rent ? Number(rent) : undefined,
+      paymentSchedule: String(formData.get("paymentSchedule") ?? "").trim() || undefined,
+      paymentMethod: String(formData.get("paymentMethod") ?? "").trim() || undefined,
+      note: String(formData.get("note") ?? "").trim() || undefined,
+    });
+  } catch (e) {
+    return { status: "error", message: e instanceof Error ? e.message : "Could not record your response." };
+  }
+  return { status: "done", action };
+}
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
 
