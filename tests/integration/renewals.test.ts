@@ -4,10 +4,13 @@ import * as clients from "@/server/services/clients";
 import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
 import {
+  acceptOffer,
   captureRentIndex,
   getRenewalRisk,
   listRenewalPipeline,
   openRenewalCase,
+  proposeOffer,
+  serveNotice,
 } from "@/server/services/renewals";
 
 let W: TestActor;
@@ -118,5 +121,74 @@ describe("renewal risk desk", () => {
     });
     await expect(getRenewalRisk(W.ctx, otherTenancy.id)).rejects.toThrow();
     await expect(captureRentIndex(W.ctx, { tenancyId: otherTenancy.id, marketRentAvg: 60_000 })).rejects.toThrow();
+  });
+});
+
+describe("renewal negotiation", () => {
+  it("versions proposals and counters, superseding the prior open offer", async () => {
+    const rc = await openRenewalCase(W.ctx, tenancyId);
+    const o1 = await proposeOffer(W.ctx, {
+      renewalCaseId: rc.id,
+      party: "LANDLORD",
+      annualRent: 79_200,
+      paymentSchedule: "4 cheques",
+    });
+    expect(o1.version).toBe(1);
+    expect(await prisma.evidenceEvent.findFirst({ where: { type: "OFFER_PROPOSED", scopeId: o1.id } })).toBeTruthy();
+    expect((await prisma.tenancy.findUnique({ where: { id: tenancyId } }))!.status).toBe("NEGOTIATING");
+
+    const o2 = await proposeOffer(W.ctx, {
+      renewalCaseId: rc.id,
+      party: "TENANT",
+      annualRent: 77_000,
+      paymentSchedule: "2 cheques",
+    });
+    expect(o2.version).toBe(2);
+    expect((await prisma.offer.findUnique({ where: { id: o1.id } }))!.status).toBe("SUPERSEDED");
+    expect(await prisma.evidenceEvent.findFirst({ where: { type: "OFFER_COUNTERED", scopeId: o2.id } })).toBeTruthy();
+  });
+
+  it("accepting an offer agrees the case and renews the tenancy", async () => {
+    const rc = await openRenewalCase(W.ctx, tenancyId);
+    const o = await proposeOffer(W.ctx, {
+      renewalCaseId: rc.id,
+      party: "LANDLORD",
+      annualRent: 79_200,
+      paymentSchedule: "4 cheques",
+    });
+    await acceptOffer(W.ctx, o.id);
+
+    const after = await prisma.renewalCase.findUnique({ where: { id: rc.id } });
+    expect(after!.status).toBe("AGREED");
+    expect(after!.decidedOfferId).toBe(o.id);
+    expect((await prisma.offer.findUnique({ where: { id: o.id } }))!.status).toBe("ACCEPTED");
+    expect((await prisma.tenancy.findUnique({ where: { id: tenancyId } }))!.status).toBe("RENEWED");
+    expect(await prisma.evidenceEvent.findFirst({ where: { type: "OFFER_ACCEPTED", scopeId: o.id } })).toBeTruthy();
+
+    const risk = await getRenewalRisk(W.ctx, tenancyId);
+    expect(risk.offers).toHaveLength(1);
+    expect(risk.renewalCase?.decidedOfferId).toBe(o.id);
+  });
+
+  it("serving notice records evidence and moves the case + tenancy", async () => {
+    const rc = await openRenewalCase(W.ctx, tenancyId);
+    await serveNotice(W.ctx, rc.id);
+    const after = await prisma.renewalCase.findUnique({ where: { id: rc.id } });
+    expect(after!.status).toBe("NOTICE_SERVED");
+    expect(after!.noticeServedAt).toBeTruthy();
+    expect((await prisma.tenancy.findUnique({ where: { id: tenancyId } }))!.status).toBe("NOTICE_SERVED");
+    expect(await prisma.evidenceEvent.findFirst({ where: { type: "NOTICE_SERVED", scopeId: rc.id } })).toBeTruthy();
+  });
+
+  it("requires renewals.decide to accept an offer", async () => {
+    const rc = await openRenewalCase(W.ctx, tenancyId);
+    const o = await proposeOffer(W.ctx, {
+      renewalCaseId: rc.id,
+      party: "LANDLORD",
+      annualRent: 79_200,
+      paymentSchedule: "4 cheques",
+    });
+    const agent = await addMember(W.workspaceId, "AGENT"); // read-only on renewals
+    await expect(acceptOffer(agent.ctx, o.id)).rejects.toThrow();
   });
 });
