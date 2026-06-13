@@ -3,7 +3,7 @@ import { deliverNotification } from "../notify";
 import { detectLatePayments } from "../services/payments";
 import { sweepOverdueProofRequests } from "../services/proofs";
 import { evaluateWorkspaceRisk } from "../services/risk";
-import { runAlertLadders } from "../services/alerts";
+import { runAlertLadders, sendWeeklyDigest } from "../services/alerts";
 import { prisma } from "../db";
 
 // In-process job runner (T0.3). Polls the outbox and runs daily jobs.
@@ -19,7 +19,7 @@ export const handlers: Record<string, OutboxHandler> = {
   },
 };
 
-/** One daily pass: late cheques, overdue proofs, risk re-evaluation, ladders. */
+/** One daily pass: late cheques, overdue proofs, risk re-evaluation, ladders, digest. */
 export async function runDailyJobs(): Promise<void> {
   const workspaces = await prisma.workspace.findMany({ where: { archivedAt: null } });
   for (const ws of workspaces) {
@@ -27,6 +27,7 @@ export async function runDailyJobs(): Promise<void> {
     await sweepOverdueProofRequests(ws.id);
     await evaluateWorkspaceRisk(ws.id);
     await runAlertLadders(ws.id);
+    await sendWeeklyDigest(ws.id); // self-throttles to once a week
   }
 }
 
