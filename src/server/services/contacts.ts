@@ -7,14 +7,26 @@ import { recordAudit } from "../audit";
 
 export async function listContacts(
   ctx: AuthzContext,
-  opts?: { kind?: ContactKind; includeArchived?: boolean },
+  opts?: { kind?: ContactKind; includeArchived?: boolean; q?: string },
 ) {
   require_(ctx, "contacts.read");
+  const q = opts?.q?.trim();
   return prisma.contact.findMany({
     where: {
       ...scope(ctx),
       ...(opts?.kind ? { kind: opts.kind } : {}),
       ...(opts?.includeArchived ? {} : { archivedAt: null }),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+              { phone: { contains: q, mode: "insensitive" } },
+              { emiratesId: { contains: q, mode: "insensitive" } },
+              { company: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
     },
     orderBy: { name: "asc" },
   });
@@ -25,6 +37,32 @@ export async function getContact(ctx: AuthzContext, id: string) {
   const contact = await prisma.contact.findUnique({ where: { id } });
   assertSameWorkspace(ctx, contact);
   return contact;
+}
+
+/** Contact + the contracts and proof requests it's a party to (T2.2 detail). */
+export async function getContactDetail(ctx: AuthzContext, id: string) {
+  require_(ctx, "contacts.read");
+  const contact = await prisma.contact.findUnique({ where: { id } });
+  assertSameWorkspace(ctx, contact);
+
+  const clientFilter = ctx.clientPrincipalId
+    ? { property: { clientPrincipalId: ctx.clientPrincipalId } }
+    : {};
+  const tenancies = await prisma.tenancy.findMany({
+    where: {
+      workspaceId: ctx.workspaceId,
+      OR: [{ landlordContactId: id }, { tenantContactId: id }],
+      ...clientFilter,
+    },
+    include: { property: true },
+    orderBy: { endDate: "desc" },
+  });
+  const proofRequests = await prisma.proofRequest.findMany({
+    where: { workspaceId: ctx.workspaceId, assignedContactId: id },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return { contact: contact!, tenancies, proofRequests };
 }
 
 export interface ContactInput {

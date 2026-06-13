@@ -243,3 +243,29 @@ export function Money({ amount }: { amount: string | number }) {
   const n = typeof amount === "string" ? Number(amount) : amount;
   return <span className="figure">AED {n.toLocaleString("en-AE", { minimumFractionDigits: 0 })}</span>;
 }
+
+/** Server-rendered search box: a GET form that sets ?q= on the current page. */
+export function SearchForm({
+  q,
+  placeholder = "Search…",
+  hidden,
+}: {
+  q?: string;
+  placeholder?: string;
+  hidden?: Record<string, string>;
+}) {
+  return (
+    <form method="get" className="mb-4 flex gap-2">
+      {hidden &&
+        Object.entries(hidden).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+      <input
+        name="q"
+        defaultValue={q ?? ""}
+        placeholder={placeholder}
+        className="w-full max-w-sm rounded-lg border border-line bg-white px-3 py-2 text-sm text-navy-900 focus:border-gold-500 focus:outline-none"
+      />
+      <Button type="submit" variant="secondary">Search</Button>
+      {q ? <LinkButton href="?">Clear</LinkButton> : null}
+    </form>
+  );
+}

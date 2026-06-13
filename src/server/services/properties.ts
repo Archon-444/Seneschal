@@ -7,15 +7,29 @@ import { recordAudit } from "../audit";
 
 export async function listProperties(
   ctx: AuthzContext,
-  opts?: { clientPrincipalId?: string; includeArchived?: boolean },
+  opts?: { clientPrincipalId?: string; includeArchived?: boolean; q?: string },
 ) {
   require_(ctx, "properties.read");
+  const q = opts?.q?.trim();
   return prisma.property.findMany({
     where: {
       ...scope(ctx),
       ...clientScope(ctx),
       ...(opts?.clientPrincipalId ? { clientPrincipalId: opts.clientPrincipalId } : {}),
       ...(opts?.includeArchived ? {} : { archivedAt: null }),
+      ...(q
+        ? {
+            OR: [
+              { community: { contains: q, mode: "insensitive" } },
+              { building: { contains: q, mode: "insensitive" } },
+              { unitNo: { contains: q, mode: "insensitive" } },
+              { propertyType: { contains: q, mode: "insensitive" } },
+              { makaniNo: { contains: q, mode: "insensitive" } },
+              { dewaPremiseNo: { contains: q, mode: "insensitive" } },
+              { tenancies: { some: { ejariNo: { contains: q, mode: "insensitive" } } } },
+            ],
+          }
+        : {}),
     },
     orderBy: [{ community: "asc" }, { building: "asc" }],
     include: { tenancies: { where: { archivedAt: null }, orderBy: { endDate: "desc" }, take: 1 } },
