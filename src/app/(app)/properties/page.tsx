@@ -15,7 +15,12 @@ export default async function PropertiesPage() {
       <PageHeader
         title="Properties"
         subtitle={`${properties.length} under oversight`}
-        actions={<LinkButton href="/properties/new" variant="primary">Add property</LinkButton>}
+        actions={
+          <>
+            <LinkButton href="/properties/new">Add property</LinkButton>
+            <LinkButton href="/onboarding/new" variant="primary">Onboard tenancy</LinkButton>
+          </>
+        }
       />
       {properties.length === 0 ? (
         <EmptyState message="No properties yet. Add one manually or import from a contract." />

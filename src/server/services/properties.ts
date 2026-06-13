@@ -44,6 +44,11 @@ export interface PropertyInput {
   propertyType?: string;
   bedrooms?: number;
   sizeSqft?: number;
+  usage?: string;
+  plotNo?: string;
+  makaniNo?: string;
+  dewaPremiseNo?: string;
+  sizeSqm?: number;
   assignedAgentId?: string;
   notes?: string;
 }

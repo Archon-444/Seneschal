@@ -92,6 +92,12 @@ model Contact {
   phone       String?
   email       String?
   company     String?
+  // Ejari party identity (optional) — captured during onboarding from the
+  // Unified Tenancy Contract; licenseNo/Authority used when the party is a company.
+  emiratesId          String?
+  nationality         String?
+  licenseNo           String?
+  licensingAuthority  String?
   notes       String?
   createdAt   DateTime    @default(now())
   archivedAt  DateTime?
@@ -120,9 +126,15 @@ model Property {
   building          String?
   unitNo            String?
   emirate           String   @default("Dubai")
-  propertyType      String?          // apartment, villa, office...
+  propertyType      String?          // free text: "Apartment", "2 Bed Villa + Maid"...
   bedrooms          Int?
   sizeSqft          Int?
+  // Ejari asset identifiers (optional) — captured during onboarding
+  usage             String?          // Residential | Commercial | Industrial
+  plotNo            String?
+  makaniNo          String?
+  dewaPremiseNo     String?
+  sizeSqm           Decimal?  @db.Decimal(10, 2)
   assignedAgentId   String?          // Contact
   serviceChargeInfo Json?
   riskStatus        String?

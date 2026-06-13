@@ -33,6 +33,10 @@ export interface ContactInput {
   phone?: string;
   email?: string;
   company?: string;
+  emiratesId?: string;
+  nationality?: string;
+  licenseNo?: string;
+  licensingAuthority?: string;
   notes?: string;
 }
 

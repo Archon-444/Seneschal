@@ -51,6 +51,16 @@ export default async function PropertyDetailPage({
         actions={!tenancy ? <LinkButton href={`/tenancies/new?propertyId=${id}`} variant="primary">Add tenancy</LinkButton> : undefined}
       />
 
+      {(property!.usage || property!.makaniNo || property!.dewaPremiseNo || property!.plotNo || property!.sizeSqm) && (
+        <div className="mb-6 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border border-line bg-ivory-100 px-4 py-3 text-sm">
+          {property!.usage && <AssetFact label="Usage" value={property!.usage} />}
+          {property!.plotNo && <AssetFact label="Plot" value={property!.plotNo} />}
+          {property!.makaniNo && <AssetFact label="Makani" value={property!.makaniNo} />}
+          {property!.dewaPremiseNo && <AssetFact label="DEWA premises" value={property!.dewaPremiseNo} />}
+          {property!.sizeSqm != null && <AssetFact label="Area" value={`${Number(property!.sizeSqm)} s.m`} />}
+        </div>
+      )}
+
       <div className="mb-6 flex gap-1 border-b border-ivory-300">
         {TABS.map((t) => (
           <Link
@@ -179,6 +189,15 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
     <div>
       <div className="text-xs font-medium uppercase tracking-wide text-navy-300">{label}</div>
       <div className="mt-0.5 text-navy-900">{children}</div>
+    </div>
+  );
+}
+
+function AssetFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="text-xs font-medium uppercase tracking-wide text-muted">{label}</span>
+      <div className="figure text-navy-900">{value}</div>
     </div>
   );
 }
