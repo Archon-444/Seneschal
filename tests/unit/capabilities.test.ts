@@ -43,6 +43,14 @@ describe("role capability matrix", () => {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
     },
+    "renewals.read": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
+      AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
+    },
+    "renewals.write": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+    },
     "imports.manage": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
