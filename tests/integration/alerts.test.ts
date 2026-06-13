@@ -79,8 +79,18 @@ describe("alert ladders", () => {
     expect((evidence!.payload as { template: string }).template).toBe("notice_gate_v1");
   });
 
-  it("weekly digest sends to fiduciary/admin members", async () => {
+  it("weekly digest sends to fiduciary/admin members, throttled to once a week", async () => {
     await sendWeeklyDigest(W.workspaceId);
+    await sendWeeklyDigest(W.workspaceId); // second call within the week is skipped
+    const digests = await prisma.notificationMessage.findMany({
+      where: { workspaceId: W.workspaceId, templateCode: "weekly_digest_v1" },
+    });
+    expect(digests).toHaveLength(1);
+  });
+
+  it("the daily runner triggers the weekly digest", async () => {
+    const { runDailyJobs } = await import("@/server/outbox/runner");
+    await runDailyJobs();
     const digest = await prisma.notificationMessage.findFirst({
       where: { workspaceId: W.workspaceId, templateCode: "weekly_digest_v1" },
     });

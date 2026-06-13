@@ -2,10 +2,10 @@ import { Prisma, type EvidenceType, type Instrument, type PaymentStatus } from "
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
 import { recordEvidence } from "../evidence";
-import { toUtcDateOnly, todayInDubai } from "../calculators/dates";
+import { formatDubaiDate, toUtcDateOnly, todayInDubai } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
 import { clearPaymentLate, evaluateRiskForTenancy, raisePaymentLate } from "./risk";
-import { enqueue } from "../outbox";
+import { notify } from "../notify";
 import { getTenancy } from "./tenancies";
 
 // Payments register (E4) — record-keeping only, Seneschal never holds funds.
@@ -148,7 +148,9 @@ export async function transitionPayment(
 
 /**
  * Late detection job (T4.3). Marks LATE anything past due without RECEIVED+,
- * raises PAYMENT_LATE and queues a reminder. Idempotent across reruns.
+ * raises PAYMENT_LATE and sends a reminder to the workspace's overseers.
+ * Idempotent across reruns: each item flips to LATE here, so the SCHEDULED/
+ * REQUESTED filter excludes it next time — one reminder per item.
  */
 export async function detectLatePayments(workspaceId?: string): Promise<number> {
   const today = todayInDubai();
@@ -158,16 +160,50 @@ export async function detectLatePayments(workspaceId?: string): Promise<number> 
       status: { in: ["SCHEDULED", "REQUESTED"] },
       dueDate: { lt: today },
     },
-    include: { tenancy: true },
+    include: { tenancy: { include: { property: true } } },
   });
+
+  // resolve each workspace's overseers once
+  const adminsByWorkspace = new Map<string, { userId: string }[]>();
+  async function adminsFor(wsId: string) {
+    let admins = adminsByWorkspace.get(wsId);
+    if (!admins) {
+      admins = await prisma.membership.findMany({
+        where: {
+          workspaceId: wsId,
+          revokedAt: null,
+          role: { in: ["WORKSPACE_ADMIN", "FIDUCIARY", "MANAGER"] },
+        },
+        select: { userId: true },
+      });
+      adminsByWorkspace.set(wsId, admins);
+    }
+    return admins;
+  }
+
   for (const item of due) {
     await prisma.paymentItem.update({ where: { id: item.id }, data: { status: "LATE" } });
     await raisePaymentLate(item.id);
-    await enqueue("notification.send", {
-      kind: "payment_late_reminder",
-      workspaceId: item.workspaceId,
-      paymentItemId: item.id,
-    });
+
+    const where = item.tenancy.property
+      ? `${item.tenancy.property.community} ${item.tenancy.property.unitNo ?? ""}`.trim()
+      : "a property";
+    for (const admin of await adminsFor(item.workspaceId)) {
+      await notify({
+        workspaceId: item.workspaceId,
+        channel: "EMAIL",
+        templateCode: "payment_late_v1",
+        subject: `Cheque overdue — ${where} — ${formatDubaiDate(item.dueDate)}`,
+        body:
+          `A scheduled payment is past due and not yet recorded as received.\n\n` +
+          `Property: ${where}\nCheque: ${item.chequeNo ?? `#${item.seq}`} · ${String(item.amount)} AED\n` +
+          `Was due: ${formatDubaiDate(item.dueDate)}\n\n` +
+          `Record-keeping reminder only — Seneschal holds no funds. Review before action.`,
+        toUserId: admin.userId,
+        relatedType: "TENANCY",
+        relatedId: item.tenancyId,
+      });
+    }
   }
   return due.length;
 }

@@ -99,8 +99,18 @@ export async function runAlertLadders(workspaceId: string): Promise<number> {
   return sent;
 }
 
-/** Weekly digest email (T9.2). */
+/**
+ * Weekly digest email (T9.2). Self-throttling: skips if a digest was already
+ * sent for this workspace in the last 6 days, so the daily runner can call it
+ * every pass and it still fires only once a week.
+ */
 export async function sendWeeklyDigest(workspaceId: string): Promise<void> {
+  const sixDaysAgo = new Date(Date.now() - 6 * 86_400_000);
+  const recent = await prisma.notificationMessage.findFirst({
+    where: { workspaceId, templateCode: "weekly_digest_v1", createdAt: { gte: sixDaysAgo } },
+  });
+  if (recent) return;
+
   const today = todayInDubai();
   const in7 = new Date(today.getTime() + 7 * 86_400_000);
   const [deadlines, flags, proofs] = await Promise.all([

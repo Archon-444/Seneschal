@@ -125,7 +125,18 @@ describe("late detection (T4.3)", () => {
       where: { code: "PAYMENT_LATE", scopeId: pastDue.id, status: "OPEN" },
     });
     expect(flag).toBeTruthy();
-    expect(await prisma.outbox.count({ where: { topic: "notification.send" } })).toBeGreaterThan(0);
+
+    // a deliverable reminder is created (NotificationMessage + outbox messageId),
+    // addressed to the workspace overseer — not a malformed bare enqueue
+    const reminders = await prisma.notificationMessage.findMany({
+      where: { workspaceId: W.workspaceId, templateCode: "payment_late_v1" },
+    });
+    expect(reminders).toHaveLength(1); // once only, despite two detect runs
+    expect(reminders[0].status).toBe("QUEUED");
+    expect(reminders[0].toUserId).toBe(W.ctx.userId);
+    expect(reminders[0].relatedId).toBe(tenancyId);
+    const outbox = await prisma.outbox.findFirst({ where: { topic: "notification.send" } });
+    expect((outbox!.payload as { messageId?: string }).messageId).toBe(reminders[0].id);
 
     // receiving the late cheque clears the flag
     await payments.transitionPayment(W.ctx, pastDue.id, "RECEIVED");
