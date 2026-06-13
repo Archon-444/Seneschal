@@ -62,31 +62,38 @@ export function KpiCard({
   value,
   tone = "default",
   variant = "default",
+  href,
 }: {
   label: string;
   value: ReactNode;
   tone?: "default" | "warn" | "danger" | "good";
   variant?: "default" | "risk";
+  href?: string;
 }) {
-  if (variant === "risk") {
-    return (
-      <div className="rounded-xl border border-navy-900 bg-navy-900 p-5 text-white shadow-sm">
-        <div className="text-xs font-bold uppercase tracking-wider text-gold-500">{label}</div>
-        <div className="figure mt-1 text-3xl font-semibold">{value}</div>
-      </div>
-    );
-  }
   const toneClass = {
     default: "text-navy-900",
     warn: "text-amber-700",
     danger: "text-claret-500",
     good: "text-verde-700",
   }[tone];
-  return (
-    <Card>
-      <div className="text-xs font-bold uppercase tracking-wider text-muted">{label}</div>
-      <div className={`figure mt-1 text-3xl ${toneClass}`}>{value}</div>
-    </Card>
+  const inner =
+    variant === "risk" ? (
+      <div
+        className={`rounded-xl border border-navy-900 bg-navy-900 p-5 text-white shadow-sm ${href ? "transition hover:brightness-125" : ""}`}
+      >
+        <div className="text-xs font-bold uppercase tracking-wider text-gold-500">{label}</div>
+        <div className="figure mt-1 text-3xl font-semibold">{value}</div>
+      </div>
+    ) : (
+      <Card hover={!!href}>
+        <div className="text-xs font-bold uppercase tracking-wider text-muted">{label}</div>
+        <div className={`figure mt-1 text-3xl ${toneClass}`}>{value}</div>
+      </Card>
+    );
+  return href ? (
+    <Link href={href} className="block">{inner}</Link>
+  ) : (
+    inner
   );
 }
 
