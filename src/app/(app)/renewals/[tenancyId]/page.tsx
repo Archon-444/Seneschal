@@ -3,8 +3,14 @@ import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { getRenewalRisk } from "@/server/services/renewals";
 import { daysBetween, formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, Field, inputClass, Money, PageHeader } from "@/components/ui";
-import { captureIndexAction, openRenewalCaseAction } from "../../actions";
+import { Badge, Button, Card, Field, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import {
+  acceptOfferAction,
+  captureIndexAction,
+  openRenewalCaseAction,
+  proposeOfferAction,
+  serveNoticeAction,
+} from "../../actions";
 
 // Renewal risk report (Renewal Risk Desk). Notice-gate countdown + the lawful
 // Decree 43 position from a captured index. Estimates for review — not legal advice.
@@ -149,6 +155,72 @@ export default async function RenewalReportPage({
           <Button type="submit">Save index figure</Button>
         </form>
       </Card>
+
+      {/* Negotiation workspace */}
+      {risk!.renewalCase && (
+        <Card className="mb-6">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg text-navy-900">Renewal terms</h2>
+            {risk!.renewalCase.status !== "AGREED" && risk!.renewalCase.status !== "NOTICE_SERVED" && (
+              <form action={serveNoticeAction}>
+                <input type="hidden" name="renewalCaseId" value={risk!.renewalCase.id} />
+                <input type="hidden" name="tenancyId" value={tenancyId} />
+                <Button type="submit" variant="secondary">Mark notice served</Button>
+              </form>
+            )}
+          </div>
+
+          {risk!.offers.length === 0 ? (
+            <p className="mb-4 text-sm text-muted">No terms on the table yet — send the first proposal below.</p>
+          ) : (
+            <Table headers={["v", "Party", "Annual rent", "Payment", "Status", ""]}>
+              {risk!.offers.map((o) => (
+                <tr key={o.id} className={o.status === "ACCEPTED" ? "bg-verde-100/40" : ""}>
+                  <Td className="figure">{o.version}</Td>
+                  <Td><Badge value={o.party} /></Td>
+                  <Td><Money amount={o.annualRent} /></Td>
+                  <Td>{o.paymentSchedule}{o.paymentMethod ? ` · ${o.paymentMethod}` : ""}</Td>
+                  <Td><Badge value={o.status} /></Td>
+                  <Td>
+                    {(o.status === "SENT" || o.status === "COUNTERED") && (
+                      <form action={acceptOfferAction}>
+                        <input type="hidden" name="offerId" value={o.id} />
+                        <input type="hidden" name="tenancyId" value={tenancyId} />
+                        <button className="text-xs text-navy-500 underline-offset-2 hover:text-verde-700 hover:underline">
+                          Accept
+                        </button>
+                      </form>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </Table>
+          )}
+
+          {risk!.renewalCase.status !== "AGREED" && (
+            <form action={proposeOfferAction} className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4">
+              <input type="hidden" name="renewalCaseId" value={risk!.renewalCase.id} />
+              <input type="hidden" name="tenancyId" value={tenancyId} />
+              <Field label="Party">
+                <select name="party" className={inputClass}>
+                  <option value="LANDLORD">Landlord proposal</option>
+                  <option value="TENANT">Tenant counter</option>
+                </select>
+              </Field>
+              <Field label="Annual rent (AED)">
+                <input name="annualRent" type="number" min="1" step="1" required className={inputClass} placeholder="e.g. 79200" />
+              </Field>
+              <Field label="Payment schedule">
+                <input name="paymentSchedule" required className={inputClass} placeholder="4 cheques" />
+              </Field>
+              <Field label="Method">
+                <input name="paymentMethod" className={inputClass} placeholder="Cheque" />
+              </Field>
+              <Button type="submit">Add terms</Button>
+            </form>
+          )}
+        </Card>
+      )}
 
       <p className="text-xs text-muted">
         Decree No. (43) of 2013 figures are estimates anchored to the captured index. Seneschal provides

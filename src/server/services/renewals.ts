@@ -1,10 +1,10 @@
-import { Prisma, type RenewalStatus } from "@prisma/client";
+import { Prisma, type OfferParty, type RenewalStatus, type TenancyStatus } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, require_, scope } from "../authz";
+import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
 import { resolveClientScopeIds } from "./clientScope";
-import { getTenancy } from "./tenancies";
+import { getTenancy, setTenancyStatus } from "./tenancies";
 import { decree43, type RentPositionResult } from "../calculators/rent";
 import {
   contractExpiry,
@@ -129,6 +129,19 @@ export async function captureRentIndex(ctx: AuthzContext, input: CaptureIndexInp
   return capture;
 }
 
+export interface OfferView {
+  id: string;
+  version: number;
+  party: OfferParty;
+  annualRent: number;
+  paymentSchedule: string;
+  paymentMethod: string | null;
+  termMonths: number | null;
+  status: string;
+  note: string | null;
+  createdAt: Date;
+}
+
 export interface RenewalRisk {
   tenancy: NonNullable<Awaited<ReturnType<typeof getTenancy>>>;
   noticeGateAt: Date;
@@ -138,7 +151,8 @@ export interface RenewalRisk {
   gatePassed: boolean;
   latestIndex: { marketRentAvg: number; capturedAt: Date; source: string } | null;
   position: RentPositionResult | null;
-  renewalCase: { id: string; status: RenewalStatus } | null;
+  renewalCase: { id: string; status: RenewalStatus; decidedOfferId: string | null } | null;
+  offers: OfferView[];
 }
 
 /** Assemble the renewal risk report for one tenancy. */
@@ -152,10 +166,17 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
       orderBy: { capturedAt: "desc" },
     }),
     prisma.renewalCase.findFirst({
-      where: { workspaceId: ctx.workspaceId, tenancyId, status: { notIn: TERMINAL } },
+      where: { workspaceId: ctx.workspaceId, tenancyId },
       orderBy: { createdAt: "desc" },
     }),
   ]);
+
+  const offers = renewalCase
+    ? await prisma.offer.findMany({
+        where: { renewalCaseId: renewalCase.id },
+        orderBy: { version: "asc" },
+      })
+    : [];
 
   const gate = noticeGate(tenancy!.endDate, tenancy!.noticePeriodDays);
   const today = todayInDubai();
@@ -176,7 +197,21 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
     gatePassed: daysToGate < 0,
     latestIndex,
     position,
-    renewalCase: renewalCase ? { id: renewalCase.id, status: renewalCase.status } : null,
+    renewalCase: renewalCase
+      ? { id: renewalCase.id, status: renewalCase.status, decidedOfferId: renewalCase.decidedOfferId }
+      : null,
+    offers: offers.map((o) => ({
+      id: o.id,
+      version: o.version,
+      party: o.party,
+      annualRent: Number(o.annualRent),
+      paymentSchedule: o.paymentSchedule,
+      paymentMethod: o.paymentMethod,
+      termMonths: o.termMonths,
+      status: o.status,
+      note: o.note,
+      createdAt: o.createdAt,
+    })),
   };
 }
 
@@ -273,4 +308,175 @@ export async function listRenewalPipeline(
       stage: caseStage.get(t.id) ?? null,
     };
   });
+}
+
+// ── Negotiation: offers, counters, decisions, notice
+
+/** Best-effort tenancy status move — skips silently when the transition isn't
+ *  legal for the current status (the RenewalCase status stays authoritative). */
+async function tryMoveTenancy(ctx: AuthzContext, tenancyId: string, target: TenancyStatus) {
+  try {
+    await setTenancyStatus(ctx, tenancyId, target);
+  } catch (e) {
+    if (!(e instanceof AuthzError && e.status === 422)) throw e;
+  }
+}
+
+export interface OfferInput {
+  renewalCaseId: string;
+  party: OfferParty;
+  annualRent: number;
+  paymentSchedule: string;
+  paymentMethod?: string;
+  termMonths?: number;
+  startDate?: Date;
+  note?: string;
+  viaSecureLinkId?: string;
+}
+
+/** Propose a landlord offer or record a tenant counter — a new versioned Offer. */
+export async function proposeOffer(ctx: AuthzContext, input: OfferInput) {
+  require_(ctx, "renewals.write");
+  if (!(input.annualRent > 0)) throw new AuthzError("Offer rent must be a positive amount", 422);
+  const renewalCase = await prisma.renewalCase.findUnique({ where: { id: input.renewalCaseId } });
+  assertSameWorkspace(ctx, renewalCase);
+  await getTenancy(ctx, renewalCase!.tenancyId); // enforces client scope
+
+  // Supersede any still-open offer; the newest figure is the one on the table.
+  await prisma.offer.updateMany({
+    where: { renewalCaseId: renewalCase!.id, status: { in: ["SENT", "COUNTERED"] } },
+    data: { status: "SUPERSEDED" },
+  });
+  const last = await prisma.offer.findFirst({
+    where: { renewalCaseId: renewalCase!.id },
+    orderBy: { version: "desc" },
+  });
+  const version = (last?.version ?? 0) + 1;
+
+  const offer = await prisma.offer.create({
+    data: {
+      workspaceId: ctx.workspaceId,
+      renewalCaseId: renewalCase!.id,
+      tenancyId: renewalCase!.tenancyId,
+      version,
+      party: input.party,
+      annualRent: new Prisma.Decimal(input.annualRent),
+      paymentSchedule: input.paymentSchedule,
+      paymentMethod: input.paymentMethod ?? null,
+      termMonths: input.termMonths ?? null,
+      startDate: input.startDate ? toUtcDateOnly(input.startDate) : null,
+      note: input.note ?? null,
+      status: input.party === "TENANT" ? "COUNTERED" : "SENT",
+      createdById: ctx.userId,
+      viaSecureLinkId: input.viaSecureLinkId ?? null,
+    },
+  });
+  await prisma.renewalCase.update({ where: { id: renewalCase!.id }, data: { status: "NEGOTIATING" } });
+  await tryMoveTenancy(ctx, renewalCase!.tenancyId, "NEGOTIATING");
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: input.party === "TENANT" ? "OFFER_COUNTERED" : "OFFER_PROPOSED",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "OFFER",
+    scopeId: offer.id,
+    tenancyId: renewalCase!.tenancyId,
+    propertyId: renewalCase!.propertyId,
+    payload: { version, party: input.party, annualRent: input.annualRent, paymentSchedule: input.paymentSchedule },
+  });
+  await recordAudit({
+    workspaceId: ctx.workspaceId,
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    verb: "renewal.propose_offer",
+    objectType: "Offer",
+    objectId: offer.id,
+  });
+  return offer;
+}
+
+/** Accept an offer — the case is AGREED and the tenancy moves toward RENEWED. */
+export async function acceptOffer(ctx: AuthzContext, offerId: string) {
+  require_(ctx, "renewals.decide");
+  const offer = await prisma.offer.findUnique({ where: { id: offerId } });
+  assertSameWorkspace(ctx, offer);
+  const tenancy = await getTenancy(ctx, offer!.tenancyId); // enforces client scope
+
+  await prisma.offer.updateMany({
+    where: { renewalCaseId: offer!.renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offerId } },
+    data: { status: "SUPERSEDED" },
+  });
+  await prisma.offer.update({ where: { id: offerId }, data: { status: "ACCEPTED" } });
+  await prisma.renewalCase.update({
+    where: { id: offer!.renewalCaseId },
+    data: { status: "AGREED", decidedOfferId: offerId },
+  });
+  await tryMoveTenancy(ctx, offer!.tenancyId, "RENEWED");
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: "OFFER_ACCEPTED",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "OFFER",
+    scopeId: offerId,
+    tenancyId: offer!.tenancyId,
+    propertyId: tenancy!.propertyId,
+    payload: { version: offer!.version, annualRent: Number(offer!.annualRent) },
+  });
+  await recordAudit({
+    workspaceId: ctx.workspaceId,
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    verb: "renewal.accept_offer",
+    objectType: "Offer",
+    objectId: offerId,
+  });
+  return offer;
+}
+
+/** Mark the change notice served on a renewal case. */
+export async function serveNotice(
+  ctx: AuthzContext,
+  renewalCaseId: string,
+  opts?: { noticeDocId?: string; servedAt?: Date },
+) {
+  require_(ctx, "renewals.decide");
+  const renewalCase = await prisma.renewalCase.findUnique({ where: { id: renewalCaseId } });
+  assertSameWorkspace(ctx, renewalCase);
+  await getTenancy(ctx, renewalCase!.tenancyId); // enforces client scope
+
+  const updated = await prisma.renewalCase.update({
+    where: { id: renewalCaseId },
+    data: {
+      status: "NOTICE_SERVED",
+      noticeServedAt: opts?.servedAt ?? new Date(),
+      noticeDocId: opts?.noticeDocId ?? null,
+    },
+  });
+  await tryMoveTenancy(ctx, renewalCase!.tenancyId, "NOTICE_SERVED");
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: "NOTICE_SERVED",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "RENEWAL_CASE",
+    scopeId: renewalCaseId,
+    tenancyId: renewalCase!.tenancyId,
+    propertyId: renewalCase!.propertyId,
+  });
+  await recordAudit({
+    workspaceId: ctx.workspaceId,
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    verb: "renewal.serve_notice",
+    objectType: "RenewalCase",
+    objectId: renewalCaseId,
+  });
+  return updated;
 }

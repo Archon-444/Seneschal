@@ -906,11 +906,50 @@ model RenewalCase {
   noticeGateAt        DateTime?                          // mirror of the NOTICE_GATE deadline
   expiresAt           DateTime                           // contract end
   renewalDate         DateTime                           // first day of the next term
+  noticeServedAt      DateTime?                          // when the change notice was served
+  noticeDocId         String?                            // Document holding the served notice
+  decidedOfferId      String?                            // the accepted Offer
   createdById         String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   @@index([workspaceId, status])
   @@index([workspaceId, tenancyId])
+}
+
+// Versioned renewal terms — landlord proposals and tenant counters live as Offers
+// on a RenewalCase. Each new figure supersedes the prior open one; history is kept.
+model Offer {
+  id              String      @id @default(uuid())
+  workspaceId     String
+  renewalCaseId   String
+  tenancyId       String
+  version         Int
+  party           OfferParty
+  annualRent      Decimal     @db.Decimal(12, 2)
+  paymentSchedule String                            // e.g. "4 cheques"
+  paymentMethod   String?
+  termMonths      Int?
+  startDate       DateTime?
+  note            String?
+  status          OfferStatus @default(SENT)
+  createdById     String?
+  viaSecureLinkId String?                           // set when a tenant responds via secure link
+  createdAt       DateTime    @default(now())
+  @@unique([renewalCaseId, version])
+  @@index([workspaceId, renewalCaseId])
+}
+
+enum OfferParty {
+  LANDLORD
+  TENANT
+}
+
+enum OfferStatus {
+  SENT
+  COUNTERED
+  ACCEPTED
+  SUPERSEDED
+  WITHDRAWN
 }
 
 enum RenewalStatus {

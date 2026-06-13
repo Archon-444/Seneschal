@@ -119,6 +119,33 @@ export async function captureIndexAction(formData: FormData) {
   revalidatePath(`/renewals/${tenancyId}`);
 }
 
+export async function proposeOfferAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const tenancyId = s(formData, "tenancyId");
+  await renewals.proposeOffer(ctx, {
+    renewalCaseId: s(formData, "renewalCaseId"),
+    party: s(formData, "party") as "LANDLORD" | "TENANT",
+    annualRent: num(formData, "annualRent") ?? 0,
+    paymentSchedule: s(formData, "paymentSchedule"),
+    paymentMethod: opt(formData, "paymentMethod"),
+    termMonths: num(formData, "termMonths"),
+    note: opt(formData, "note"),
+  });
+  revalidatePath(`/renewals/${tenancyId}`);
+}
+
+export async function acceptOfferAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await renewals.acceptOffer(ctx, s(formData, "offerId"));
+  revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
+}
+
+export async function serveNoticeAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await renewals.serveNotice(ctx, s(formData, "renewalCaseId"));
+  revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
+}
+
 /** Combined Ejari onboarding: landlord + tenant + asset + tenancy in one submit. */
 export async function onboardTenancyAction(formData: FormData) {
   const ctx = await requireCtx();
