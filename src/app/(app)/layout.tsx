@@ -10,6 +10,7 @@ const NAV = [
   { href: "/clients", label: "Clients" },
   { href: "/contacts", label: "Contacts" },
   { href: "/calendar", label: "Calendar" },
+  { href: "/renewals", label: "Renewals" },
   { href: "/payments", label: "Payments" },
   { href: "/vault", label: "Document vault" },
   { href: "/imports", label: "Import & extract" },

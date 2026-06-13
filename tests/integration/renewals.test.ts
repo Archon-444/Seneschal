@@ -1,0 +1,122 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { addMember, makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
+import * as clients from "@/server/services/clients";
+import * as properties from "@/server/services/properties";
+import * as tenancies from "@/server/services/tenancies";
+import {
+  captureRentIndex,
+  getRenewalRisk,
+  listRenewalPipeline,
+  openRenewalCase,
+} from "@/server/services/renewals";
+
+let W: TestActor;
+let clientId: string;
+let tenancyId: string;
+
+function daysFromNow(n: number): Date {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + n);
+  return d;
+}
+
+beforeEach(async () => {
+  await resetDb();
+  W = await makeWorkspace("Renewals WS");
+  const client = await clients.createClient(W.ctx, { displayName: "Al Noor" });
+  clientId = client.id;
+  const property = await properties.createProperty(W.ctx, {
+    clientPrincipalId: clientId,
+    community: "Dubai Marina",
+    unitNo: "1204",
+  });
+  const tenancy = await tenancies.createTenancy(W.ctx, {
+    propertyId: property.id,
+    startDate: daysFromNow(-305),
+    endDate: daysFromNow(60),
+    annualRent: 72_000,
+  });
+  tenancyId = tenancy.id;
+});
+
+describe("renewal risk desk", () => {
+  it("captures an index figure, records evidence, and computes the lawful position", async () => {
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 96_000 });
+
+    const evidence = await prisma.evidenceEvent.findFirst({
+      where: { type: "INDEX_CAPTURED", tenancyId },
+    });
+    expect(evidence).toBeTruthy();
+
+    const risk = await getRenewalRisk(W.ctx, tenancyId);
+    expect(risk.latestIndex?.marketRentAvg).toBe(96_000);
+    expect(risk.position?.bandPct).toBe(10);
+    expect(risk.position?.ceiling).toBe(79_200);
+    expect(risk.position?.valueAtRisk).toBe(7_200);
+  });
+
+  it("getRenewalRisk has no position before any index is captured", async () => {
+    const risk = await getRenewalRisk(W.ctx, tenancyId);
+    expect(risk.latestIndex).toBeNull();
+    expect(risk.position).toBeNull();
+    expect(risk.expiresAt).toBeTruthy();
+  });
+
+  it("opens a renewal case once (idempotent) and records assessment evidence", async () => {
+    const a = await openRenewalCase(W.ctx, tenancyId);
+    const b = await openRenewalCase(W.ctx, tenancyId);
+    expect(b.id).toBe(a.id);
+
+    const cases = await prisma.renewalCase.count({ where: { tenancyId } });
+    expect(cases).toBe(1);
+    expect(
+      await prisma.evidenceEvent.findFirst({ where: { type: "RENEWAL_ASSESSMENT_CREATED", tenancyId } }),
+    ).toBeTruthy();
+  });
+
+  it("lists the tenancy in the pipeline with computed uplift", async () => {
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 96_000 });
+    const rows = await listRenewalPipeline(W.ctx);
+    const row = rows.find((r) => r.tenancyId === tenancyId);
+    expect(row).toBeTruthy();
+    expect(row!.valueAtRisk).toBe(7_200);
+    expect(row!.ownerName).toBe("Al Noor");
+    expect(Math.round(row!.gapPct! * 100)).toBe(25);
+  });
+
+  it("scopes the pipeline and report to a CLIENT_VIEWER's own client", async () => {
+    // a second client + tenancy the viewer should never see
+    const other = await clients.createClient(W.ctx, { displayName: "Other Co" });
+    const otherProp = await properties.createProperty(W.ctx, {
+      clientPrincipalId: other.id,
+      community: "JVC",
+      unitNo: "9",
+    });
+    const otherTenancy = await tenancies.createTenancy(W.ctx, {
+      propertyId: otherProp.id,
+      startDate: daysFromNow(-300),
+      endDate: daysFromNow(40),
+      annualRent: 48_000,
+    });
+
+    const viewer = await addMember(W.workspaceId, "CLIENT_VIEWER", clientId);
+    const seen = (await listRenewalPipeline(viewer.ctx)).map((r) => r.tenancyId);
+    expect(seen).toContain(tenancyId);
+    expect(seen).not.toContain(otherTenancy.id);
+
+    await expect(getRenewalRisk(viewer.ctx, otherTenancy.id)).rejects.toThrow();
+  });
+
+  it("rejects a tenancy from another workspace", async () => {
+    const other = await makeWorkspace("Other WS", { type: "OWNER" });
+    const p = await properties.createProperty(other.ctx, { community: "X", unitNo: "1" });
+    const otherTenancy = await tenancies.createTenancy(other.ctx, {
+      propertyId: p.id,
+      startDate: daysFromNow(-300),
+      endDate: daysFromNow(50),
+      annualRent: 50_000,
+    });
+    await expect(getRenewalRisk(W.ctx, otherTenancy.id)).rejects.toThrow();
+    await expect(captureRentIndex(W.ctx, { tenancyId: otherTenancy.id, marketRentAvg: 60_000 })).rejects.toThrow();
+  });
+});

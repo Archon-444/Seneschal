@@ -9,6 +9,7 @@ import * as contacts from "@/server/services/contacts";
 import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
 import * as deadlines from "@/server/services/deadlines";
+import * as renewals from "@/server/services/renewals";
 import * as payments from "@/server/services/payments";
 import * as documents from "@/server/services/documents";
 import * as proofs from "@/server/services/proofs";
@@ -95,6 +96,27 @@ export async function completeDeadlineAction(formData: FormData) {
   const ctx = await requireCtx();
   await deadlines.setDeadlineStatus(ctx, s(formData, "id"), s(formData, "status") as "DONE" | "CANCELLED");
   revalidatePath("/calendar");
+}
+
+export async function openRenewalCaseAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const tenancyId = s(formData, "tenancyId");
+  await renewals.openRenewalCase(ctx, tenancyId);
+  revalidatePath(`/renewals/${tenancyId}`);
+}
+
+export async function captureIndexAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const tenancyId = s(formData, "tenancyId");
+  const capturedAt = opt(formData, "capturedAt");
+  await renewals.captureRentIndex(ctx, {
+    tenancyId,
+    marketRentAvg: num(formData, "marketRentAvg") ?? 0,
+    capturedAt: capturedAt ? new Date(capturedAt) : undefined,
+    source: opt(formData, "source"),
+    note: opt(formData, "note"),
+  });
+  revalidatePath(`/renewals/${tenancyId}`);
 }
 
 /** Combined Ejari onboarding: landlord + tenant + asset + tenancy in one submit. */

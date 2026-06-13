@@ -297,6 +297,8 @@ enum ScopeType {
   IMPORT_BATCH
   REPORT
   TASK
+  RENEWAL_CASE
+  OFFER
 }
 enum DocumentKind {
   TENANCY_CONTRACT
@@ -874,8 +876,56 @@ model Report {
   @@index([workspaceId, clientPrincipalId])
 }
 
+// ───────────────────────────── Renewals — decision support (Stage 2, now active)
+// The Renewal Risk Desk: a captured rent-index figure + the Decree 43 lawful
+// position drive renewal decisions. RenewalCase tracks the workflow per tenancy;
+// RentIndexCapture is the manually-captured DLD reference (append-only, latest wins).
+// EvidenceType already reserves INDEX_CAPTURED / RENEWAL_ASSESSMENT_CREATED / OFFER_*.
+
+model RentIndexCapture {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  tenancyId     String
+  propertyId    String
+  marketRentAvg Decimal  @db.Decimal(12, 2)   // index average market rent (manual capture)
+  source        String   @default("DLD Smart Rental Index")
+  capturedAt    DateTime                       // when the figure was read from the official source
+  capturedById  String?
+  note          String?
+  createdAt     DateTime @default(now())
+  @@index([workspaceId, tenancyId])
+}
+
+model RenewalCase {
+  id                  String        @id @default(uuid())
+  workspaceId         String
+  tenancyId           String
+  propertyId          String
+  status              RenewalStatus @default(ASSESSING)
+  currentRentSnapshot Decimal       @db.Decimal(12, 2)  // rent at the time the case opened
+  noticeGateAt        DateTime?                          // mirror of the NOTICE_GATE deadline
+  expiresAt           DateTime                           // contract end
+  renewalDate         DateTime                           // first day of the next term
+  createdById         String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  @@index([workspaceId, status])
+  @@index([workspaceId, tenancyId])
+}
+
+enum RenewalStatus {
+  ASSESSING
+  NOTICE_DUE
+  NOTICE_SERVED
+  NEGOTIATING
+  AGREED
+  RENEWED
+  DECLINED
+  LAPSED
+}
+
 // ───────────────────────────── Stage 2 — DO NOT MIGRATE YET
-// RenewalCase, Offer, Notice, IndexCapture, PartnerOrg per spec v2 §6.
+// Offer, Notice, PartnerOrg per spec v2 §6 (Offer arrives in the negotiation PR).
 // EvidenceType and LinkPurpose already reserve their values so Stage 2 adds tables without enum churn.
 
 // ───────────────────────────── Auth [1A — ADDITION to schema v1.0]
