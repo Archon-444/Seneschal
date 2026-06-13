@@ -1,44 +1,62 @@
 @import "tailwindcss";
 
 @theme {
-  /* Seneschal palette: premium, calm, trustworthy */
-  --color-ivory-50: #fdfcf8;
-  --color-ivory-100: #f8f5ec;
+  /* Seneschal palette: premium, calm, trustworthy — aligned to the design demo.
+     Token NAMES are kept stable (ivory/navy/gold/verde/claret) so all 21 screens
+     pick up the new hexes without markup changes. -100 shades are the soft tints
+     used for pill/stat backgrounds; -500 the solid accent; -700 the deep text. */
+
+  /* surfaces */
+  --color-ivory-50: #f6f3eb;   /* app background */
+  --color-ivory-100: #fbf9f2;  /* raised panels / hover */
   --color-ivory-200: #efe9d9;
-  --color-ivory-300: #e3dac2;
+  --color-ivory-300: #e4decf;  /* hairline borders (line) */
 
   --color-navy-50: #eef1f6;
   --color-navy-100: #d5dce8;
-  --color-navy-300: #7d8db0;
-  --color-navy-500: #3b4d77;
-  --color-navy-700: #243254;
-  --color-navy-800: #1a2540;
-  --color-navy-900: #111a30;
+  --color-navy-300: #7d8aa3;
+  --color-navy-500: #30415f;   /* secondary ink */
+  --color-navy-700: #233252;
+  --color-navy-800: #1b2a45;
+  --color-navy-900: #16263f;   /* primary ink / sidebar */
 
   --color-gold-300: #e3c882;
-  --color-gold-500: #c9a44c;
-  --color-gold-700: #a07f2e;
+  --color-gold-500: #bf9b53;   /* accent */
+  --color-gold-700: #8a743e;   /* gold text on tint */
+  --color-gold-100: #f0e6d2;   /* gold tint */
 
-  --color-verde-100: #e1efe5;
-  --color-verde-500: #3d7a52;
+  --color-verde-100: #e3f0e9;  /* green tint */
+  --color-verde-500: #2e7d5b;
   --color-verde-700: #2a5a3a;
 
-  --color-claret-100: #f7e4e1;
-  --color-claret-500: #a4392f;
+  --color-amber-100: #f7ead8;  /* amber tint (in-progress) */
+  --color-amber-500: #b5722c;
+  --color-amber-700: #8a5520;
+
+  --color-claret-100: #f5e3e0; /* red tint */
+  --color-claret-500: #a8453b;
   --color-claret-700: #7d2920;
 
-  --font-display: "Georgia", "Times New Roman", serif;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  /* semantic helpers */
+  --color-line: #e4decf;
+  --color-muted: #6b7385;
+
+  --radius: 12px;
+
+  --font-display: var(--font-fraunces), "Georgia", serif;
+  --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 body {
   background-color: var(--color-ivory-50);
   color: var(--color-navy-900);
+  font-family: var(--font-sans);
 }
 
 .font-display {
   font-family: var(--font-display);
+  letter-spacing: -0.01em;
 }
 
 /* money and dates render in monospace per design language */

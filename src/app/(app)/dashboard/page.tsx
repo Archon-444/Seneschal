@@ -4,7 +4,7 @@ import { dashboardKpis } from "@/server/services/dashboard";
 import { listDeadlines } from "@/server/services/deadlines";
 import { listRiskFlags } from "@/server/services/risk";
 import { formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
-import { Badge, Card, EmptyState, KpiCard, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Card, EmptyState, KpiCard, PageHeader, Reminder, Table, Td } from "@/components/ui";
 
 export default async function DashboardPage() {
   const ctx = await requireCtx();
@@ -19,6 +19,7 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Workspace overview"
         title="Dashboard"
         subtitle="Know what is due. Know who owns it. Keep the proof."
       />
@@ -26,7 +27,12 @@ export default async function DashboardPage() {
         <KpiCard label="Properties" value={kpis.properties} />
         <KpiCard label="Active tenancies" value={kpis.tenancies} />
         <KpiCard label="Deadlines · 30 days" value={kpis.upcomingDeadlines} tone={kpis.upcomingDeadlines > 0 ? "warn" : "default"} />
-        <KpiCard label="Overdue deadlines" value={kpis.overdueDeadlines} tone={kpis.overdueDeadlines > 0 ? "danger" : "good"} />
+        <KpiCard
+          label="Overdue deadlines"
+          value={kpis.overdueDeadlines}
+          variant={kpis.overdueDeadlines > 0 ? "risk" : "default"}
+          tone={kpis.overdueDeadlines > 0 ? "danger" : "good"}
+        />
         <KpiCard label="Open risk flags" value={kpis.openFlags} tone={kpis.openFlags > 0 ? "warn" : "good"} />
         <KpiCard label="Open proof requests" value={kpis.openProofs} />
         <KpiCard label="Late / bounced cheques" value={kpis.latePayments} tone={kpis.latePayments > 0 ? "danger" : "good"} />
@@ -38,19 +44,21 @@ export default async function DashboardPage() {
           {upcoming.length === 0 ? (
             <EmptyState message="No upcoming deadlines. The calendar is clear." />
           ) : (
-            <Table headers={["Due", "Kind", "Property"]}>
+            <Card>
               {upcoming.map((d) => (
-                <tr key={d.id}>
-                  <Td className="figure whitespace-nowrap">{formatDubaiDate(d.dueAt)}</Td>
-                  <Td><Badge value={d.kind} /></Td>
-                  <Td>
-                    {d.tenancy?.property
+                <Reminder
+                  key={d.id}
+                  date={formatDubaiDate(d.dueAt).toUpperCase()}
+                  hot={d.kind === "NOTICE_GATE"}
+                  title={d.kind.replace(/_/g, " ")}
+                  sub={
+                    d.tenancy?.property
                       ? `${d.tenancy.property.community} · ${d.tenancy.property.unitNo ?? ""}`
-                      : "—"}
-                  </Td>
-                </tr>
+                      : undefined
+                  }
+                />
               ))}
-            </Table>
+            </Card>
           )}
         </div>
         <div>
