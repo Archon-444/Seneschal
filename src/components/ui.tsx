@@ -60,12 +60,15 @@ export function Card({
 export function KpiCard({
   label,
   value,
+  sub,
   tone = "default",
   variant = "default",
   href,
 }: {
   label: string;
   value: ReactNode;
+  /** Optional caption under the figure — context, not a second metric. */
+  sub?: string;
   tone?: "default" | "warn" | "danger" | "good";
   variant?: "default" | "risk";
   href?: string;
@@ -76,18 +79,24 @@ export function KpiCard({
     danger: "text-claret-500",
     good: "text-verde-700",
   }[tone];
+  // The ledger "tick": a short hairline-gold rule under every figure — the one
+  // recurring signature mark, quiet enough to live on every screen.
   const inner =
     variant === "risk" ? (
       <div
-        className={`rounded-xl border border-navy-900 bg-navy-900 p-5 text-white shadow-sm ${href ? "transition hover:brightness-125" : ""}`}
+        className={`rounded-xl border border-navy-900 bg-navy-900 p-5 text-white shadow-sm ${href ? "transition hover:brightness-110" : ""}`}
       >
-        <div className="text-xs font-bold uppercase tracking-wider text-gold-500">{label}</div>
-        <div className="figure mt-1 text-3xl font-semibold">{value}</div>
+        <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-gold-500">{label}</div>
+        <div className="figure mt-2 text-[2rem] font-semibold leading-none">{value}</div>
+        <div className="mt-3 h-px w-7 bg-gold-500/60" />
+        {sub && <div className="mt-2 text-[11px] text-white/55">{sub}</div>}
       </div>
     ) : (
       <Card hover={!!href}>
-        <div className="text-xs font-bold uppercase tracking-wider text-muted">{label}</div>
-        <div className={`figure mt-1 text-3xl ${toneClass}`}>{value}</div>
+        <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">{label}</div>
+        <div className={`figure mt-2 text-[2rem] font-semibold leading-none ${toneClass}`}>{value}</div>
+        <div className="mt-3 h-px w-7 bg-gold-500/40" />
+        {sub && <div className="mt-2 text-[11px] text-muted">{sub}</div>}
       </Card>
     );
   return href ? (
