@@ -16,6 +16,7 @@ import * as imports from "@/server/services/imports";
 import * as extraction from "@/server/services/extraction";
 import * as risk from "@/server/services/risk";
 import * as reports from "@/server/services/reports";
+import { onboardTenancy, type PartyInput } from "@/server/services/onboarding";
 import { dispatchPending } from "@/server/outbox";
 import { handlers } from "@/server/outbox/runner";
 
@@ -75,6 +76,61 @@ export async function archivePropertyAction(formData: FormData) {
   const ctx = await requireCtx();
   await properties.archiveProperty(ctx, s(formData, "id"));
   redirect("/properties");
+}
+
+/** Combined Ejari onboarding: landlord + tenant + asset + tenancy in one submit. */
+export async function onboardTenancyAction(formData: FormData) {
+  const ctx = await requireCtx();
+
+  const party = (prefix: string): PartyInput | undefined => {
+    const name = opt(formData, `${prefix}_name`);
+    if (!name) return undefined;
+    return {
+      name,
+      emiratesId: opt(formData, `${prefix}_emiratesId`),
+      email: opt(formData, `${prefix}_email`),
+      phone: opt(formData, `${prefix}_phone`),
+      nationality: opt(formData, `${prefix}_nationality`),
+      company: opt(formData, `${prefix}_company`),
+      licenseNo: opt(formData, `${prefix}_licenseNo`),
+      licensingAuthority: opt(formData, `${prefix}_licensingAuthority`),
+    };
+  };
+
+  const propertyId = opt(formData, "propertyId");
+  const newProperty = propertyId
+    ? undefined
+    : {
+        clientPrincipalId: opt(formData, "pr_clientPrincipalId"),
+        community: s(formData, "pr_community"),
+        building: opt(formData, "pr_building"),
+        unitNo: opt(formData, "pr_unitNo"),
+        propertyType: opt(formData, "pr_propertyType"),
+        bedrooms: num(formData, "pr_bedrooms"),
+        usage: opt(formData, "pr_usage"),
+        plotNo: opt(formData, "pr_plotNo"),
+        makaniNo: opt(formData, "pr_makaniNo"),
+        dewaPremiseNo: opt(formData, "pr_dewaPremiseNo"),
+        sizeSqm: num(formData, "pr_sizeSqm"),
+      };
+
+  const result = await onboardTenancy(ctx, {
+    landlordContactId: opt(formData, "landlordContactId"),
+    newLandlord: party("ll"),
+    tenantContactId: opt(formData, "tenantContactId"),
+    newTenant: party("tn"),
+    propertyId,
+    newProperty,
+    ejariNo: opt(formData, "ejariNo"),
+    startDate: new Date(s(formData, "startDate")),
+    endDate: new Date(s(formData, "endDate")),
+    annualRent: num(formData, "annualRent") ?? 0,
+    depositAmount: num(formData, "depositAmount"),
+    noticePeriodDays: num(formData, "noticePeriodDays"),
+    paymentTermsNote: opt(formData, "paymentTermsNote"),
+    chequeCount: num(formData, "chequeCount"),
+  });
+  redirect(`/properties/${result.propertyId}`);
 }
 
 export async function createTenancyAction(formData: FormData) {
