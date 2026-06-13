@@ -24,18 +24,19 @@ export default async function DashboardPage() {
         subtitle="Know what is due. Know who owns it. Keep the proof."
       />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard label="Properties" value={kpis.properties} />
-        <KpiCard label="Active tenancies" value={kpis.tenancies} />
-        <KpiCard label="Deadlines · 30 days" value={kpis.upcomingDeadlines} tone={kpis.upcomingDeadlines > 0 ? "warn" : "default"} />
+        <KpiCard label="Properties" value={kpis.properties} href="/properties" />
+        <KpiCard label="Active tenancies" value={kpis.tenancies} href="/properties" />
+        <KpiCard label="Deadlines · 30 days" value={kpis.upcomingDeadlines} tone={kpis.upcomingDeadlines > 0 ? "warn" : "default"} href="/calendar" />
         <KpiCard
           label="Overdue deadlines"
           value={kpis.overdueDeadlines}
           variant={kpis.overdueDeadlines > 0 ? "risk" : "default"}
           tone={kpis.overdueDeadlines > 0 ? "danger" : "good"}
+          href="/calendar"
         />
-        <KpiCard label="Open risk flags" value={kpis.openFlags} tone={kpis.openFlags > 0 ? "warn" : "good"} />
-        <KpiCard label="Open proof requests" value={kpis.openProofs} />
-        <KpiCard label="Late / bounced cheques" value={kpis.latePayments} tone={kpis.latePayments > 0 ? "danger" : "good"} />
+        <KpiCard label="Open risk flags" value={kpis.openFlags} tone={kpis.openFlags > 0 ? "warn" : "good"} href="/risk" />
+        <KpiCard label="Open proof requests" value={kpis.openProofs} href="/proofs" />
+        <KpiCard label="Late / bounced cheques" value={kpis.latePayments} tone={kpis.latePayments > 0 ? "danger" : "good"} href="/payments?status=problem" />
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
