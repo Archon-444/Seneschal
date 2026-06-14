@@ -13,9 +13,9 @@ export interface RentPositionResult {
   marketRentAvg: number;
   /** Fraction the current rent sits below market (0..1, clamped at 0). */
   gapPct: number;
-  /** Lawful increase band as a whole percentage: 0 | 5 | 10 | 15 | 20. */
+  /** Estimated permissible increase band as a whole percentage: 0 | 5 | 10 | 15 | 20. */
   bandPct: number;
-  /** Highest lawful renewal rent = currentRent × (1 + bandPct/100). */
+  /** Index-based ceiling estimate = currentRent × (1 + bandPct/100). */
   ceiling: number;
   /** Annual uplift forgone if no valid notice is served = ceiling − currentRent. */
   valueAtRisk: number;
@@ -28,7 +28,7 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** Decree 43 lawful increase band, ceiling and value-at-risk for a renewal. */
+/** Decree 43 estimated permissible increase band, ceiling and value-at-risk for a renewal. */
 export function decree43(currentRent: number, marketRentAvg: number): RentPositionResult {
   if (!(currentRent > 0) || !(marketRentAvg > 0)) {
     throw new Error("decree43 requires positive currentRent and marketRentAvg");

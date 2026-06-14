@@ -18,7 +18,7 @@ import {
 } from "../calculators/dates";
 
 // Renewal Risk Desk (decision support). A renewal is driven by two facts: how
-// close the notice gate is, and where the rent sits against the lawful Decree 43
+// close the notice gate is, and where the rent sits against the Decree 43 ceiling estimate
 // ceiling. RenewalCase tracks the workflow; RentIndexCapture is the captured DLD
 // reference. Every figure here is an estimate for review — not legal advice.
 
