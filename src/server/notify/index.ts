@@ -1,6 +1,8 @@
 import type { Channel, Prisma, ScopeType } from "@prisma/client";
 import { prisma } from "../db";
 import { enqueue } from "../outbox";
+import { whatsappConfigured } from "./whatsapp";
+import { hasActiveMessagingConsent } from "../services/consent";
 
 // Notification gateway (T9.1 — release blocking). `notify()` writes a
 // NotificationMessage row and enqueues delivery via the outbox; providers live
@@ -15,6 +17,8 @@ export interface NotifyInput {
   toUserId?: string;
   toContactId?: string;
   toAddress?: string; // resolved email/phone; stored on the outbox payload only
+  /** Upgrade to this channel at delivery if gated checks pass; else stay `channel`. */
+  preferChannel?: Channel;
   relatedType?: ScopeType;
   relatedId?: string;
 }
@@ -37,7 +41,7 @@ export async function notify(input: NotifyInput, db: Prisma.TransactionClient = 
   });
   await enqueue(
     "notification.send",
-    { messageId: message.id, toAddress: input.toAddress ?? null },
+    { messageId: message.id, toAddress: input.toAddress ?? null, preferChannel: input.preferChannel ?? null },
     db,
   );
   return message;
@@ -57,24 +61,43 @@ export async function deliverNotification(payload: Record<string, unknown>): Pro
   const message = await prisma.notificationMessage.findUnique({ where: { id: messageId } });
   if (!message || message.status !== "QUEUED") return; // idempotent
 
-  let to = (payload.toAddress as string | null) ?? null;
-  if (!to && message.toUserId) {
-    const user = await prisma.user.findUnique({ where: { id: message.toUserId } });
-    to = user?.email ?? null;
+  // Resolve both addresses once — we may need email and/or phone.
+  const user = message.toUserId ? await prisma.user.findUnique({ where: { id: message.toUserId } }) : null;
+  const contact = message.toContactId
+    ? await prisma.contact.findUnique({ where: { id: message.toContactId } })
+    : null;
+  const email = (payload.toAddress as string | null) ?? user?.email ?? contact?.email ?? null;
+  const phone = user?.phone ?? contact?.phone ?? null;
+
+  // Lazy channel resolution: only upgrade to WhatsApp when explicitly preferred
+  // AND the provider is configured AND the recipient has active MESSAGING consent.
+  let channel = message.channel;
+  if ((payload.preferChannel as Channel | undefined) === "WHATSAPP" && channel !== "WHATSAPP") {
+    const consented = message.toUserId
+      ? await hasActiveMessagingConsent({ userId: message.toUserId })
+      : message.toContactId
+        ? await hasActiveMessagingConsent({ contactId: message.toContactId })
+        : false;
+    if (whatsappConfigured() && consented && phone) channel = "WHATSAPP";
   }
-  if (!to && message.toContactId) {
-    const contact = await prisma.contact.findUnique({ where: { id: message.toContactId } });
-    to = (message.channel === "EMAIL" ? contact?.email : contact?.phone) ?? null;
+
+  // Address for the resolved channel; downgrade WhatsApp→email if no phone.
+  let to = channel === "WHATSAPP" ? phone : email;
+  if (channel === "WHATSAPP" && !to) {
+    channel = "EMAIL";
+    to = email;
   }
   if (!to) {
-    await prisma.notificationMessage.update({
-      where: { id: messageId },
-      data: { status: "FAILED" },
-    });
+    await prisma.notificationMessage.update({ where: { id: messageId }, data: { status: "FAILED" } });
     return;
   }
 
-  const adapter = await adapterFor(message.channel);
+  // Gate 3: the log must record the channel actually used, never claim EMAIL on a WhatsApp send.
+  if (channel !== message.channel) {
+    await prisma.notificationMessage.update({ where: { id: messageId }, data: { channel } });
+  }
+
+  const adapter = await adapterFor(channel);
   try {
     const { providerRef } = await adapter.send({
       to,

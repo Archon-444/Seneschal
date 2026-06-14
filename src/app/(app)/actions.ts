@@ -10,6 +10,7 @@ import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
 import * as deadlines from "@/server/services/deadlines";
 import * as renewals from "@/server/services/renewals";
+import * as consent from "@/server/services/consent";
 import * as payments from "@/server/services/payments";
 import * as documents from "@/server/services/documents";
 import * as proofs from "@/server/services/proofs";
@@ -162,6 +163,20 @@ export async function captureBenchmarkAction(formData: FormData) {
     note: opt(formData, "note"),
   });
   revalidatePath("/renewals");
+}
+
+export async function grantMessagingConsentAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const contactId = s(formData, "contactId");
+  await consent.grantMessagingConsent(ctx, { contactId });
+  revalidatePath(`/contacts/${contactId}`);
+}
+
+export async function revokeMessagingConsentAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const contactId = s(formData, "contactId");
+  await consent.revokeMessagingConsent(ctx, { contactId });
+  revalidatePath(`/contacts/${contactId}`);
 }
 
 /** Combined Ejari onboarding: landlord + tenant + asset + tenancy in one submit. */

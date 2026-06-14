@@ -53,6 +53,11 @@ export function TenantOfferForm({ token }: { token: string }) {
         </div>
       )}
 
+      <label className="flex items-start gap-2 text-xs text-navy-500">
+        <input type="checkbox" name="optIn" className="mt-0.5" />
+        <span>You may contact me on WhatsApp about this renewal.</span>
+      </label>
+
       {state.status === "error" && <p className="text-sm text-claret-500">{state.message}</p>}
 
       {mode === "choose" ? (

@@ -15,7 +15,18 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-const recommended = ["EMAIL_PROVIDER", "STORAGE_DRIVER", "CRON_SECRET", "APP_BASE_URL"];
+// WhatsApp is optional — unset means a safe console no-op; set all five to go live.
+const recommended = [
+  "EMAIL_PROVIDER",
+  "STORAGE_DRIVER",
+  "CRON_SECRET",
+  "APP_BASE_URL",
+  "WHATSAPP_PROVIDER",
+  "WHATSAPP_PHONE_NUMBER_ID",
+  "WHATSAPP_ACCESS_TOKEN",
+  "WHATSAPP_VERIFY_TOKEN",
+  "WHATSAPP_APP_SECRET",
+];
 for (const key of recommended) {
   if (!process.env[key]) {
     console.warn(`⚠ ${key} is not set — see README → Deploy (Vercel).`);

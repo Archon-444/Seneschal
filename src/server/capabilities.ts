@@ -33,6 +33,7 @@ export const CAPABILITIES = [
   "reports.generate",
   "reports.read",
   "notifications.read",
+  "messaging.manage",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -74,6 +75,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "riskflags.ack",
     "reports.generate",
     "notifications.read",
+    "messaging.manage",
   ],
   // CLIENT_VIEWER is additionally scoped to a single ClientPrincipal in authz.
   CLIENT_VIEWER: READ_PORTFOLIO,
