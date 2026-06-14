@@ -5,6 +5,7 @@ import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
 import {
   acceptOffer,
+  captureBenchmark,
   captureRentIndex,
   getOfferForLink,
   getRenewalRisk,
@@ -276,5 +277,68 @@ describe("tenant secure-response link", () => {
     });
     const proofLink = await prisma.secureLink.findUnique({ where: { id: proofLinkId } });
     await expect(respondToOfferViaLink(proofLink!, { action: "ACCEPT" })).rejects.toThrow();
+  });
+});
+
+describe("renewal index benchmark", () => {
+  it("falls back to a community benchmark when the tenancy has no capture", async () => {
+    await captureBenchmark(W.ctx, { community: "Dubai Marina", marketRentAvg: 96_000 });
+    const risk = await getRenewalRisk(W.ctx, tenancyId);
+    expect(risk.position?.valueAtRisk).toBe(7_200);
+    expect(risk.latestIndex?.isBenchmark).toBe(true);
+  });
+
+  it("a tenancy-specific capture overrides the benchmark", async () => {
+    await captureBenchmark(W.ctx, { community: "Dubai Marina", marketRentAvg: 200_000 });
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 96_000 });
+    const risk = await getRenewalRisk(W.ctx, tenancyId);
+    expect(risk.latestIndex?.marketRentAvg).toBe(96_000);
+    expect(risk.latestIndex?.isBenchmark).toBe(false);
+    expect(risk.position?.valueAtRisk).toBe(7_200);
+  });
+
+  it("a building-specific benchmark beats the community-wide one", async () => {
+    const prop = await properties.createProperty(W.ctx, {
+      clientPrincipalId: clientId,
+      community: "Dubai Marina",
+      building: "Marina Heights",
+      unitNo: "5",
+    });
+    const ten = await tenancies.createTenancy(W.ctx, {
+      propertyId: prop.id,
+      startDate: daysFromNow(-300),
+      endDate: daysFromNow(50),
+      annualRent: 72_000,
+    });
+    await captureBenchmark(W.ctx, { community: "Dubai Marina", marketRentAvg: 200_000 }); // community-wide
+    await captureBenchmark(W.ctx, { community: "Dubai Marina", building: "Marina Heights", marketRentAvg: 96_000 }); // building
+    const risk = await getRenewalRisk(W.ctx, ten.id);
+    expect(risk.latestIndex?.marketRentAvg).toBe(96_000);
+    expect(risk.position?.valueAtRisk).toBe(7_200);
+  });
+
+  it("the pipeline uses benchmark fallback and flags isBenchmark", async () => {
+    await captureBenchmark(W.ctx, { community: "Dubai Marina", marketRentAvg: 96_000 });
+    const row = (await listRenewalPipeline(W.ctx)).find((r) => r.tenancyId === tenancyId);
+    expect(row?.valueAtRisk).toBe(7_200);
+    expect(row?.isBenchmark).toBe(true);
+  });
+
+  it("no capture and no matching benchmark → no position", async () => {
+    await captureBenchmark(W.ctx, { community: "Other Community", marketRentAvg: 96_000 });
+    const risk = await getRenewalRisk(W.ctx, tenancyId);
+    expect(risk.position).toBeNull();
+    expect(risk.latestIndex).toBeNull();
+  });
+
+  it("captureBenchmark writes INDEX_CAPTURED evidence and an audit", async () => {
+    const b = await captureBenchmark(W.ctx, { community: "Dubai Marina", marketRentAvg: 96_000 });
+    const ev = await prisma.evidenceEvent.findFirst({
+      where: { workspaceId: W.workspaceId, type: "INDEX_CAPTURED", scopeType: "WORKSPACE" },
+    });
+    expect((ev!.payload as { benchmark?: boolean }).benchmark).toBe(true);
+    expect(
+      await prisma.auditEvent.findFirst({ where: { verb: "renewal.capture_benchmark", objectId: b.id } }),
+    ).toBeTruthy();
   });
 });

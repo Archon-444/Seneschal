@@ -152,6 +152,18 @@ export async function sendOfferToTenantAction(formData: FormData) {
   revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
 }
 
+export async function captureBenchmarkAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await renewals.captureBenchmark(ctx, {
+    community: s(formData, "community"),
+    building: opt(formData, "building"),
+    marketRentAvg: num(formData, "marketRentAvg") ?? 0,
+    source: opt(formData, "source"),
+    note: opt(formData, "note"),
+  });
+  revalidatePath("/renewals");
+}
+
 /** Combined Ejari onboarding: landlord + tenant + asset + tenancy in one submit. */
 export async function onboardTenancyAction(formData: FormData) {
   const ctx = await requireCtx();

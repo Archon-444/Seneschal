@@ -164,14 +164,30 @@ export interface EffectiveIndex {
   isBenchmark: boolean;
 }
 
+/** Latest benchmark for a community(+building): building-specific is preferred,
+ *  else the community-wide (building null) figure. Latest capturedAt wins. */
+async function resolveBenchmark(workspaceId: string, community: string, building: string | null) {
+  if (building) {
+    const b = await prisma.rentIndexBenchmark.findFirst({
+      where: { workspaceId, community, building },
+      orderBy: { capturedAt: "desc" },
+    });
+    if (b) return b;
+  }
+  return prisma.rentIndexBenchmark.findFirst({
+    where: { workspaceId, community, building: null },
+    orderBy: { capturedAt: "desc" },
+  });
+}
+
 /** Resolve the index figure that applies to a tenancy — the single source of
  *  truth for every surface (report, pipeline, property/client pages) and the
- *  notice-gate alert. PR2: latest tenancy-specific RentIndexCapture only.
- *  PR3 extends this with community/building benchmark fallback. */
+ *  notice-gate alert. Precedence: tenancy-specific RentIndexCapture →
+ *  building benchmark → community benchmark → none. */
 export async function resolveEffectiveIndex(
   workspaceId: string,
   tenancyId: string,
-  _property?: { community: string; building: string | null } | null,
+  property?: { community: string; building: string | null } | null,
 ): Promise<EffectiveIndex | null> {
   const capture = await prisma.rentIndexCapture.findFirst({
     where: { workspaceId, tenancyId },
@@ -185,7 +201,76 @@ export async function resolveEffectiveIndex(
       isBenchmark: false,
     };
   }
+  if (property?.community) {
+    const benchmark = await resolveBenchmark(workspaceId, property.community, property.building ?? null);
+    if (benchmark) {
+      return {
+        marketRentAvg: Number(benchmark.marketRentAvg),
+        capturedAt: benchmark.capturedAt,
+        source: benchmark.source,
+        isBenchmark: true,
+      };
+    }
+  }
   return null;
+}
+
+export interface BenchmarkInput {
+  community: string;
+  building?: string;
+  marketRentAvg: number;
+  capturedAt?: Date;
+  source?: string;
+  note?: string;
+}
+
+/** Capture a community/building index benchmark reusable across units. */
+export async function captureBenchmark(ctx: AuthzContext, input: BenchmarkInput) {
+  require_(ctx, "renewals.write");
+  if (!(input.marketRentAvg > 0)) throw new AuthzError("Market rent must be a positive amount", 422);
+  if (!input.community.trim()) throw new AuthzError("Community is required", 422);
+
+  const benchmark = await prisma.rentIndexBenchmark.create({
+    data: {
+      workspaceId: ctx.workspaceId,
+      community: input.community.trim(),
+      building: input.building?.trim() || null,
+      marketRentAvg: new Prisma.Decimal(input.marketRentAvg),
+      source: input.source?.trim() || "DLD Smart Rental Index",
+      capturedAt: input.capturedAt ?? new Date(),
+      capturedById: ctx.userId,
+      note: input.note ?? null,
+    },
+  });
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: "INDEX_CAPTURED",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "WORKSPACE",
+    scopeId: ctx.workspaceId,
+    payload: { benchmark: true, community: benchmark.community, building: benchmark.building, marketRentAvg: input.marketRentAvg },
+  });
+  await recordAudit({
+    workspaceId: ctx.workspaceId,
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    verb: "renewal.capture_benchmark",
+    objectType: "RentIndexBenchmark",
+    objectId: benchmark.id,
+  });
+  return benchmark;
+}
+
+/** List captured benchmarks for the workspace (newest first). */
+export async function listBenchmarks(ctx: AuthzContext) {
+  require_(ctx, "renewals.read");
+  return prisma.rentIndexBenchmark.findMany({
+    where: { workspaceId: ctx.workspaceId },
+    orderBy: { capturedAt: "desc" },
+  });
 }
 
 /** Assemble the renewal risk report for one tenancy. */
@@ -256,6 +341,7 @@ export interface PipelineRow {
   currentRent: number;
   gapPct: number | null;
   valueAtRisk: number | null;
+  isBenchmark: boolean;
   stage: RenewalStatus | null;
 }
 
@@ -319,12 +405,35 @@ export async function listRenewalPipeline(
   const latestByTenancy = new Map<string, (typeof captures)[number]>();
   for (const c of captures) if (!latestByTenancy.has(c.tenancyId)) latestByTenancy.set(c.tenancyId, c);
 
+  // Benchmarks for fallback (no per-tenancy query). Ordered desc, so the first
+  // match is the latest; building-specific is preferred over community-wide.
+  const benchmarks = await prisma.rentIndexBenchmark.findMany({
+    where: { workspaceId: ctx.workspaceId },
+    orderBy: { capturedAt: "desc" },
+  });
+  const pickBenchmark = (community: string, building: string | null) => {
+    if (building) {
+      const b = benchmarks.find((x) => x.community === community && x.building === building);
+      if (b) return b;
+    }
+    return benchmarks.find((x) => x.community === community && x.building === null) ?? null;
+  };
+
   return tenancies.map((t) => {
     const gate = noticeGate(t.endDate, t.noticePeriodDays);
     const daysToGate = daysBetween(today, gate.date);
-    const latest = latestByTenancy.get(t.id);
-    const position = latest ? decree43(Number(t.annualRent), Number(latest.marketRentAvg)) : null;
     const p = t.property;
+    const latest = latestByTenancy.get(t.id);
+    let isBenchmark = false;
+    let marketRentAvg: number | null = latest ? Number(latest.marketRentAvg) : null;
+    if (marketRentAvg == null) {
+      const b = pickBenchmark(p.community, p.building ?? null);
+      if (b) {
+        marketRentAvg = Number(b.marketRentAvg);
+        isBenchmark = true;
+      }
+    }
+    const position = marketRentAvg != null ? decree43(Number(t.annualRent), marketRentAvg) : null;
     const unit = [p.community, p.building, p.unitNo].filter(Boolean).join(" · ");
     return {
       tenancyId: t.id,
@@ -337,6 +446,7 @@ export async function listRenewalPipeline(
       currentRent: Number(t.annualRent),
       gapPct: position ? position.gapPct : null,
       valueAtRisk: position ? position.valueAtRisk : null,
+      isBenchmark,
       stage: caseStage.get(t.id) ?? null,
     };
   });
