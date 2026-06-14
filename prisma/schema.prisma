@@ -896,6 +896,24 @@ model RentIndexCapture {
   @@index([workspaceId, tenancyId])
 }
 
+// A captured index figure reusable across units in a community (optionally a
+// specific building), so a tenancy without its own capture can fall back to it.
+// Append-only; latest capturedAt wins; building-specific is preferred over
+// community-wide. Resolution lives in resolveEffectiveIndex (renewals.ts).
+model RentIndexBenchmark {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  community     String
+  building      String?
+  marketRentAvg Decimal  @db.Decimal(12, 2)
+  source        String   @default("DLD Smart Rental Index")
+  capturedAt    DateTime
+  capturedById  String?
+  note          String?
+  createdAt     DateTime @default(now())
+  @@index([workspaceId, community, building])
+}
+
 model RenewalCase {
   id                  String        @id @default(uuid())
   workspaceId         String

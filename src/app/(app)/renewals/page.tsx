@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
-import { listRenewalPipeline } from "@/server/services/renewals";
+import { listRenewalPipeline, listBenchmarks } from "@/server/services/renewals";
+import { roleHas } from "@/server/capabilities";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Card, EmptyState, KpiCard, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Field, inputClass, KpiCard, Money, PageHeader, Table, Td } from "@/components/ui";
+import { captureBenchmarkAction } from "../actions";
 
 // Renewal pipeline (Renewal Risk Desk). Every unit approaching renewal, with its
 // notice gate, index-based position and where the decision stands. Figures are
@@ -10,7 +12,11 @@ import { Badge, Card, EmptyState, KpiCard, Money, PageHeader, Table, Td } from "
 
 export default async function RenewalsPage() {
   const ctx = await requireCtx();
-  const rows = await listRenewalPipeline(ctx, { withinDays: 120 });
+  const [rows, benchmarks] = await Promise.all([
+    listRenewalPipeline(ctx, { withinDays: 120 }),
+    listBenchmarks(ctx),
+  ]);
+  const canWrite = roleHas(ctx.role, "renewals.write");
 
   const gatesClosing = rows.filter((r) => !r.gatePassed && r.daysToGate <= 30).length;
   const upliftInPipeline = rows.reduce((sum, r) => sum + (r.valueAtRisk ?? 0), 0);
@@ -55,12 +61,57 @@ export default async function RenewalsPage() {
                 )}
               </Td>
               <Td className="figure whitespace-nowrap">{formatDubaiDate(r.renewalDate)}</Td>
-              <Td>{r.gapPct != null ? `${Math.round(r.gapPct * 100)}% below` : <span className="text-muted">no index yet</span>}</Td>
+              <Td>
+                {r.gapPct != null ? (
+                  <>
+                    {Math.round(r.gapPct * 100)}% below
+                    {r.isBenchmark && <span className="text-muted"> (benchmark)</span>}
+                  </>
+                ) : (
+                  <span className="text-muted">no index yet</span>
+                )}
+              </Td>
               <Td>{r.valueAtRisk != null ? <Money amount={r.valueAtRisk} /> : "—"}</Td>
               <Td>{r.stage ? <Badge value={r.stage} /> : <span className="text-xs text-muted">{r.gatePassed ? "lapsed" : "not started"}</span>}</Td>
             </tr>
           ))}
         </Table>
+      )}
+
+      {canWrite && (
+        <Card className="mt-8">
+          <h2 className="font-display mb-1 text-lg text-navy-900">Community benchmarks</h2>
+          <p className="mb-3 text-xs text-muted">
+            A captured index figure reused across units in a community (or a specific building) when a
+            tenancy has no figure of its own. Building-specific is preferred over community-wide.
+          </p>
+          <form action={captureBenchmarkAction} className="flex flex-wrap items-end gap-3">
+            <Field label="Community">
+              <input name="community" required className={inputClass} placeholder="Dubai Marina" />
+            </Field>
+            <Field label="Building (optional)">
+              <input name="building" className={inputClass} placeholder="Marina Heights" />
+            </Field>
+            <Field label="Index average market rent (AED/yr)">
+              <input name="marketRentAvg" type="number" min="1" step="1" required className={inputClass} placeholder="e.g. 96000" />
+            </Field>
+            <Button type="submit">Save benchmark</Button>
+          </form>
+          {benchmarks.length > 0 && (
+            <div className="mt-4">
+              <Table headers={["Community", "Building", "Index avg", "Captured"]}>
+                {benchmarks.map((b) => (
+                  <tr key={b.id}>
+                    <Td>{b.community}</Td>
+                    <Td>{b.building ?? <span className="text-muted">community-wide</span>}</Td>
+                    <Td><Money amount={String(b.marketRentAvg)} /></Td>
+                    <Td className="figure whitespace-nowrap">{formatDubaiDate(b.capturedAt)}</Td>
+                  </tr>
+                ))}
+              </Table>
+            </div>
+          )}
+        </Card>
       )}
 
       <Card className="mt-6 border-gold-300 bg-gold-50/40">
