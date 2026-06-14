@@ -5,7 +5,7 @@ import { formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, Card, EmptyState, KpiCard, Money, PageHeader, Table, Td } from "@/components/ui";
 
 // Renewal pipeline (Renewal Risk Desk). Every unit approaching renewal, with its
-// notice gate, lawful position and where the decision stands. Figures are
+// notice gate, index-based position and where the decision stands. Figures are
 // estimates anchored to the captured index — review before action.
 
 export default async function RenewalsPage() {
@@ -20,20 +20,20 @@ export default async function RenewalsPage() {
     <>
       <PageHeader
         title="Renewals"
-        subtitle="Units approaching renewal — notice gates, lawful uplift, and where each decision stands."
+        subtitle="Units approaching renewal — notice gates, estimated uplift, and where each decision stands."
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Renewals · next 120 days" value={rows.length} />
         <KpiCard label="Gates closing ≤30 days" value={gatesClosing} variant="risk" />
-        <KpiCard label="Lawful uplift in pipeline" value={<Money amount={upliftInPipeline} />} tone="good" />
+        <KpiCard label="Est. permissible uplift" value={<Money amount={upliftInPipeline} />} tone="good" />
         <KpiCard label="Open renewal cases" value={openCases} />
       </div>
 
       {rows.length === 0 ? (
         <EmptyState message="No tenancies are within 120 days of renewal." />
       ) : (
-        <Table headers={["Unit · owner", "Notice gate", "Renewal", "Index position", "Uplift / yr", "Stage"]}>
+        <Table headers={["Unit · owner", "Notice gate", "Renewal", "Index position", "Est. uplift / yr", "Stage"]}>
           {rows.map((r) => (
             <tr key={r.tenancyId}>
               <Td>
@@ -65,7 +65,7 @@ export default async function RenewalsPage() {
 
       <Card className="mt-6 border-gold-300 bg-gold-50/40">
         <p className="text-xs text-muted">
-          Lawful position is estimated from a manually-captured DLD Smart Rental Index figure under
+          Index-based position, estimated from a manually-captured DLD Smart Rental Index figure under
           Decree No. (43) of 2013. Seneschal is not a broker or legal adviser — review official
           sources before serving a notice or agreeing terms.
         </p>

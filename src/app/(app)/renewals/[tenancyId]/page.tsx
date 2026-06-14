@@ -13,7 +13,7 @@ import {
   serveNoticeAction,
 } from "../../actions";
 
-// Renewal risk report (Renewal Risk Desk). Notice-gate countdown + the lawful
+// Renewal risk report (Renewal Risk Desk). Notice-gate countdown + the index-based
 // Decree 43 position from a captured index. Estimates for review — not legal advice.
 
 export default async function RenewalReportPage({
@@ -96,7 +96,7 @@ export default async function RenewalReportPage({
       {/* RERA position */}
       <Card className="mb-6 border-gold-300 bg-gold-50/40">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-display text-xl text-navy-900">Lawful position (Decree 43)</h2>
+          <h2 className="font-display text-xl text-navy-900">Index-based position · Decree 43</h2>
           {risk!.latestIndex && (
             <span className="figure text-xs text-muted">
               {risk!.latestIndex.source} · captured {formatDubaiDate(risk!.latestIndex.capturedAt)}
@@ -106,7 +106,7 @@ export default async function RenewalReportPage({
 
         {pos ? (
           <>
-            <LawfulScale
+            <CeilingScale
               current={pos.currentRent}
               ceiling={pos.ceiling}
               bandPct={pos.bandPct}
@@ -126,10 +126,10 @@ export default async function RenewalReportPage({
               </span>
               <p>
                 {pos.bandPct === 0 ? (
-                  <>The rent sits within the top market band — no lawful increase applies this renewal.</>
+                  <>The rent sits within the top market band — no estimated permissible increase applies this renewal.</>
                 ) : (
                   <>
-                    An estimated <b>{pos.bandPct}%</b> increase applies, lifting the lawful ceiling to{" "}
+                    An estimated <b>{pos.bandPct}%</b> increase applies, lifting the index-based ceiling estimate to{" "}
                     <Money amount={pos.ceiling} />. Up to <Money amount={pos.valueAtRisk} />/yr is forgone
                     if no valid notice is served by <b>{formatDubaiDate(risk!.noticeGateAt)}</b> — recurring
                     until the next correct notice.
@@ -141,7 +141,7 @@ export default async function RenewalReportPage({
         ) : (
           <p className="text-sm text-muted">
             No index figure captured yet. Enter the DLD Smart Rental Index average for a comparable unit
-            below to compute the lawful band, ceiling and value at risk.
+            below to compute the estimated band, ceiling and value at risk.
           </p>
         )}
       </Card>
@@ -257,7 +257,7 @@ export default async function RenewalReportPage({
             <div>
               <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Case progress</h3>
               <ul className="space-y-1.5 text-sm">
-                <Task done={!!risk!.latestIndex} label="Index captured & lawful position computed" />
+                <Task done={!!risk!.latestIndex} label="Index captured & index position computed" />
                 <Task done label="Renewal case opened" />
                 <Task done={risk!.offers.some((o) => o.party === "LANDLORD")} label="Proposal prepared" />
                 <Task done={risk!.offers.some((o) => o.party === "TENANT")} label="Tenant responded" />
@@ -337,8 +337,8 @@ function deltaOnCurrent(rent: number, current: number): string {
 }
 
 /** The decision signature: where current rent, the offers on the table, and the
- *  lawful Decree 43 ceiling sit on one axis — the negotiating room, at a glance. */
-function LawfulScale({
+ *  Decree 43 ceiling estimate sit on one axis — the negotiating room, at a glance. */
+function CeilingScale({
   current,
   ceiling,
   bandPct,
@@ -352,7 +352,7 @@ function LawfulScale({
   if (bandPct === 0 || ceiling <= current) {
     return (
       <div className="rounded-lg border border-line bg-white/60 p-4 text-sm text-navy-700">
-        No lawful increase applies this renewal — the rent already sits within the top market band.
+        No estimated permissible increase applies this renewal — the rent already sits within the top market band.
       </div>
     );
   }
@@ -361,7 +361,7 @@ function LawfulScale({
   return (
     <div className="px-1 pt-8 pb-1">
       <div className="relative h-2 rounded-full bg-gradient-to-r from-verde-100 to-gold-100">
-        {/* lawful ceiling cap */}
+        {/* ceiling-estimate cap */}
         <div className="absolute right-0 -top-1.5 h-5 w-0.5 bg-claret-500" />
         {markers.map((m, i) => (
           <div key={i} className="absolute top-1/2" style={{ left: `${at(m.value)}%` }}>
@@ -378,7 +378,7 @@ function LawfulScale({
       </div>
       <div className="figure mt-3 flex justify-between text-[11px] text-muted">
         <span>current · AED {current.toLocaleString("en-AE")}</span>
-        <span className="text-claret-700">lawful ceiling · AED {ceiling.toLocaleString("en-AE")}</span>
+        <span className="text-claret-700">ceiling estimate · AED {ceiling.toLocaleString("en-AE")}</span>
       </div>
       {markers.length > 0 && (
         <div className="mt-2 flex gap-4 text-[10px] text-muted">
