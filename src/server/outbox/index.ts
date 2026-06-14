@@ -4,7 +4,7 @@ import { prisma } from "../db";
 // Outbox (T0.3): request handlers never execute side effects inline — they
 // enqueue, the runner dispatches with retries.
 
-export type OutboxTopic = "notification.send" | "risk.evaluate" | "payments.late_check";
+export type OutboxTopic = "notification.send" | "risk.evaluate" | "payments.late_check" | "whatsapp.status";
 
 type Db = Prisma.TransactionClient;
 

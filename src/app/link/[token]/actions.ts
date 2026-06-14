@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { validateLinkToken, consumeLinkUse } from "@/server/services/secureLinks";
 import { submitProofViaLink } from "@/server/services/proofs";
 import { respondToOfferViaLink } from "@/server/services/renewals";
+import { recordLinkMessagingOptIn } from "@/server/services/consent";
 
 export type SubmitState =
   | { status: "idle" }
@@ -38,6 +39,13 @@ export async function respondToOfferAction(
     });
   } catch (e) {
     return { status: "error", message: e instanceof Error ? e.message : "Could not record your response." };
+  }
+  if (String(formData.get("optIn") ?? "") === "on") {
+    try {
+      await recordLinkMessagingOptIn(validation.link);
+    } catch {
+      /* opt-in is best-effort; never fail the response on it */
+    }
   }
   return { status: "done", action };
 }

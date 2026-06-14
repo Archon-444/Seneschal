@@ -1,5 +1,6 @@
 import { dispatchPending, type OutboxHandler } from "./index";
 import { deliverNotification } from "../notify";
+import { applyWhatsappEvents } from "../notify/whatsappEvents";
 import { detectLatePayments } from "../services/payments";
 import { sweepOverdueProofRequests } from "../services/proofs";
 import { evaluateWorkspaceRisk } from "../services/risk";
@@ -17,6 +18,7 @@ export const handlers: Record<string, OutboxHandler> = {
   "payments.late_check": async (payload) => {
     await detectLatePayments(payload.workspaceId as string | undefined);
   },
+  "whatsapp.status": applyWhatsappEvents,
 };
 
 /** One daily pass: late cheques, overdue proofs, risk re-evaluation, ladders, digest. */
