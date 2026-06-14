@@ -285,3 +285,51 @@ export function SearchForm({
     </form>
   );
 }
+
+/** Map a scope (scopeType/scopeId) to the record's page. Single source of truth
+ *  so every screen links the same way. Returns null when there's no destination. */
+export function resolveScopeLink(scopeType: string, scopeId: string | null): string | null {
+  if (!scopeId) return null;
+  switch (scopeType) {
+    case "TENANCY":
+      return `/renewals/${scopeId}`;
+    case "PROPERTY":
+      return `/properties/${scopeId}`;
+    case "CLIENT":
+      return `/clients/${scopeId}`;
+    case "PROOF_REQUEST":
+      return `/proofs/${scopeId}`;
+    case "PAYMENT_ITEM":
+      return "/payments";
+    default:
+      return null;
+  }
+}
+
+/** A scope rendered as a link to its record, or plain text when unlinkable. */
+export function ScopeLink({
+  scopeType,
+  scopeId,
+  label,
+}: {
+  scopeType: string;
+  scopeId: string | null;
+  label?: string;
+}) {
+  const href = resolveScopeLink(scopeType, scopeId);
+  const text = label ?? scopeType.replace(/_/g, " ").toLowerCase();
+  return href ? (
+    <Link href={href} className="text-navy-700 hover:underline">{text}</Link>
+  ) : (
+    <span className="text-navy-500">{text}</span>
+  );
+}
+
+/** Consistent "← back to list" affordance for detail pages. */
+export function BackLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="mb-4 inline-block text-sm text-muted hover:text-navy-900">
+      ← {label}
+    </Link>
+  );
+}

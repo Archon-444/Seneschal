@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { getContactDetail } from "@/server/services/contacts";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Card, EmptyState, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, BackLink, Card, EmptyState, Money, PageHeader, Table, Td } from "@/components/ui";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -22,6 +22,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
   return (
     <>
+      <BackLink href="/contacts" label="All contacts" />
       <PageHeader eyebrow={contact.kind} title={contact.name} subtitle={contact.company ?? undefined} />
 
       <Card className="mb-6 max-w-3xl">

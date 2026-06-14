@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { getDocument, getDocumentAccessLog, getDocumentUrl } from "@/server/services/documents";
-import { Badge, Card, LinkButton, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, BackLink, Card, LinkButton, PageHeader, resolveScopeLink, ScopeLink, Table, Td } from "@/components/ui";
 
 export default async function DocumentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,11 +17,17 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
 
   return (
     <>
+      <BackLink href="/vault" label="Document vault" />
       <PageHeader
         title={doc!.fileName}
         subtitle={`${doc!.kind.replace(/_/g, " ")} · ${(doc!.sizeBytes / 1024).toFixed(1)} KB`}
         actions={<LinkButton href={url} variant="primary">Download (signed link, 5 min)</LinkButton>}
       />
+      {resolveScopeLink(doc!.scopeType, doc!.scopeId) && (
+        <p className="mb-6 text-sm text-muted">
+          Belongs to: <ScopeLink scopeType={doc!.scopeType} scopeId={doc!.scopeId} />
+        </p>
+      )}
       <Card className="mb-6 max-w-2xl">
         <div className="text-xs font-medium uppercase tracking-wide text-navy-300">SHA-256 at ingest</div>
         <div className="figure mt-1 break-all text-sm text-navy-700">{doc!.sha256}</div>

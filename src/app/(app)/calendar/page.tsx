@@ -32,10 +32,27 @@ export default async function CalendarPage({
   const overdue = all.filter((d) => d.dueAt < today);
   const upcoming = all.filter((d) => d.dueAt >= today).slice(0, 15);
 
-  const propertyLabel = (d: (typeof all)[number]) =>
-    d.tenancy?.property
+  const propertyCell = (d: (typeof all)[number]) => {
+    const pid = d.propertyId ?? d.tenancy?.propertyId;
+    const label = d.tenancy?.property
       ? `${d.tenancy.property.community} · ${d.tenancy.property.unitNo ?? ""}`
       : "—";
+    return pid ? (
+      <Link href={`/properties/${pid}`} className="hover:underline">{label}</Link>
+    ) : (
+      <span className="text-muted">{label}</span>
+    );
+  };
+
+  // Notice-gate entries deep-link to the renewal report; other entries stay plain.
+  const entryCell = (d: (typeof all)[number]) => {
+    const badge = <Badge value={deadlineLabel(d)} />;
+    return d.kind === "NOTICE_GATE" && d.tenancyId ? (
+      <Link href={`/renewals/${d.tenancyId}`}>{badge}</Link>
+    ) : (
+      badge
+    );
+  };
 
   const byDay = new Map<string, typeof all>();
   for (const d of inMonth) {
@@ -139,8 +156,8 @@ export default async function CalendarPage({
               {overdue.map((d) => (
                 <tr key={d.id} className="bg-claret-100/40">
                   <Td className="figure whitespace-nowrap font-semibold text-claret-700">{formatDubaiDate(d.dueAt)}</Td>
-                  <Td><Badge value={deadlineLabel(d)} /></Td>
-                  <Td>{propertyLabel(d)}</Td>
+                  <Td>{entryCell(d)}</Td>
+                  <Td>{propertyCell(d)}</Td>
                   <Td>{isManual(d) ? <DoneButton id={d.id} /> : null}</Td>
                 </tr>
               ))}
@@ -156,8 +173,8 @@ export default async function CalendarPage({
               {upcoming.map((d) => (
                 <tr key={d.id}>
                   <Td className="figure whitespace-nowrap">{formatDubaiDate(d.dueAt)}</Td>
-                  <Td><Badge value={deadlineLabel(d)} /></Td>
-                  <Td>{propertyLabel(d)}</Td>
+                  <Td>{entryCell(d)}</Td>
+                  <Td>{propertyCell(d)}</Td>
                   <Td>{isManual(d) ? <DoneButton id={d.id} /> : null}</Td>
                 </tr>
               ))}

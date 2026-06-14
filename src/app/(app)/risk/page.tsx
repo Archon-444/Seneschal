@@ -1,7 +1,7 @@
 import { requireCtx } from "@/server/auth/request";
 import { listRiskFlags } from "@/server/services/risk";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, EmptyState, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, EmptyState, PageHeader, ScopeLink, Table, Td } from "@/components/ui";
 import { ackFlagAction } from "../actions";
 
 export default async function RiskPage() {
@@ -20,7 +20,7 @@ export default async function RiskPage() {
               <Td className="figure whitespace-nowrap">{formatDubaiDate(f.raisedAt)}</Td>
               <Td><Badge value={f.code} /></Td>
               <Td><Badge value={f.severity} /></Td>
-              <Td className="text-xs">{f.scopeType}</Td>
+              <Td className="text-xs"><ScopeLink scopeType={f.scopeType} scopeId={f.scopeId} /></Td>
               <Td><Badge value={f.status} /></Td>
               <Td className="figure text-xs">{f.ruleVersion ?? "—"}</Td>
               <Td>
