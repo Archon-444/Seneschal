@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { getProperty } from "@/server/services/properties";
+import { getRenewalRisk } from "@/server/services/renewals";
 import { listDocuments } from "@/server/services/documents";
 import { listEvidence, EVIDENCE_LABELS } from "@/server/services/evidenceQuery";
 import { daysBetween, formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
@@ -51,6 +52,9 @@ export default async function PropertyDetailPage({
   const title = `${property!.community}${property!.building ? ` · ${property!.building}` : ""}${property!.unitNo ? ` · ${property!.unitNo}` : ""}`;
   const daysToEnd = tenancyFull ? daysBetween(todayInDubai(), tenancyFull.endDate) : null;
   const approachingRenewal = daysToEnd != null && daysToEnd >= 0 && daysToEnd <= 120;
+  const renewalRisk = tenancyFull ? await getRenewalRisk(ctx, tenancyFull.id).catch(() => null) : null;
+  const pos = renewalRisk?.position ?? null;
+  const rentVsMarketPct = pos ? Math.round((1 - pos.currentRent / pos.marketRentAvg) * 100) : 0;
 
   return (
     <>
@@ -124,6 +128,22 @@ export default async function PropertyDetailPage({
                 ) : "—"}
               </Detail>
             </div>
+            {pos && (
+              <div className="mt-6 rounded-lg border border-gold-300 bg-gold-50/40 p-4">
+                <h3 className="font-display mb-2 text-lg text-navy-900">Market position</h3>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
+                  <MarketFact label="Rent vs market" value={`${Math.abs(rentVsMarketPct)}% ${rentVsMarketPct >= 0 ? "below" : "above"}`} />
+                  <MarketFact label="Increase band (Decree 43)" value={`${pos.bandPct}%`} />
+                  <MarketFact label="Index-based ceiling est." value={<Money amount={pos.ceiling} />} />
+                  <MarketFact label="Estimated value at risk" value={<><Money amount={pos.valueAtRisk} />/yr</>} />
+                </div>
+                <p className="mt-3 text-xs text-muted">
+                  Estimated from the captured index{renewalRisk!.latestIndex?.isBenchmark ? " (community benchmark)" : ""} · not
+                  legal advice · source captured {formatDubaiDate(renewalRisk!.latestIndex!.capturedAt)}.{" "}
+                  <Link href={`/renewals/${tenancyFull.id}`} className="text-gold-700 hover:underline">Full report →</Link>
+                </p>
+              </div>
+            )}
             <h3 className="font-display mt-6 mb-2 text-lg text-navy-900">Open deadlines</h3>
             <Table headers={["Due", "Kind", "Rule"]}>
               {tenancyFull.deadlines.map((d) => (
@@ -218,6 +238,15 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
     <div>
       <div className="text-xs font-medium uppercase tracking-wide text-navy-300">{label}</div>
       <div className="mt-0.5 text-navy-900">{children}</div>
+    </div>
+  );
+}
+
+function MarketFact({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</div>
+      <div className="figure mt-0.5 text-navy-900">{value}</div>
     </div>
   );
 }

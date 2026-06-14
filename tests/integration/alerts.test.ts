@@ -4,6 +4,7 @@ import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
 import * as payments from "@/server/services/payments";
 import { runAlertLadders, sendWeeklyDigest } from "@/server/services/alerts";
+import { captureRentIndex } from "@/server/services/renewals";
 import { todayInDubai } from "@/server/calculators/dates";
 
 // T9.2 — ladders run from Deadline rows; every send is REMINDER_SENT evidence;
@@ -95,5 +96,86 @@ describe("alert ladders", () => {
       where: { workspaceId: W.workspaceId, templateCode: "weekly_digest_v1" },
     });
     expect(digest).toBeTruthy();
+  });
+});
+
+async function noticeGateTenancy(actor: TestActor, annualRent: number) {
+  const property = await properties.createProperty(actor.ctx, {
+    clientPrincipalId: (
+      await prisma.clientPrincipal.create({
+        data: { workspaceId: actor.workspaceId, displayName: "C" },
+      })
+    ).id,
+    community: "Dubai Marina",
+    unitNo: "1",
+  });
+  // gate = end − 90; place it at today+120 to fire the T-120 rung
+  return tenancies.createTenancy(actor.ctx, {
+    propertyId: property.id,
+    startDate: daysFromToday(-155),
+    endDate: daysFromToday(210),
+    annualRent,
+    ejariNo: "L-IDX",
+  });
+}
+
+async function noticeGateBody(workspaceId: string): Promise<string> {
+  const msg = await prisma.notificationMessage.findFirst({
+    where: { workspaceId, templateCode: "notice_gate_v1", direction: "OUTBOUND" },
+  });
+  return msg?.bodyRef ?? "";
+}
+
+const BANNED = ["lawful", "by law", "enforceable", "legal band"];
+function expectNoBannedTerms(body: string) {
+  const lower = body.toLowerCase();
+  for (const term of BANNED) expect(lower).not.toContain(term);
+}
+
+describe("notice-gate alert — RERA enrichment (PR2)", () => {
+  it("embeds the ceiling estimate and value-at-risk when an index exists", async () => {
+    const tenancy = await noticeGateTenancy(W, 72000);
+    // 72,000 vs market 96,000 → 25% below → Decree-43 10% band.
+    await captureRentIndex(W.ctx, { tenancyId: tenancy.id, marketRentAvg: 96000 });
+
+    expect(await runAlertLadders(W.workspaceId)).toBe(1); // body changes, not rung count
+
+    const body = await noticeGateBody(W.workspaceId);
+    const lower = body.toLowerCase();
+    expect(lower).toContain("index-based ceiling estimate");
+    expect(lower).toContain("at risk if a valid renewal notice");
+    expect(lower).toContain("based on supplied data and the captured index");
+    expect(lower).toContain("review before action");
+    expect((body.match(/AED\s*[\d,]+/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expectNoBannedTerms(body);
+  });
+
+  it("stays generic when no index is captured", async () => {
+    await noticeGateTenancy(W, 72000);
+    expect(await runAlertLadders(W.workspaceId)).toBe(1);
+    const lower = (await noticeGateBody(W.workspaceId)).toLowerCase();
+    expect(lower).toContain("deadline reminder");
+    expect(lower).not.toContain("index-based ceiling estimate");
+    expectNoBannedTerms(lower);
+  });
+
+  it("no shipped reminder body uses constrained legal terms", async () => {
+    const tenancy = await noticeGateTenancy(W, 72000);
+    await captureRentIndex(W.ctx, { tenancyId: tenancy.id, marketRentAvg: 96000 });
+    await runAlertLadders(W.workspaceId);
+    const all = await prisma.notificationMessage.findMany({
+      where: { workspaceId: W.workspaceId, direction: "OUTBOUND" },
+    });
+    expect(all.length).toBeGreaterThan(0);
+    for (const m of all) expectNoBannedTerms(m.bodyRef ?? "");
+  });
+
+  it("computes the canonical Decree-43 ceiling and value-at-risk", async () => {
+    const tenancy = await noticeGateTenancy(W, 72000);
+    await captureRentIndex(W.ctx, { tenancyId: tenancy.id, marketRentAvg: 96000 });
+    await runAlertLadders(W.workspaceId);
+    const normalized = (await noticeGateBody(W.workspaceId)).replace(/,/g, "");
+    expect(normalized).toContain("79200"); // ceiling estimate
+    expect(normalized).toContain("7200"); // value at risk / yr
   });
 });
