@@ -6,7 +6,7 @@ import { listSecureLinks } from "@/server/services/secureLinks";
 import { listDocuments } from "@/server/services/documents";
 import { listEvidence, EVIDENCE_LABELS } from "@/server/services/evidenceQuery";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, Field, inputClass, PageHeader, Table, Td } from "@/components/ui";
+import { BackLink, Badge, Button, Card, Field, inputClass, PageHeader, resolveScopeLink, ScopeLink, Table, Td } from "@/components/ui";
 import { decideProofAction, resendProofAction, revokeLinkAction } from "../../actions";
 
 export default async function ProofDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -28,6 +28,7 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
 
   return (
     <>
+      <BackLink href="/proofs" label="All proof requests" />
       <PageHeader
         title={request!.title}
         subtitle={`Due ${request!.dueAt ? formatDubaiDate(request!.dueAt) : "—"}`}
@@ -43,6 +44,11 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
           <Badge value={request!.status} />
           <span className="text-sm text-navy-700">{request!.requiredEvidence}</span>
         </div>
+        {resolveScopeLink(request!.scopeType, request!.scopeId) && (
+          <p className="mt-2 text-sm text-muted">
+            Scope: <ScopeLink scopeType={request!.scopeType} scopeId={request!.scopeId} />
+          </p>
+        )}
         {request!.decisionNote && (
           <p className="mt-2 text-sm text-navy-500">Decision note: {request!.decisionNote}</p>
         )}

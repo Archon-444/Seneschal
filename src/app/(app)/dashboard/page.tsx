@@ -4,7 +4,7 @@ import { dashboardKpis } from "@/server/services/dashboard";
 import { listDeadlines } from "@/server/services/deadlines";
 import { listRiskFlags } from "@/server/services/risk";
 import { formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
-import { Badge, Card, EmptyState, Eyebrow, KpiCard, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Card, EmptyState, Eyebrow, KpiCard, PageHeader, resolveScopeLink, Table, Td } from "@/components/ui";
 
 export default async function DashboardPage() {
   const ctx = await requireCtx();
@@ -105,10 +105,11 @@ export default async function DashboardPage() {
               {flags.slice(0, 8).map((f) => {
                 const accent =
                   f.severity === "CRITICAL" ? "border-claret-500" : f.severity === "WARN" ? "border-amber-500" : "border-line";
+                const href = resolveScopeLink(f.scopeType, f.scopeId);
                 return (
                   <tr key={f.id}>
                     <Td className={`figure whitespace-nowrap border-l-2 ${accent}`}>{formatDubaiDate(f.raisedAt)}</Td>
-                    <Td><Badge value={f.code} /></Td>
+                    <Td>{href ? <Link href={href}><Badge value={f.code} /></Link> : <Badge value={f.code} />}</Td>
                     <Td><Badge value={f.severity} /></Td>
                   </tr>
                 );

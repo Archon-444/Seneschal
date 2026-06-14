@@ -4,8 +4,8 @@ import { requireCtx } from "@/server/auth/request";
 import { getProperty } from "@/server/services/properties";
 import { listDocuments } from "@/server/services/documents";
 import { listEvidence, EVIDENCE_LABELS } from "@/server/services/evidenceQuery";
-import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Card, EmptyState, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
+import { daysBetween, formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
+import { Badge, BackLink, Card, EmptyState, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
 import { PaymentRow } from "./PaymentRow";
 import { UploadForm } from "./UploadForm";
 
@@ -49,14 +49,26 @@ export default async function PropertyDetailPage({
     : null;
 
   const title = `${property!.community}${property!.building ? ` · ${property!.building}` : ""}${property!.unitNo ? ` · ${property!.unitNo}` : ""}`;
+  const daysToEnd = tenancyFull ? daysBetween(todayInDubai(), tenancyFull.endDate) : null;
+  const approachingRenewal = daysToEnd != null && daysToEnd >= 0 && daysToEnd <= 120;
 
   return (
     <>
+      <BackLink href="/properties" label="All properties" />
       <PageHeader
         title={title}
         subtitle={`${property!.propertyType ?? "property"}${property!.bedrooms != null ? ` · ${property!.bedrooms || "Studio"} BR` : ""}`}
         actions={!tenancy ? <LinkButton href={`/tenancies/new?propertyId=${id}`} variant="primary">Add tenancy</LinkButton> : undefined}
       />
+
+      {approachingRenewal && (
+        <Link
+          href={`/renewals/${tenancyFull!.id}`}
+          className="mb-6 inline-flex items-center gap-1 rounded-md border border-gold-300 bg-gold-50/40 px-3 py-1.5 text-sm font-medium text-gold-700 hover:bg-gold-100"
+        >
+          Approaching renewal · {daysToEnd} days to expiry — view risk report →
+        </Link>
+      )}
 
       {(property!.usage || property!.makaniNo || property!.dewaPremiseNo || property!.plotNo || property!.sizeSqm) && (
         <div className="mb-6 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border border-line bg-ivory-100 px-4 py-3 text-sm">

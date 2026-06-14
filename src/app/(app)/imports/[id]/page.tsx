@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { getImportBatch, type ImportRowData } from "@/server/services/imports";
-import { Badge, Button, Card, PageHeader, Table, Td } from "@/components/ui";
+import { BackLink, Badge, Button, Card, PageHeader, Table, Td } from "@/components/ui";
 import { commitBatchAction, rollbackBatchAction } from "../../actions";
 
 export default async function ImportBatchPage({ params }: { params: Promise<{ id: string }> }) {
@@ -18,6 +18,7 @@ export default async function ImportBatchPage({ params }: { params: Promise<{ id
 
   return (
     <>
+      <BackLink href="/imports" label="All imports" />
       <PageHeader
         title={`Import batch — ${batch!.source}`}
         subtitle={`${batch!.rows.length} rows · ${conflicts} conflicted (conflicts block the row, not the batch)`}

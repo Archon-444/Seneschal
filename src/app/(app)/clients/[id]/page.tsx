@@ -6,7 +6,7 @@ import { listProperties } from "@/server/services/properties";
 import { listDeadlines } from "@/server/services/deadlines";
 import { listPayments } from "@/server/services/payments";
 import { formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
-import { Badge, EmptyState, KpiCard, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, BackLink, EmptyState, KpiCard, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
 
 // Screen 17 — client-scoped dashboard. CLIENT_VIEWER lands here; fiduciaries
 // use it as the per-client view. Scoping enforced by authz (T1.4 suite).
@@ -34,6 +34,7 @@ export default async function ClientDashboardPage({ params }: { params: Promise<
 
   return (
     <>
+      <BackLink href="/clients" label="All clients" />
       <PageHeader
         title={client!.displayName}
         subtitle="Client dashboard"
