@@ -90,6 +90,25 @@ describe("renewal risk desk", () => {
     expect(Math.round(row!.gapPct! * 100)).toBe(25);
   });
 
+  it("filters the pipeline to an explicit clientPrincipalId (fiduciary view)", async () => {
+    const other = await clients.createClient(W.ctx, { displayName: "Other Co" });
+    const otherProp = await properties.createProperty(W.ctx, {
+      clientPrincipalId: other.id,
+      community: "JVC",
+      unitNo: "9",
+    });
+    const otherTenancy = await tenancies.createTenancy(W.ctx, {
+      propertyId: otherProp.id,
+      startDate: daysFromNow(-300),
+      endDate: daysFromNow(40),
+      annualRent: 48_000,
+    });
+
+    const ids = (await listRenewalPipeline(W.ctx, { clientPrincipalId: clientId })).map((r) => r.tenancyId);
+    expect(ids).toContain(tenancyId);
+    expect(ids).not.toContain(otherTenancy.id);
+  });
+
   it("scopes the pipeline and report to a CLIENT_VIEWER's own client", async () => {
     // a second client + tenancy the viewer should never see
     const other = await clients.createClient(W.ctx, { displayName: "Other Co" });

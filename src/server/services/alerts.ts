@@ -1,6 +1,8 @@
 import { prisma } from "../db";
 import { notify } from "../notify";
 import { recordEvidence } from "../evidence";
+import { resolveEffectiveIndex } from "./renewals";
+import { decree43 } from "../calculators/rent";
 import { daysBetween, formatDubaiDate, todayInDubai } from "../calculators/dates";
 
 // Alert ladders (T9.2), config-defined per P3 workflow templates. Ladders run
@@ -67,16 +69,37 @@ export async function runAlertLadders(workspaceId: string): Promise<number> {
         const where = deadline.tenancy?.property
           ? `${deadline.tenancy.property.community} ${deadline.tenancy.property.unitNo ?? ""}`.trim()
           : "your portfolio";
+
+        // RERA enrichment: notice-gate ladder only, and only when an index resolves.
+        // Carries the index-based ceiling estimate + value-at-risk into the reminder.
+        let subjectSuffix = "";
+        let bodySuffix = "";
+        if (templateCode === "notice_gate_v1" && deadline.tenancyId && deadline.tenancy) {
+          const eff = await resolveEffectiveIndex(workspaceId, deadline.tenancyId, deadline.tenancy.property);
+          if (eff) {
+            const pos = decree43(Number(deadline.tenancy.annualRent), eff.marketRentAvg);
+            const aed = (n: number) => `AED ${Math.round(n).toLocaleString("en-AE")}`;
+            subjectSuffix = ` — est. ${aed(pos.valueAtRisk)}/yr at stake`;
+            bodySuffix =
+              `\n\nIndex-based ceiling estimate: ${aed(pos.ceiling)}.\n` +
+              `Estimated ${aed(pos.valueAtRisk)}/yr at risk if a valid renewal notice is not served by ` +
+              `${formatDubaiDate(deadline.dueAt)}. Based on supplied data and the captured index ` +
+              `(source captured ${formatDubaiDate(eff.capturedAt)}). Review before action — record-keeping ` +
+              `assistance, not legal advice.`;
+          }
+        }
+
         for (const admin of admins) {
           await notify({
             workspaceId,
             channel: "EMAIL",
             templateCode,
-            subject: `${deadline.kind.replace(/_/g, " ")} — ${where} — ${formatDubaiDate(deadline.dueAt)}`,
+            subject: `${deadline.kind.replace(/_/g, " ")} — ${where} — ${formatDubaiDate(deadline.dueAt)}${subjectSuffix}`,
             body:
               `Deadline reminder (${rung.code}).\n\n` +
               `Kind: ${deadline.kind}\nProperty: ${where}\nDue: ${formatDubaiDate(deadline.dueAt)}\n\n` +
-              `Review before action. This is record-keeping assistance, not legal advice.`,
+              `Review before action. This is record-keeping assistance, not legal advice.` +
+              bodySuffix,
             toUserId: admin.userId,
             relatedType: "TENANCY",
             relatedId: deadline.tenancyId ?? undefined,

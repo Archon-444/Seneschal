@@ -3,17 +3,20 @@ import { requireCtx } from "@/server/auth/request";
 import { dashboardKpis } from "@/server/services/dashboard";
 import { listDeadlines } from "@/server/services/deadlines";
 import { listRiskFlags } from "@/server/services/risk";
+import { listRenewalPipeline } from "@/server/services/renewals";
 import { formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
-import { Badge, Card, EmptyState, Eyebrow, KpiCard, PageHeader, resolveScopeLink, Table, Td } from "@/components/ui";
+import { Badge, Card, EmptyState, Eyebrow, KpiCard, Money, PageHeader, resolveScopeLink, Table, Td } from "@/components/ui";
 
 export default async function DashboardPage() {
   const ctx = await requireCtx();
-  const [kpis, deadlines, flags] = await Promise.all([
+  const [kpis, deadlines, flags, pipeline] = await Promise.all([
     dashboardKpis(ctx),
     listDeadlines(ctx),
     listRiskFlags(ctx),
+    listRenewalPipeline(ctx),
   ]);
   const today = todayInDubai();
+  const upliftAtRisk = pipeline.reduce((sum, r) => sum + (r.valueAtRisk ?? 0), 0);
   const upcoming = deadlines.filter((d) => d.dueAt >= today).slice(0, 8);
 
   return (
@@ -27,7 +30,7 @@ export default async function DashboardPage() {
       {/* Tier 1 — what costs money if it's ignored. Loud only when non-zero. */}
       <section className="mb-8">
         <Eyebrow>Needs attention</Eyebrow>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard
             label="Overdue deadlines"
             value={kpis.overdueDeadlines}
@@ -49,6 +52,13 @@ export default async function DashboardPage() {
             tone={kpis.openFlags > 0 ? "warn" : "good"}
             sub={kpis.openFlags > 0 ? "to review" : "none open"}
             href="/risk"
+          />
+          <KpiCard
+            label="Est. permissible uplift · 120 days"
+            value={<Money amount={upliftAtRisk} />}
+            tone="good"
+            sub="captured-index renewals · estimate only"
+            href="/renewals"
           />
         </div>
       </section>

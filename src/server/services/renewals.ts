@@ -151,10 +151,41 @@ export interface RenewalRisk {
   renewalDate: Date;
   daysToGate: number;
   gatePassed: boolean;
-  latestIndex: { marketRentAvg: number; capturedAt: Date; source: string } | null;
+  latestIndex: { marketRentAvg: number; capturedAt: Date; source: string; isBenchmark: boolean } | null;
   position: RentPositionResult | null;
   renewalCase: { id: string; status: RenewalStatus; decidedOfferId: string | null } | null;
   offers: OfferView[];
+}
+
+export interface EffectiveIndex {
+  marketRentAvg: number;
+  capturedAt: Date;
+  source: string;
+  isBenchmark: boolean;
+}
+
+/** Resolve the index figure that applies to a tenancy — the single source of
+ *  truth for every surface (report, pipeline, property/client pages) and the
+ *  notice-gate alert. PR2: latest tenancy-specific RentIndexCapture only.
+ *  PR3 extends this with community/building benchmark fallback. */
+export async function resolveEffectiveIndex(
+  workspaceId: string,
+  tenancyId: string,
+  _property?: { community: string; building: string | null } | null,
+): Promise<EffectiveIndex | null> {
+  const capture = await prisma.rentIndexCapture.findFirst({
+    where: { workspaceId, tenancyId },
+    orderBy: { capturedAt: "desc" },
+  });
+  if (capture) {
+    return {
+      marketRentAvg: Number(capture.marketRentAvg),
+      capturedAt: capture.capturedAt,
+      source: capture.source,
+      isBenchmark: false,
+    };
+  }
+  return null;
 }
 
 /** Assemble the renewal risk report for one tenancy. */
@@ -162,11 +193,8 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
   require_(ctx, "renewals.read");
   const tenancy = await getTenancy(ctx, tenancyId); // enforces workspace + client scope
 
-  const [latest, renewalCase] = await Promise.all([
-    prisma.rentIndexCapture.findFirst({
-      where: { workspaceId: ctx.workspaceId, tenancyId },
-      orderBy: { capturedAt: "desc" },
-    }),
+  const [eff, renewalCase] = await Promise.all([
+    resolveEffectiveIndex(ctx.workspaceId, tenancyId, tenancy!.property),
     prisma.renewalCase.findFirst({
       where: { workspaceId: ctx.workspaceId, tenancyId },
       orderBy: { createdAt: "desc" },
@@ -183,8 +211,8 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
   const gate = noticeGate(tenancy!.endDate, tenancy!.noticePeriodDays);
   const today = todayInDubai();
   const daysToGate = daysBetween(today, gate.date);
-  const latestIndex = latest
-    ? { marketRentAvg: Number(latest.marketRentAvg), capturedAt: latest.capturedAt, source: latest.source }
+  const latestIndex = eff
+    ? { marketRentAvg: eff.marketRentAvg, capturedAt: eff.capturedAt, source: eff.source, isBenchmark: eff.isBenchmark }
     : null;
   const position = latestIndex
     ? decree43(Number(tenancy!.annualRent), latestIndex.marketRentAvg)
@@ -234,17 +262,19 @@ export interface PipelineRow {
 /** Tenancies approaching renewal (or with an open case), with computed position. */
 export async function listRenewalPipeline(
   ctx: AuthzContext,
-  opts?: { withinDays?: number },
+  opts?: { withinDays?: number; clientPrincipalId?: string },
 ): Promise<PipelineRow[]> {
   require_(ctx, "renewals.read");
   const within = opts?.withinDays ?? 120;
   const today = todayInDubai();
   const horizon = addDaysUtc(today, within);
 
-  // CLIENT_VIEWER: restrict to the client's own tenancies (same pattern as listDeadlines).
+  // Restrict to a client's tenancies: a CLIENT_VIEWER is always locked to its own
+  // client; a fiduciary may pass an explicit clientPrincipalId (mirrors listDeadlines).
+  const effectiveClientId = ctx.clientPrincipalId ?? opts?.clientPrincipalId ?? null;
   let scopedTenancyIds: string[] | null = null;
-  if (ctx.clientPrincipalId) {
-    const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId);
+  if (effectiveClientId) {
+    const ids = await resolveClientScopeIds(ctx.workspaceId, effectiveClientId);
     scopedTenancyIds = ids.tenancyIds;
   }
 

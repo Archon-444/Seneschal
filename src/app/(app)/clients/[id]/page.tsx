@@ -4,6 +4,7 @@ import { requireCtx } from "@/server/auth/request";
 import { getClient } from "@/server/services/clients";
 import { listProperties } from "@/server/services/properties";
 import { listDeadlines } from "@/server/services/deadlines";
+import { listRenewalPipeline } from "@/server/services/renewals";
 import { listPayments } from "@/server/services/payments";
 import { formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
 import { Badge, BackLink, EmptyState, KpiCard, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
@@ -21,10 +22,11 @@ export default async function ClientDashboardPage({ params }: { params: Promise<
   } catch {
     notFound();
   }
-  const [properties, deadlines, payments] = await Promise.all([
+  const [properties, deadlines, payments, renewalRows] = await Promise.all([
     listProperties(ctx, { clientPrincipalId: id }),
     listDeadlines(ctx, { clientPrincipalId: id }),
     listPayments(ctx),
+    listRenewalPipeline(ctx, { clientPrincipalId: id }),
   ]);
   const today = todayInDubai();
   const clientPropertyIds = new Set(properties.map((p) => p.id));
@@ -70,6 +72,28 @@ export default async function ClientDashboardPage({ params }: { params: Promise<
             );
           })}
         </Table>
+      )}
+
+      {renewalRows.length > 0 && (
+        <>
+          <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Renewals outlook</h2>
+          <Table headers={["Unit", "Notice gate", "Est. permissible uplift", "Stage"]}>
+            {renewalRows.map((r) => (
+              <tr key={r.tenancyId}>
+                <Td>
+                  <Link href={`/renewals/${r.tenancyId}`} className="text-navy-900 hover:underline">
+                    {r.unit || "Unit"}
+                  </Link>
+                </Td>
+                <Td className="figure whitespace-nowrap">
+                  {formatDubaiDate(r.noticeGateAt)}{r.gatePassed ? " · passed" : ` · ${r.daysToGate}d`}
+                </Td>
+                <Td>{r.valueAtRisk != null ? <Money amount={r.valueAtRisk} /> : "—"}</Td>
+                <Td>{r.stage ? <Badge value={r.stage} /> : <span className="text-xs text-muted">—</span>}</Td>
+              </tr>
+            ))}
+          </Table>
+        </>
       )}
 
       <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Cheques</h2>
