@@ -26,10 +26,14 @@ function safeEqual(a: string, b: string): boolean {
 
 export async function POST(req: Request): Promise<Response> {
   if (process.env.WHATSAPP_PROVIDER !== "meta") return new Response("Not found", { status: 404 });
+  // Fail closed: without an app secret the HMAC key would be the empty string,
+  // which any caller can reproduce — forged webhooks must never be accepted.
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+  if (!appSecret) return new Response("Server misconfigured", { status: 500 });
   // Read the raw body BEFORE any JSON parse — the HMAC is computed over it.
   const raw = await req.text();
   const sig = req.headers.get("x-hub-signature-256") ?? "";
-  const expected = "sha256=" + crypto.createHmac("sha256", process.env.WHATSAPP_APP_SECRET ?? "").update(raw).digest("hex");
+  const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(raw).digest("hex");
   if (!safeEqual(sig, expected)) return new Response("Unauthorized", { status: 401 });
 
   let body: Record<string, unknown> = {};

@@ -69,24 +69,24 @@ export async function deliverNotification(payload: Record<string, unknown>): Pro
   const email = (payload.toAddress as string | null) ?? user?.email ?? contact?.email ?? null;
   const phone = user?.phone ?? contact?.phone ?? null;
 
-  // Lazy channel resolution: only upgrade to WhatsApp when explicitly preferred
-  // AND the provider is configured AND the recipient has active MESSAGING consent.
+  // Channel resolution. A message reaches WhatsApp only when it is explicitly
+  // preferred (or already on that channel) AND the provider is configured AND a
+  // phone exists AND the recipient has active MESSAGING consent. The gate is
+  // applied to the *resolved* channel, so a message created directly on WHATSAPP
+  // is gated too — never deliver over WhatsApp without an active grant.
   let channel = message.channel;
-  if ((payload.preferChannel as Channel | undefined) === "WHATSAPP" && channel !== "WHATSAPP") {
+  if ((payload.preferChannel as Channel | undefined) === "WHATSAPP") channel = "WHATSAPP";
+  if (channel === "WHATSAPP") {
     const consented = message.toUserId
       ? await hasActiveMessagingConsent({ userId: message.toUserId })
       : message.toContactId
         ? await hasActiveMessagingConsent({ contactId: message.toContactId })
         : false;
-    if (whatsappConfigured() && consented && phone) channel = "WHATSAPP";
+    if (!whatsappConfigured() || !consented || !phone) channel = "EMAIL";
   }
 
-  // Address for the resolved channel; downgrade WhatsApp→email if no phone.
-  let to = channel === "WHATSAPP" ? phone : email;
-  if (channel === "WHATSAPP" && !to) {
-    channel = "EMAIL";
-    to = email;
-  }
+  // Address for the resolved channel. WhatsApp implies a phone (gated above).
+  const to = channel === "WHATSAPP" ? phone : email;
   if (!to) {
     await prisma.notificationMessage.update({ where: { id: messageId }, data: { status: "FAILED" } });
     return;

@@ -53,9 +53,20 @@ export async function applyWhatsappEvents(payload: Record<string, unknown>): Pro
 
       for (const m of value.messages ?? []) {
         if (!m.from) continue;
-        // Best-effort inbound → evidence. Resolve the workspace via the contact phone.
-        const contact = await prisma.contact.findFirst({ where: { phone: { contains: m.from } } });
-        if (!contact) continue;
+        // Best-effort inbound → evidence. Resolve the contact via its phone, but
+        // never misattribute: narrow with a digit prefilter, then require an
+        // EXACT normalized match that is unambiguous across the whole table —
+        // a substring or cross-workspace collision must not write evidence to
+        // the wrong workspace (evidence is insert-only and permanent).
+        const fromDigits = m.from.replace(/\D/g, "");
+        if (!fromDigits) continue;
+        const candidates = await prisma.contact.findMany({
+          where: { phone: { contains: fromDigits } },
+          select: { id: true, workspaceId: true, phone: true },
+        });
+        const matches = candidates.filter((c) => c.phone?.replace(/\D/g, "") === fromDigits);
+        if (matches.length !== 1) continue; // 0 = unknown sender, >1 = ambiguous
+        const contact = matches[0];
         await recordEvidence({
           workspaceId: contact.workspaceId,
           type: "TENANT_ACKNOWLEDGED",

@@ -13,6 +13,17 @@ export const MESSAGING_NOTICE_VERSION = "messaging_notice_v1";
 
 export type ConsentTarget = { contactId: string } | { userId: string };
 
+/** Users join workspaces via Membership (no workspaceId column), so scope a
+ *  user target by asserting an active membership in the caller's workspace —
+ *  never flip consent on a user belonging to another workspace. */
+async function assertUserInWorkspace(ctx: AuthzContext, userId: string): Promise<void> {
+  const membership = await prisma.membership.findFirst({
+    where: { workspaceId: ctx.workspaceId, userId },
+    select: { id: true },
+  });
+  if (!membership) throw new AuthzError("Not found", 404);
+}
+
 export async function grantMessagingConsent(
   ctx: AuthzContext,
   target: ConsentTarget,
@@ -32,8 +43,7 @@ export async function grantMessagingConsent(
       },
     });
   } else {
-    const user = await prisma.user.findUnique({ where: { id: target.userId } });
-    if (!user) throw new AuthzError("Unknown user", 404);
+    await assertUserInWorkspace(ctx, target.userId);
     await prisma.user.update({ where: { id: target.userId }, data: { waOptInAt: new Date() } });
   }
   await recordEvidence({
@@ -58,6 +68,7 @@ export async function revokeMessagingConsent(ctx: AuthzContext, target: ConsentT
       data: { revokedAt: new Date() },
     });
   } else {
+    await assertUserInWorkspace(ctx, target.userId);
     await prisma.user.update({ where: { id: target.userId }, data: { waOptInAt: null } });
   }
   await recordEvidence({
