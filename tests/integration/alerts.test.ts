@@ -6,6 +6,7 @@ import * as payments from "@/server/services/payments";
 import { runAlertLadders, sendWeeklyDigest } from "@/server/services/alerts";
 import { captureRentIndex } from "@/server/services/renewals";
 import { todayInDubai } from "@/server/calculators/dates";
+import { findBannedCopy } from "../copyConstraints";
 
 // T9.2 — ladders run from Deadline rows; every send is REMINDER_SENT evidence;
 // each rung fires once (idempotent across daily reruns).
@@ -126,10 +127,8 @@ async function noticeGateBody(workspaceId: string): Promise<string> {
   return msg?.bodyRef ?? "";
 }
 
-const BANNED = ["lawful", "by law", "enforceable", "legal band"];
 function expectNoBannedTerms(body: string) {
-  const lower = body.toLowerCase();
-  for (const term of BANNED) expect(lower).not.toContain(term);
+  expect(findBannedCopy(body)).toBeNull();
 }
 
 describe("notice-gate alert — RERA enrichment (PR2)", () => {

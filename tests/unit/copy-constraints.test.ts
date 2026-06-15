@@ -1,21 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { BANNED_COPY, findBannedCopy } from "../copyConstraints";
 
 // Gate 2 (seneschal-build-handoff.md): production copy must never present the
 // Decree-43 / index figures as legally binding. These terms are banned in any
-// shipped UI string. Notification bodies are swept separately in alerts.test.ts.
+// shipped string. The same BANNED_COPY patterns sweep the runtime notice-gate
+// body in alerts.test.ts — one source of truth, no drift.
 // Permanent guard — eyeballing failed once already (the renewal desk shipped
 // "Lawful position" / "lawful ceiling" before this existed). Use the constraint-
 // safe phrasing instead: "estimated permissible increase", "index-based ceiling
 // estimate", "based on supplied data", "review before action".
 
-// Word-boundary patterns so legitimate copy is not tripped: "lawyer",
-// "legal adviser", and "not legal advice" must all pass.
-const BANNED: RegExp[] = [/\blawful\b/i, /\bby law\b/i, /\benforceable\b/i, /legal band/i];
-
-// User-facing source roots (pages, the public tenant link, shared components).
-const ROOTS = ["src/app/(app)", "src/app/link", "src/components"];
+// User-facing source roots: pages, the public tenant link, shared components,
+// and the server layer (notification bodies, reports, link-page server text).
+const ROOTS = ["src/app/(app)", "src/app/link", "src/components", "src/server"];
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -30,19 +29,16 @@ function walk(dir: string): string[] {
 describe("copy constraints (Gate 2)", () => {
   it("does not trip on legitimate near-misses", () => {
     for (const sample of ["lawyer", "legal adviser", "not legal advice", "by lawyer"]) {
-      expect(BANNED.some((p) => p.test(sample))).toBe(false);
+      expect(BANNED_COPY.some((p) => p.test(sample))).toBe(false);
     }
   });
 
-  it("no shipped UI string uses a banned legal term", () => {
+  it("no shipped string uses a banned legal term", () => {
     const offenders: string[] = [];
     for (const root of ROOTS) {
       for (const file of walk(root)) {
-        const text = readFileSync(file, "utf8");
-        for (const pat of BANNED) {
-          const m = text.match(pat);
-          if (m) offenders.push(`${file}: "${m[0]}"`);
-        }
+        const found = findBannedCopy(readFileSync(file, "utf8"));
+        if (found) offenders.push(`${file}: "${found}"`);
       }
     }
     expect(offenders, `banned legal terms found:\n${offenders.join("\n")}`).toEqual([]);
