@@ -112,7 +112,7 @@ describe("whatsapp delivery gating", () => {
     expect(calledMeta(spy)).toBe(false);
   });
 
-  it("delivers to a workspace user with waOptInAt + phone over WhatsApp", async () => {
+  it("delivers to a consented workspace user with a phone over WhatsApp", async () => {
     const spy = stubMetaProvider();
     await grantMessagingConsent(W.ctx, { userId: W.ctx.userId });
     await prisma.user.update({ where: { id: W.ctx.userId }, data: { phone: "+971500000099" } });
@@ -178,10 +178,24 @@ describe("messaging consent", () => {
     expect(await hasActiveMessagingConsent({ contactId: c.id })).toBe(false);
   });
 
-  it("user opt-in sets waOptInAt", async () => {
+  it("user opt-in writes an append-only ConsentRecord; revoke sets revokedAt", async () => {
     await grantMessagingConsent(W.ctx, { userId: W.ctx.userId });
-    expect((await prisma.user.findUnique({ where: { id: W.ctx.userId } }))?.waOptInAt).toBeTruthy();
-    expect(await hasActiveMessagingConsent({ userId: W.ctx.userId })).toBe(true);
+    const granted = await prisma.consentRecord.findFirst({
+      where: { workspaceId: W.workspaceId, userId: W.ctx.userId, purpose: "MESSAGING" },
+    });
+    expect(granted).toBeTruthy();
+    expect(granted!.revokedAt).toBeNull();
+    expect(await hasActiveMessagingConsent({ userId: W.ctx.userId }, W.workspaceId)).toBe(true);
+
+    await revokeMessagingConsent(W.ctx, { userId: W.ctx.userId });
+    expect(await hasActiveMessagingConsent({ userId: W.ctx.userId }, W.workspaceId)).toBe(false);
+    // The original grant row survives — revocation is a new state, not a delete.
+    expect(
+      await prisma.consentRecord.count({ where: { userId: W.ctx.userId, purpose: "MESSAGING" } }),
+    ).toBe(1);
+    expect(
+      (await prisma.consentRecord.findFirst({ where: { userId: W.ctx.userId } }))?.revokedAt,
+    ).not.toBeNull();
   });
 
   it("grant/revoke write CONSENT_GRANTED / CONSENT_REVOKED evidence", async () => {

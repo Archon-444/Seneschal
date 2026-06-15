@@ -39,7 +39,6 @@ model User {
   name        String
   locale      String   @default("en")
   isStaff     Boolean  @default(false)
-  waOptInAt   DateTime?
   createdAt   DateTime @default(now())
   memberships Membership[]
 }
@@ -476,7 +475,10 @@ enum LinkPurpose {
 model ConsentRecord {                // P5
   id            String        @id @default(uuid())
   workspaceId   String
-  contactId     String
+  // Exactly one subject: a Contact (tenant/landlord) or a workspace User.
+  // Both are append-only — a revocation sets revokedAt, never deletes.
+  contactId     String?
+  userId        String?
   purpose       ConsentPurpose
   source        ConsentSource
   noticeVersion String
@@ -484,6 +486,7 @@ model ConsentRecord {                // P5
   grantedAt     DateTime      @default(now())
   revokedAt     DateTime?
   @@index([workspaceId, contactId])
+  @@index([workspaceId, userId])
 }
 
 enum ConsentPurpose {

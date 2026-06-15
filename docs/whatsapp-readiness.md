@@ -15,7 +15,7 @@ stub behind the same `notify()` gateway as email, so 1B swaps one module.
 | Template catalogue drafted EN | product | ☐ draft below |
 | Template catalogue translated AR | product | ☐ not started |
 | Templates submitted for Meta approval | ops | ☐ blocked on above |
-| Opt-in capture flow agreed (waOptInAt already in schema) | product | ☐ not started |
+| Opt-in capture flow agreed (append-only ConsentRecord, contacts + users) | product | ☐ not started |
 
 ## Draft template catalogue (EN — AR translation pending)
 

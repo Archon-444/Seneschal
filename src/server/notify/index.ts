@@ -78,9 +78,9 @@ export async function deliverNotification(payload: Record<string, unknown>): Pro
   if ((payload.preferChannel as Channel | undefined) === "WHATSAPP") channel = "WHATSAPP";
   if (channel === "WHATSAPP") {
     const consented = message.toUserId
-      ? await hasActiveMessagingConsent({ userId: message.toUserId })
+      ? await hasActiveMessagingConsent({ userId: message.toUserId }, message.workspaceId)
       : message.toContactId
-        ? await hasActiveMessagingConsent({ contactId: message.toContactId })
+        ? await hasActiveMessagingConsent({ contactId: message.toContactId }, message.workspaceId)
         : false;
     if (!whatsappConfigured() || !consented || !phone) channel = "EMAIL";
   }
