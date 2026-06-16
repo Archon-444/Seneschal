@@ -71,6 +71,21 @@ describe("role capability matrix", () => {
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
+    "passport.write": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: false, TENANT: true,
+    },
+    "passport.share": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: false, TENANT: true,
+    },
+    "enquiries.read": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: false, TENANT: false,
+    },
     "payments.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: true,
@@ -145,9 +160,12 @@ describe("role capability matrix", () => {
   // Self-service personas are read-only in F0a (offers.*/renewals.* arrive with
   // their authenticated services in Stage 2). Scoping to one Contact is enforced
   // separately in authz/contactScope.
-  it("TENANT is read-only", () => {
+  // TENANT is read-only across the portfolio EXCEPT for managing/sharing its own
+  // rental passport (1C): passport.read/write/share. Scoping to one Contact is
+  // enforced separately in authz/contactScope.
+  it("TENANT is read-only apart from its own passport", () => {
     for (const cap of ROLE_CAPABILITIES.TENANT) {
-      expect(/\.read$/.test(cap)).toBe(true);
+      expect(cap.endsWith(".read") || cap.startsWith("passport.")).toBe(true);
     }
   });
 

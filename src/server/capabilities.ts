@@ -31,6 +31,10 @@ export const CAPABILITIES = [
   "proofs.read",
   "proofs.write",
   "proofs.decide",
+  "passport.read",
+  "passport.write",
+  "passport.share",
+  "enquiries.read",
   "evidence.read",
   "riskflags.read",
   "riskflags.ack",
@@ -80,6 +84,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "imports.manage",
     "proofs.write",
     "proofs.decide",
+    "passport.read",
+    "enquiries.read",
     "riskflags.ack",
     "reports.generate",
     "notifications.read",
@@ -112,7 +118,16 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   // Membership.subjectContactId (see services/contactScope.ts). F0a grants only
   // the read capabilities whose service paths are contact-scoped and tested here;
   // offers.* / renewals.* arrive with their authenticated services in Stage 2.
-  TENANT: ["tenancies.read", "payments.read", "deadlines.read", "documents.read", "proofs.read"],
+  TENANT: [
+    "tenancies.read",
+    "payments.read",
+    "deadlines.read",
+    "documents.read",
+    "proofs.read",
+    "passport.read",
+    "passport.write",
+    "passport.share",
+  ],
   LANDLORD: [
     "properties.read",
     "listings.read",

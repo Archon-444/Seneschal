@@ -233,6 +233,34 @@ enum ListingStatus {
   ARCHIVED
 }
 
+// ───────────────────────────── Tenant passport [1C] — demand side
+
+// A tenant's reusable rental profile, scoped to ONE Contact (the TENANT persona's
+// subjectContactId). Supporting documents attach as scope-polymorphic Documents
+// (scopeType TENANT_PASSPORT, scopeId = passport id). Sharing with a landlord/agent
+// is a consent-gated secure link (PASSPORT_SHARE).
+model TenantPassport {
+  id            String         @id @default(uuid())
+  workspaceId   String
+  contactId     String         // the TENANT persona's Contact — one passport per contact
+  status        PassportStatus @default(DRAFT)
+  employer      String?
+  jobTitle      String?
+  monthlyIncome Decimal?       @db.Decimal(12, 2)
+  nationality   String?
+  householdSize Int?
+  moveInBy      DateTime?      // date-only; store UTC midnight via toUtcDateOnly
+  summary       String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  @@unique([workspaceId, contactId])
+}
+
+enum PassportStatus {
+  DRAFT
+  READY
+}
+
 // ───────────────────────────── Deadlines & calendar [1A]
 
 model Deadline {
@@ -346,6 +374,7 @@ enum ScopeType {
   RENEWAL_CASE
   OFFER
   LISTING
+  TENANT_PASSPORT
 }
 enum DocumentKind {
   TENANCY_CONTRACT
