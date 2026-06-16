@@ -49,6 +49,7 @@ model Membership {
   userId            String
   role              Role
   clientPrincipalId String?          // required when role = CLIENT_VIEWER (scopes to one client)
+  subjectContactId  String?          // required when role = TENANT | LANDLORD (scopes to one Contact)
   createdAt         DateTime @default(now())
   revokedAt         DateTime?
   workspace         Workspace @relation(fields: [workspaceId], references: [id])
@@ -67,6 +68,8 @@ enum Role {
   LICENSED_PARTNER
   VENDOR
   AUDITOR
+  LANDLORD          // self-service supply-side persona; scoped to one Contact via Membership.subjectContactId
+  TENANT            // self-service demand-side persona; scoped to one Contact via Membership.subjectContactId
 }
 // Staff is NOT a membership role: staff access goes through the audited admin service path only (User.isStaff).
 
@@ -121,6 +124,7 @@ model Property {
   id                String   @id @default(uuid())
   workspaceId       String
   clientPrincipalId String?
+  ownerContactId    String?          // Contact — the landlord/owner; LANDLORD persona scopes to owned properties (incl. vacant)
   community         String
   building          String?
   unitNo            String?

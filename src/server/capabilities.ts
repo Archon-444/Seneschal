@@ -100,6 +100,19 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   ],
   VENDOR: ["proofs.read", "documents.write"],
   AUDITOR: [...READ_PORTFOLIO, "notifications.read"],
+  // Self-service personas, each additionally scoped to ONE Contact in authz via
+  // Membership.subjectContactId (see services/contactScope.ts). F0a grants only
+  // the read capabilities whose service paths are contact-scoped and tested here;
+  // offers.* / renewals.* arrive with their authenticated services in Stage 2.
+  TENANT: ["tenancies.read", "payments.read", "deadlines.read", "documents.read", "proofs.read"],
+  LANDLORD: [
+    "properties.read",
+    "tenancies.read",
+    "payments.read",
+    "deadlines.read",
+    "documents.read",
+    "proofs.read",
+  ],
 };
 
 export function roleHas(role: Role, capability: Capability): boolean {

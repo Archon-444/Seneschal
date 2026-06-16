@@ -12,9 +12,16 @@ export interface AuthzContext {
   role: Role;
   /** Set for CLIENT_VIEWER: limits every read to this client's records. */
   clientPrincipalId: string | null;
+  /** Set for TENANT | LANDLORD: limits every read to this Contact's records. */
+  subjectContactId: string | null;
   isStaff: boolean;
   /** Staff acting on behalf of a user via the admin service path. */
   onBehalfOfId?: string;
+}
+
+/** TENANT and LANDLORD are single-Contact self-service personas. */
+export function isPersonaRole(role: Role): role is "TENANT" | "LANDLORD" {
+  return role === "TENANT" || role === "LANDLORD";
 }
 
 export class AuthzError extends Error {
@@ -42,11 +49,15 @@ export function contextFromMembership(user: User, membership: Membership): Authz
   if (membership.role === "CLIENT_VIEWER" && !membership.clientPrincipalId) {
     throw new AuthzError("CLIENT_VIEWER membership missing client scope");
   }
+  if (isPersonaRole(membership.role) && !membership.subjectContactId) {
+    throw new AuthzError(`${membership.role} membership missing contact scope`);
+  }
   return {
     userId: user.id,
     workspaceId: membership.workspaceId,
     role: membership.role,
     clientPrincipalId: membership.role === "CLIENT_VIEWER" ? membership.clientPrincipalId : null,
+    subjectContactId: isPersonaRole(membership.role) ? membership.subjectContactId : null,
     isStaff: user.isStaff,
   };
 }
@@ -58,8 +69,18 @@ export function require_(ctx: AuthzContext, capability: Capability): void {
   }
 }
 
-/** Workspace filter every scoped query must include. */
+/**
+ * Workspace filter every scoped query must include.
+ *
+ * Fail-closed (F0a): throws for a persona (TENANT | LANDLORD) context. A persona
+ * needs contact-level scoping, not just workspace; any list/findMany path that
+ * has not been routed through `contactScopedWhere` therefore 403s a persona
+ * instead of returning the whole workspace. This is the list-family choke point.
+ */
 export function scope(ctx: AuthzContext): { workspaceId: string } {
+  if (ctx.subjectContactId) {
+    throw new AuthzError("Persona context must be scoped via contactScopedWhere, not scope()");
+  }
   return { workspaceId: ctx.workspaceId };
 }
 
@@ -71,11 +92,21 @@ export function clientScope(ctx: AuthzContext): { clientPrincipalId?: string } {
   return ctx.clientPrincipalId ? { clientPrincipalId: ctx.clientPrincipalId } : {};
 }
 
-/** Assert a fetched row belongs to the caller's workspace (defense in depth). */
+/**
+ * Assert a fetched row belongs to the caller's workspace (defense in depth).
+ *
+ * Fail-closed (F0a): throws for a persona context. Workspace match is NOT a
+ * sufficient read check for a TENANT | LANDLORD (a sibling tenant's row is in the
+ * same workspace), so the by-id getters must use `assertReadable` instead. A
+ * getter that still calls this with a persona context therefore fails closed.
+ */
 export function assertSameWorkspace(
   ctx: AuthzContext,
   row: { workspaceId: string } | null,
 ): asserts row is { workspaceId: string } {
+  if (ctx.subjectContactId) {
+    throw new AuthzError("Persona context must be checked via assertReadable, not assertSameWorkspace");
+  }
   if (!row || row.workspaceId !== ctx.workspaceId) {
     // 404, not 403: never confirm existence of another workspace's records.
     throw new AuthzError("Not found", 404);

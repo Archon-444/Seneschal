@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, clientScope, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
+import { assertReadable, contactScopedWhere } from "./contactScope";
 
 // Property CRUD + archive (T2.3). Fiduciary workspaces require a client on
 // every property; archiving a property never archives its evidence.
@@ -11,10 +12,12 @@ export async function listProperties(
 ) {
   require_(ctx, "properties.read");
   const q = opts?.q?.trim();
+  const base = ctx.subjectContactId
+    ? await contactScopedWhere(ctx, "PROPERTY")
+    : { ...scope(ctx), ...clientScope(ctx) };
   return prisma.property.findMany({
     where: {
-      ...scope(ctx),
-      ...clientScope(ctx),
+      ...base,
       ...(opts?.clientPrincipalId ? { clientPrincipalId: opts.clientPrincipalId } : {}),
       ...(opts?.includeArchived ? {} : { archivedAt: null }),
       ...(q
@@ -42,15 +45,13 @@ export async function getProperty(ctx: AuthzContext, id: string) {
     where: { id },
     include: { tenancies: { orderBy: { endDate: "desc" } } },
   });
-  assertSameWorkspace(ctx, property);
-  if (ctx.clientPrincipalId && property!.clientPrincipalId !== ctx.clientPrincipalId) {
-    throw new AuthzError("Not found", 404);
-  }
-  return property;
+  await assertReadable(ctx, { kind: "property", row: property });
+  return property!;
 }
 
 export interface PropertyInput {
   clientPrincipalId?: string | null;
+  ownerContactId?: string | null;
   community: string;
   building?: string;
   unitNo?: string;

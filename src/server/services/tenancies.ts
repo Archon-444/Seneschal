@@ -6,6 +6,7 @@ import { recordEvidence } from "../evidence";
 import { toUtcDateOnly } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
 import { evaluateRiskForTenancy } from "./risk";
+import { assertReadable } from "./contactScope";
 
 // Tenancy CRUD (T2.4). Create/update regenerates deadlines (T3.2); status
 // transitions are logged as evidence; archive cancels open deadlines.
@@ -20,11 +21,8 @@ export async function getTenancy(ctx: AuthzContext, id: string) {
       deadlines: { where: { status: "OPEN" }, orderBy: { dueAt: "asc" } },
     },
   });
-  assertSameWorkspace(ctx, tenancy);
-  if (ctx.clientPrincipalId && tenancy!.property.clientPrincipalId !== ctx.clientPrincipalId) {
-    throw new AuthzError("Not found", 404);
-  }
-  return tenancy;
+  await assertReadable(ctx, { kind: "tenancy", row: tenancy });
+  return tenancy!;
 }
 
 export interface TenancyInput {

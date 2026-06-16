@@ -7,6 +7,7 @@ import { ingestDocument, logDocumentAccess } from "./documents";
 import { createSecureLink } from "./secureLinks";
 import { raiseProofOverdue, clearProofOverdue } from "./risk";
 import { resolveClientScopeIds } from "./clientScope";
+import { assertReadable, contactScopedWhere } from "./contactScope";
 import { todayInDubai } from "../calculators/dates";
 
 // Proof requests (E7) — the core verb: ask an external party for evidence,
@@ -98,25 +99,24 @@ export async function sendProofRequest(ctx: AuthzContext, proofRequestId: string
 export async function getProofRequest(ctx: AuthzContext, id: string) {
   require_(ctx, "proofs.read");
   const request = await prisma.proofRequest.findUnique({ where: { id } });
-  assertSameWorkspace(ctx, request);
-  if (ctx.clientPrincipalId) {
-    const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId);
-    if (!ids.proofRequestIds.includes(request!.id)) throw new AuthzError("Not found", 404);
-  }
+  await assertReadable(ctx, { kind: "proofRequest", row: request });
   return request!;
 }
 
 export async function listProofRequests(ctx: AuthzContext) {
   require_(ctx, "proofs.read");
-  // CLIENT_VIEWER sees only proof requests whose scope resolves to their client.
-  const clientIds = ctx.clientPrincipalId
-    ? await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId)
-    : null;
+  // CLIENT_VIEWER sees only proof requests resolving to their client; a persona
+  // only those resolving to their Contact.
+  const base = ctx.subjectContactId
+    ? await contactScopedWhere(ctx, "PROOF_REQUEST")
+    : {
+        ...scope(ctx),
+        ...(ctx.clientPrincipalId
+          ? { id: { in: (await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId)).proofRequestIds } }
+          : {}),
+      };
   return prisma.proofRequest.findMany({
-    where: {
-      ...scope(ctx),
-      ...(clientIds ? { id: { in: clientIds.proofRequestIds } } : {}),
-    },
+    where: base,
     orderBy: { createdAt: "desc" },
   });
 }

@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
 import { resolveClientScopeIds } from "./clientScope";
+import { contactScopedWhere } from "./contactScope";
 import { chequeDue, contractExpiry, noticeGate, renewalDate, toUtcDateOnly, type CalcResult } from "../calculators/dates";
 
 // Deadline generation (T3.2): regenerated on every tenancy create/update and
@@ -122,25 +123,29 @@ export interface DeadlineFilters {
 
 export async function listDeadlines(ctx: AuthzContext, filters?: DeadlineFilters) {
   require_(ctx, "deadlines.read");
-  // Scope to a client (CLIENT_VIEWER, or an explicit filter) by the deadline's
-  // own property/tenancy — so manual, standalone deadlines (no tenancy) are
-  // included instead of being filtered out by a required tenancy relation.
-  const clientId = ctx.clientPrincipalId ?? filters?.clientPrincipalId;
-  let clientWhere: Prisma.DeadlineWhereInput = {};
-  if (clientId) {
-    const ids = await resolveClientScopeIds(ctx.workspaceId, clientId);
-    clientWhere = { OR: [{ propertyId: { in: ids.propertyIds } }, { tenancyId: { in: ids.tenancyIds } }] };
+  // Scope by the deadline's own property/tenancy (so manual, standalone deadlines
+  // with no tenancy are still included): a persona to their Contact's records, a
+  // CLIENT_VIEWER (or explicit filter) to a client's.
+  let base: Prisma.DeadlineWhereInput;
+  if (ctx.subjectContactId) {
+    base = await contactScopedWhere(ctx, "DEADLINE");
+  } else {
+    base = { ...scope(ctx) };
+    const clientId = ctx.clientPrincipalId ?? filters?.clientPrincipalId;
+    if (clientId) {
+      const ids = await resolveClientScopeIds(ctx.workspaceId, clientId);
+      base.OR = [{ propertyId: { in: ids.propertyIds } }, { tenancyId: { in: ids.tenancyIds } }];
+    }
   }
   return prisma.deadline.findMany({
     where: {
-      ...scope(ctx),
+      ...base,
       status: "OPEN",
       ...(filters?.kind ? { kind: filters.kind } : {}),
       ...(filters?.propertyId ? { propertyId: filters.propertyId } : {}),
       ...(filters?.from || filters?.to
         ? { dueAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) } }
         : {}),
-      ...clientWhere,
     },
     orderBy: { dueAt: "asc" },
     include: { tenancy: { include: { property: true } } },

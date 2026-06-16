@@ -1,6 +1,6 @@
 import type { LinkPurpose, ScopeType } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, assertSameWorkspace, require_ } from "../authz";
+import { type AuthzContext, assertSameWorkspace, require_, scope } from "../authz";
 import { generateToken, hashToken } from "../crypto";
 import { recordAudit } from "../audit";
 
@@ -98,8 +98,10 @@ export async function revokeSecureLink(ctx: AuthzContext, linkId: string) {
 
 export async function listSecureLinks(ctx: AuthzContext, scopeType: ScopeType, scopeId: string) {
   require_(ctx, "proofs.read");
+  // scope(ctx) (not a hand-rolled workspaceId) so a persona context fails closed
+  // here rather than listing another Contact's secure links by scopeId.
   return prisma.secureLink.findMany({
-    where: { workspaceId: ctx.workspaceId, scopeType, scopeId },
+    where: { ...scope(ctx), scopeType, scopeId },
     orderBy: { createdAt: "desc" },
   });
 }

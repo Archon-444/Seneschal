@@ -8,6 +8,7 @@ import { clearPaymentLate, evaluateRiskForTenancy, raisePaymentLate } from "./ri
 import { recordNotification } from "../notify/record";
 import { workspaceOverseers } from "../notify/recipients";
 import { loadPreferenceMap, type PreferenceMap } from "../notify/preferences";
+import { contactScopedWhere } from "./contactScope";
 import { getTenancy } from "./tenancies";
 
 // Payments register (E4) — record-keeping only, Seneschal never holds funds.
@@ -229,14 +230,19 @@ export async function listPayments(
   opts?: { tenancyId?: string; status?: PaymentStatus },
 ) {
   require_(ctx, "payments.read");
+  const base = ctx.subjectContactId
+    ? await contactScopedWhere(ctx, "PAYMENT_ITEM")
+    : {
+        ...scope(ctx),
+        ...(ctx.clientPrincipalId
+          ? { tenancy: { property: { clientPrincipalId: ctx.clientPrincipalId } } }
+          : {}),
+      };
   return prisma.paymentItem.findMany({
     where: {
-      ...scope(ctx),
+      ...base,
       ...(opts?.tenancyId ? { tenancyId: opts.tenancyId } : {}),
       ...(opts?.status ? { status: opts.status } : {}),
-      ...(ctx.clientPrincipalId
-        ? { tenancy: { property: { clientPrincipalId: ctx.clientPrincipalId } } }
-        : {}),
     },
     orderBy: [{ dueDate: "asc" }, { seq: "asc" }],
     include: { tenancy: { include: { property: true } } },
