@@ -5,9 +5,12 @@ import { isPersonaRole } from "@/server/authz";
 import { unreadCount } from "@/server/services/notifications";
 import { logoutAction } from "../(auth)/login/actions";
 import { AppShell } from "@/components/shell/AppShell";
-import { NAV } from "@/components/shell/nav";
+import { TENANT_NAV, LANDLORD_NAV } from "@/components/shell/nav";
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
+// Self-service persona surface (F0b). Mirrors (app)/layout but admits ONLY the
+// TENANT/LANDLORD personas; any operator/staff role is redirected to its own home
+// via the single homePathFor resolver, so the two surfaces can never ping-pong.
+export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
   if (!user) redirect("/login");
 
@@ -17,23 +20,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   } catch {
     redirect("/login");
   }
-  // A persona has no operator surface here — send it to /portal (its scoped home).
-  // Keeps the redirect deterministic via the single homePathFor resolver.
-  if (isPersonaRole(ctx.role)) redirect(homePathFor(ctx.role));
+  if (!isPersonaRole(ctx.role)) redirect(homePathFor(ctx.role));
 
   const { getWorkspaceName } = await import("@/server/services/workspace");
   const [workspaceName, unread] = await Promise.all([getWorkspaceName(ctx), unreadCount(ctx)]);
-  const role = ctx.role;
 
   const jar = await cookies();
   const initialCollapsed = jar.get("seneschal_sidebar")?.value === "collapsed";
+  const nav = ctx.role === "LANDLORD" ? LANDLORD_NAV : TENANT_NAV;
 
   return (
     <AppShell
-      nav={NAV}
+      nav={nav}
       isStaff={user.isStaff}
       workspaceName={workspaceName}
-      user={{ name: user.name, email: user.email, role }}
+      user={{ name: user.name, email: user.email, role: ctx.role }}
       initialCollapsed={initialCollapsed}
       initialUnread={unread}
       signOut={logoutAction}

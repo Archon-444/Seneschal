@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { addMember, makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
-import { scope, assertSameWorkspace } from "@/server/authz";
+import { scope, assertSameWorkspace, authz } from "@/server/authz";
 import { assertReadable } from "@/server/services/contactScope";
 import * as clients from "@/server/services/clients";
 import * as contacts from "@/server/services/contacts";
@@ -265,5 +265,25 @@ describe("assertReadable discriminates WITHIN the workspace (the real proof)", (
     const sibDoc = await prisma.document.findUnique({ where: { id: sibling.documentId } });
     await expect(assertReadable(tenant.ctx, { kind: "document", row: ownDoc })).resolves.toBeUndefined();
     await expect(assertReadable(tenant.ctx, { kind: "document", row: sibDoc })).rejects.toThrow();
+  });
+});
+
+describe("multi-role resolution is deterministic (operator wins — F0b)", () => {
+  it("authz() resolves a user holding TENANT + FIDUCIARY in one workspace to the operator role", async () => {
+    const dual = await prisma.user.create({
+      data: { email: `dual-${Date.now()}@test.example`, name: "Dual Role" },
+    });
+    const dualContact = await contacts.createContact(W.ctx, { kind: "TENANT", name: "Dual Tenant" });
+    // Persona membership created FIRST (older row): a createdAt-only resolver would
+    // pick TENANT and run every request under contact scope. Precedence must override.
+    await prisma.membership.create({
+      data: { workspaceId: W.workspaceId, userId: dual.id, role: "TENANT", subjectContactId: dualContact.id },
+    });
+    await prisma.membership.create({
+      data: { workspaceId: W.workspaceId, userId: dual.id, role: "FIDUCIARY" },
+    });
+    const ctx = await authz(dual.id, W.workspaceId);
+    expect(ctx.role).toBe("FIDUCIARY");
+    expect(ctx.subjectContactId).toBeNull();
   });
 });

@@ -37,12 +37,53 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new AuthzError("Unknown user", 401);
 
-  const membership = await prisma.membership.findFirst({
+  // A user may hold more than one role in a workspace (the @@unique key is on
+  // [workspaceId, userId, role]); pick one deterministically by precedence rather
+  // than letting row order decide which scope a request runs under.
+  const memberships = await prisma.membership.findMany({
     where: { userId, workspaceId, revokedAt: null },
   });
+  const membership = pickMembership(memberships);
   if (!membership) throw new AuthzError("No access to this workspace");
 
   return contextFromMembership(user, membership);
+}
+
+/**
+ * Role precedence for deterministic membership resolution — lower wins. Operator/
+ * staff roles outrank the self-service personas, so a user who is both an operator
+ * and a TENANT/LANDLORD (same or different workspace) resolves to the operator role
+ * and its broader scope, never a row-order accident. The exhaustive `Record<Role>`
+ * is a tripwire: adding a role won't compile until it is ranked here.
+ */
+const ROLE_RANK: Record<Role, number> = {
+  WORKSPACE_ADMIN: 0,
+  FIDUCIARY: 1,
+  MANAGER: 2,
+  CLIENT_VIEWER: 3,
+  AGENT: 4,
+  LICENSED_PARTNER: 5,
+  VENDOR: 6,
+  AUDITOR: 7,
+  LANDLORD: 8,
+  TENANT: 9,
+};
+
+export function rolePrecedence(role: Role): number {
+  return ROLE_RANK[role];
+}
+
+/**
+ * Pick one membership deterministically: highest role precedence first, oldest
+ * `createdAt` as a stable tiebreak. The single resolver both `authz()` (within a
+ * workspace) and `requireCtx` (across workspaces) share, so persona vs. operator
+ * scoping can never hinge on insertion order.
+ */
+export function pickMembership<M extends { role: Role; createdAt: Date }>(memberships: M[]): M | null {
+  if (memberships.length === 0) return null;
+  return [...memberships].sort(
+    (a, b) => rolePrecedence(a.role) - rolePrecedence(b.role) || a.createdAt.getTime() - b.createdAt.getTime(),
+  )[0];
 }
 
 export function contextFromMembership(user: User, membership: Membership): AuthzContext {

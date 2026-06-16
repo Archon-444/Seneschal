@@ -63,3 +63,8 @@ export const NAV: NavItem[] = [
   { href: "/risk", label: "Risk flags", icon: "risk" },
   { href: "/reports", label: "Reports", icon: "reports" },
 ];
+
+// Persona rails (F0b). One honest entry each: the self-service surface is a single
+// scoped home for now. Stage 1B/2B add their own pages and grow these.
+export const TENANT_NAV: NavItem[] = [{ href: "/portal", label: "Home", icon: "dashboard" }];
+export const LANDLORD_NAV: NavItem[] = [{ href: "/portal", label: "Home", icon: "dashboard" }];

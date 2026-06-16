@@ -474,5 +474,80 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     });
   }
 
+  // ── Persona logins (F0b): a TENANT and a LANDLORD self-service account.
+  // TENANT attaches to the existing Ricardo Fernandes contact (tenant of the Marina
+  // unit), so the tenant portal renders his real, contact-scoped tenancy + cheques.
+  const tenantUser = await prisma.user.upsert({
+    where: { email: "r.fernandes@example.com" },
+    update: {},
+    create: { email: "r.fernandes@example.com", name: "Ricardo Fernandes", locale: "en" },
+  });
+  await prisma.membership.upsert({
+    where: {
+      workspaceId_userId_role: { workspaceId: workspace.id, userId: tenantUser.id, role: "TENANT" },
+    },
+    update: { subjectContactId: fernandes.id, revokedAt: null },
+    create: {
+      workspaceId: workspace.id,
+      userId: tenantUser.id,
+      role: "TENANT",
+      subjectContactId: fernandes.id,
+    },
+  });
+
+  // LANDLORD attaches to an OWNER contact set as Property.ownerContactId on the
+  // Marina unit (occupied) plus one VACANT unit — so the landlord portal proves
+  // Decision 4: an owner sees a unit with no live tenancy.
+  const owner = await findOrCreate(
+    () => prisma.contact.findFirst({ where: { workspaceId: workspace.id, name: "Yusuf Haddad" } }),
+    () =>
+      prisma.contact.create({
+        data: {
+          workspaceId: workspace.id,
+          kind: "OWNER",
+          name: "Yusuf Haddad",
+          email: "owner@example.com",
+          phone: "+971-50-555-0199",
+        },
+      }),
+  );
+  if (marina.ownerContactId !== owner.id) {
+    await prisma.property.update({ where: { id: marina.id }, data: { ownerContactId: owner.id } });
+  }
+  await findOrCreate(
+    () => prisma.property.findFirst({ where: { workspaceId: workspace.id, building: "Palm Vista", unitNo: "12" } }),
+    () =>
+      prisma.property.create({
+        data: {
+          workspaceId: workspace.id,
+          clientPrincipalId: alNoor.id,
+          ownerContactId: owner.id,
+          community: "Palm Jumeirah",
+          building: "Palm Vista",
+          unitNo: "12",
+          propertyType: "villa",
+          bedrooms: 3,
+          sizeSqft: 3200,
+        },
+      }),
+  );
+  const ownerUser = await prisma.user.upsert({
+    where: { email: "owner@example.com" },
+    update: {},
+    create: { email: "owner@example.com", name: "Yusuf Haddad", locale: "en" },
+  });
+  await prisma.membership.upsert({
+    where: {
+      workspaceId_userId_role: { workspaceId: workspace.id, userId: ownerUser.id, role: "LANDLORD" },
+    },
+    update: { subjectContactId: owner.id, revokedAt: null },
+    create: {
+      workspaceId: workspace.id,
+      userId: ownerUser.id,
+      role: "LANDLORD",
+      subjectContactId: owner.id,
+    },
+  });
+
   return { proofLinkUrl };
 }
