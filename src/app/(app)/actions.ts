@@ -7,6 +7,7 @@ import { requireCtx } from "@/server/auth/request";
 import * as clients from "@/server/services/clients";
 import * as contacts from "@/server/services/contacts";
 import * as properties from "@/server/services/properties";
+import * as landlords from "@/server/services/landlords";
 import * as tenancies from "@/server/services/tenancies";
 import * as deadlines from "@/server/services/deadlines";
 import * as renewals from "@/server/services/renewals";
@@ -79,6 +80,20 @@ export async function archivePropertyAction(formData: FormData) {
   const ctx = await requireCtx();
   await properties.archiveProperty(ctx, s(formData, "id"));
   redirect("/properties");
+}
+
+export async function verifyLandlordAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const contactId = s(formData, "contactId");
+  await landlords.verifyLandlord(ctx, contactId, opt(formData, "note"));
+  revalidatePath(`/contacts/${contactId}`);
+}
+
+export async function revokeLandlordVerificationAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const contactId = s(formData, "contactId");
+  await landlords.revokeLandlordVerification(ctx, contactId, opt(formData, "note"));
+  revalidatePath(`/contacts/${contactId}`);
 }
 
 export async function addCalendarEntryAction(formData: FormData) {

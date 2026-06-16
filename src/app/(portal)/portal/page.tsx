@@ -4,6 +4,7 @@ import { isPersonaRole, type AuthzContext } from "@/server/authz";
 import { listPayments } from "@/server/services/payments";
 import { listDeadlines } from "@/server/services/deadlines";
 import { listProperties } from "@/server/services/properties";
+import { isLandlordVerified } from "@/server/services/landlords";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { PageHeader, Card, KpiCard, Badge, Table, Td, Money, EmptyState, Reminder } from "@/components/ui";
 
@@ -105,7 +106,11 @@ async function TenantHome({ ctx }: { ctx: AuthzContext }) {
 }
 
 async function LandlordHome({ ctx }: { ctx: AuthzContext }) {
-  const [properties, deadlines] = await Promise.all([listProperties(ctx), listDeadlines(ctx)]);
+  const [properties, deadlines, verified] = await Promise.all([
+    listProperties(ctx),
+    listDeadlines(ctx),
+    isLandlordVerified(ctx.workspaceId, ctx.subjectContactId),
+  ]);
   const occupied = properties.filter((p) => p.tenancies.length > 0).length;
   const vacant = properties.length - occupied;
 
@@ -115,6 +120,7 @@ async function LandlordHome({ ctx }: { ctx: AuthzContext }) {
         eyebrow="Your portfolio"
         title="Landlord portal"
         subtitle="The units you own, their occupancy, and upcoming dates — kept on your behalf. Seneschal never holds funds."
+        actions={verified ? <Badge value="VERIFIED LANDLORD" /> : undefined}
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">

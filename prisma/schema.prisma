@@ -101,6 +101,11 @@ model Contact {
   licenseNo           String?
   licensingAuthority  String?
   notes       String?
+  // Landlord verification (1B #2): the workspace confirms an OWNER's identity/
+  // ownership. State is denormalized here; the LANDLORD_VERIFIED evidence event is
+  // the append-only audit trail (revocation is a new event).
+  verifiedAt  DateTime?
+  verifiedById String?
   createdAt   DateTime    @default(now())
   archivedAt  DateTime?
   @@index([workspaceId, kind])
@@ -778,6 +783,7 @@ enum EvidenceType {
   LISTING_UPDATED
   LISTING_PUBLISHED
   LISTING_ARCHIVED
+  LANDLORD_VERIFIED
 }
 
 model AuditEvent {                   // security/admin log; insert-only; hash chain in v1.1 (D6)
