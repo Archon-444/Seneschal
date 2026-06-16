@@ -108,17 +108,18 @@ function BellPanel({
               type="button"
               role="menuitem"
               onClick={() => onMarkRead(it.id)}
-              className={`flex w-full items-start gap-2 border-b border-line/60 px-3 py-2 text-left hover:bg-ivory-100 ${
-                it.readAt ? "opacity-60" : ""
+              className={`flex w-full items-start gap-2 border-b border-l-2 border-line/60 px-3 py-2 text-left hover:bg-ivory-100 ${
+                it.readAt
+                  ? "border-l-transparent"
+                  : it.urgent
+                    ? "border-l-claret-500 bg-claret-500/[0.04]"
+                    : "border-l-gold-500 bg-gold-100/40"
               }`}
             >
-              <span
-                className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                  it.readAt ? "bg-transparent" : it.urgent ? "bg-claret-500" : "bg-gold-500"
-                }`}
-              />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-navy-900">{it.subject ?? "Notification"}</span>
+                <span className={`block truncate text-sm ${it.readAt ? "text-muted" : "text-navy-900"}`}>
+                  {it.subject ?? "Notification"}
+                </span>
                 <span className="figure block text-[11px] text-muted">{shortDate(it.createdAt)}</span>
               </span>
             </button>

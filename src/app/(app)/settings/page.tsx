@@ -54,19 +54,24 @@ export default async function SettingsPage() {
           a bounced cheque or the 72-hour notice window — are emailed immediately whatever you pick here.
         </p>
         <Card>
-          <form action={updateNotificationPrefsAction} className="space-y-3">
+          <form action={updateNotificationPrefsAction}>
+            <div className="flex items-center gap-3 border-b border-line pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gold-700">
+              <div className="flex-1">Alert</div>
+              <div className="w-14 text-center">In-app</div>
+              <div className="w-44">Email</div>
+            </div>
             {prefs.map((p) => (
-              <div
-                key={p.category}
-                className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 last:border-0 last:pb-0"
-              >
-                <div className="min-w-40 flex-1">
-                  <div className="text-sm font-medium text-navy-900">{CATEGORY_LABEL[p.category] ?? p.category}</div>
+              <div key={p.category} className="flex items-center gap-3 border-b border-line py-3 last:border-0">
+                <div className="flex-1 text-sm font-medium text-navy-900">{CATEGORY_LABEL[p.category] ?? p.category}</div>
+                <div className="flex w-14 justify-center">
+                  <input
+                    type="checkbox"
+                    name={`inapp_${p.category}`}
+                    defaultChecked={p.inAppEnabled}
+                    aria-label={`Show ${CATEGORY_LABEL[p.category] ?? p.category} in the bell`}
+                    className="h-4 w-4 accent-gold-500"
+                  />
                 </div>
-                <label className="flex items-center gap-2 text-xs text-muted">
-                  <input type="checkbox" name={`inapp_${p.category}`} defaultChecked={p.inAppEnabled} />
-                  In-app
-                </label>
                 <select name={`cadence_${p.category}`} defaultValue={p.cadence} className={`${inputClass} w-44`}>
                   {CADENCES.map((c) => (
                     <option key={c} value={c}>
@@ -76,7 +81,9 @@ export default async function SettingsPage() {
                 </select>
               </div>
             ))}
-            <Button type="submit">Save preferences</Button>
+            <div className="mt-4">
+              <Button type="submit">Save preferences</Button>
+            </div>
           </form>
         </Card>
       </div>

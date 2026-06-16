@@ -40,24 +40,29 @@ export default async function NotificationsPage() {
       ) : (
         <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white shadow-sm">
           {items.map((it) => (
-            <div key={it.id} className="flex items-start gap-3 px-4 py-3">
-              <span
-                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                  it.readAt ? "bg-transparent" : it.urgent ? "bg-claret-500" : "bg-gold-500"
-                }`}
-                aria-hidden="true"
-              />
+            <div
+              key={it.id}
+              className={`flex items-start gap-4 border-l-2 px-4 py-3.5 ${
+                it.readAt
+                  ? "border-l-transparent"
+                  : it.urgent
+                    ? "border-l-claret-500 bg-claret-500/[0.04]"
+                    : "border-l-gold-500 bg-gold-100/40"
+              }`}
+            >
               <div className="min-w-0 flex-1">
                 <div className={`text-sm ${it.readAt ? "text-muted" : "font-medium text-navy-900"}`}>
                   {it.subject ?? "Notification"}
                 </div>
-                {it.bodyRef && <p className="mt-0.5 whitespace-pre-line text-xs text-muted">{it.bodyRef}</p>}
+                {it.bodyRef && (
+                  <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted">{it.bodyRef}</p>
+                )}
               </div>
               <div className="shrink-0 text-right">
-                <div className="text-[11px] uppercase tracking-wider text-gold-700">
+                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-gold-700">
                   {CATEGORY_LABEL[it.category ?? ""] ?? ""}
                 </div>
-                <div className="figure text-[11px] text-muted">{formatDubaiDate(it.createdAt)}</div>
+                <div className="figure mt-0.5 text-[11px] text-muted">{formatDubaiDate(it.createdAt)}</div>
               </div>
             </div>
           ))}
