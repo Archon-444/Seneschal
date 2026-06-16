@@ -8,6 +8,7 @@ import * as clients from "@/server/services/clients";
 import * as contacts from "@/server/services/contacts";
 import * as properties from "@/server/services/properties";
 import * as landlords from "@/server/services/landlords";
+import * as enquiries from "@/server/services/enquiries";
 import * as tenancies from "@/server/services/tenancies";
 import * as deadlines from "@/server/services/deadlines";
 import * as renewals from "@/server/services/renewals";
@@ -94,6 +95,16 @@ export async function revokeLandlordVerificationAction(formData: FormData) {
   const contactId = s(formData, "contactId");
   await landlords.revokeLandlordVerification(ctx, contactId, opt(formData, "note"));
   revalidatePath(`/contacts/${contactId}`);
+}
+
+export async function setEnquiryStatusAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await enquiries.setEnquiryStatus(
+    ctx,
+    s(formData, "id"),
+    s(formData, "status") as "NEW" | "CONTACTED" | "CLOSED",
+  );
+  revalidatePath("/enquiries");
 }
 
 export async function addCalendarEntryAction(formData: FormData) {

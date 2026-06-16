@@ -261,6 +261,30 @@ enum PassportStatus {
   READY
 }
 
+// A prospective-tenant enquiry against a published listing (1C #8), captured from
+// the public listing link — no account. Notifies the workspace overseers.
+model Enquiry {
+  id           String        @id @default(uuid())
+  workspaceId  String
+  listingId    String?
+  propertyId   String?
+  name         String
+  email        String?
+  phone        String?
+  message      String?
+  status       EnquiryStatus @default(NEW)
+  source       String?       // e.g. "LISTING_LINK"
+  secureLinkId String?
+  createdAt    DateTime      @default(now())
+  @@index([workspaceId, status])
+}
+
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
 // ───────────────────────────── Deadlines & calendar [1A]
 
 model Deadline {
@@ -694,6 +718,7 @@ enum NotificationCategory {
   PROOFS
   RISK
   DIGEST
+  ENQUIRIES
 }
 
 enum Cadence {

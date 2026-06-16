@@ -48,7 +48,7 @@ export async function getOrCreateMyPassport(ctx: AuthzContext): Promise<TenantPa
 export async function updateMyPassport(ctx: AuthzContext, input: PassportInput): Promise<TenantPassport> {
   require_(ctx, "passport.write");
   const contactId = tenantContactId(ctx);
-  const passport = await getOrCreateMyPassport(ctx);
+  await getOrCreateMyPassport(ctx); // ensure the row exists before the update
   const data: Prisma.TenantPassportUncheckedUpdateInput = {};
   if (input.employer !== undefined) data.employer = input.employer;
   if (input.jobTitle !== undefined) data.jobTitle = input.jobTitle;

@@ -120,6 +120,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   RENEWALS: "Renewals",
   PROOFS: "Proof requests",
   RISK: "Risk flags",
+  ENQUIRIES: "Enquiries",
   DIGEST: "Summary",
 };
 

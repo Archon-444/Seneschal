@@ -86,6 +86,11 @@ describe("role capability matrix", () => {
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
+    "enquiries.write": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: false, TENANT: false,
+    },
     "payments.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: true,

@@ -12,6 +12,7 @@ const TEMPLATE_CATEGORY: Record<string, NotificationCategory> = {
   payment_late_v1: "PAYMENTS",
   payment_bounced_v1: "PAYMENTS",
   risk_flag_v1: "RISK",
+  enquiry_v1: "ENQUIRIES",
   daily_digest_v1: "DIGEST",
   weekly_digest_v1: "DIGEST",
 };

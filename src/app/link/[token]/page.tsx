@@ -5,6 +5,7 @@ import { getListingForLink } from "@/server/services/listings";
 import { getPassportForLink } from "@/server/services/tenantPassport";
 import { UploadProofForm } from "./UploadProofForm";
 import { TenantOfferForm } from "./TenantOfferForm";
+import { EnquiryForm } from "./EnquiryForm";
 
 // Screen 13 — external proof upload. Mobile-first, no login. The token lives
 // only in the URL; we never log or store it raw.
@@ -57,6 +58,12 @@ export default async function ExternalLinkPage({ params }: { params: Promise<{ t
           {listing.propertyType && <Row label="Type" value={listing.propertyType} />}
         </dl>
         {listing.description && <p className="mt-4 text-sm leading-relaxed text-navy-700">{listing.description}</p>}
+
+        <div className="mt-7 border-t border-ivory-200 pt-5">
+          <h2 className="font-display text-lg text-navy-900">Interested?</h2>
+          <p className="mb-3 text-sm text-navy-500">Register your interest and the managing office will be in touch.</p>
+          <EnquiryForm token={token} />
+        </div>
 
         <div className="mt-8 rounded-md bg-ivory-100 p-4 text-xs leading-relaxed text-navy-500">
           <p className="font-medium text-navy-700">About this page</p>
