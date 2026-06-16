@@ -4,7 +4,8 @@ import { applyWhatsappEvents } from "../notify/whatsappEvents";
 import { detectLatePayments } from "../services/payments";
 import { sweepOverdueProofRequests } from "../services/proofs";
 import { evaluateWorkspaceRisk } from "../services/risk";
-import { runAlertLadders, sendWeeklyDigest } from "../services/alerts";
+import { runAlertLadders } from "../services/alerts";
+import { sendUserDailyDigests, sendUserWeeklyDigests } from "../services/digests";
 import { prisma } from "../db";
 
 // In-process job runner (T0.3). Polls the outbox and runs daily jobs.
@@ -29,7 +30,8 @@ export async function runDailyJobs(): Promise<void> {
     await sweepOverdueProofRequests(ws.id);
     await evaluateWorkspaceRisk(ws.id);
     await runAlertLadders(ws.id);
-    await sendWeeklyDigest(ws.id); // self-throttles to once a week
+    await sendUserDailyDigests(ws.id); // rolls each user's pending feed items into one email
+    await sendUserWeeklyDigests(ws.id); // weekly portfolio summary + WEEKLY-cadence items
   }
 }
 

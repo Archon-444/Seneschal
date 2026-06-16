@@ -1,12 +1,13 @@
-import type { Channel, Prisma, ScopeType } from "@prisma/client";
+import type { Channel, NotificationCategory, Prisma, ScopeType } from "@prisma/client";
 import { prisma } from "../db";
 import { enqueue } from "../outbox";
 import { whatsappConfigured } from "./whatsapp";
 import { hasActiveMessagingConsent } from "../services/consent";
 
-// Notification gateway (T9.1 — release blocking). `notify()` writes a
-// NotificationMessage row and enqueues delivery via the outbox; providers live
-// behind the adapter interface so swapping one touches only its module.
+// Notification gateway (T9.1 — release blocking). `notify()` is the single writer
+// of NotificationMessage. EMAIL/WHATSAPP/SMS rows enqueue delivery via the outbox;
+// an INAPP row is a feed item that is "delivered" the moment it exists, so it skips
+// the outbox entirely. The fan-in helper (notify/record.ts) sits above this.
 
 export interface NotifyInput {
   workspaceId: string;
@@ -21,9 +22,13 @@ export interface NotifyInput {
   preferChannel?: Channel;
   relatedType?: ScopeType;
   relatedId?: string;
+  /** Feed metadata (INAPP rows + digest routing); ignored by external channels. */
+  category?: NotificationCategory;
+  urgent?: boolean;
 }
 
 export async function notify(input: NotifyInput, db: Prisma.TransactionClient = prisma) {
+  const isInApp = input.channel === "INAPP";
   const message = await db.notificationMessage.create({
     data: {
       workspaceId: input.workspaceId,
@@ -34,16 +39,22 @@ export async function notify(input: NotifyInput, db: Prisma.TransactionClient = 
       templateCode: input.templateCode,
       subject: input.subject ?? null,
       bodyRef: input.body,
-      status: "QUEUED",
+      // A feed item exists == delivered; an external send starts QUEUED.
+      status: isInApp ? "DELIVERED" : "QUEUED",
       relatedType: input.relatedType ?? null,
       relatedId: input.relatedId ?? null,
+      category: input.category ?? null,
+      urgent: input.urgent ?? false,
     },
   });
-  await enqueue(
-    "notification.send",
-    { messageId: message.id, toAddress: input.toAddress ?? null, preferChannel: input.preferChannel ?? null },
-    db,
-  );
+  // INAPP has no external send — no outbox work.
+  if (!isInApp) {
+    await enqueue(
+      "notification.send",
+      { messageId: message.id, toAddress: input.toAddress ?? null, preferChannel: input.preferChannel ?? null },
+      db,
+    );
+  }
   return message;
 }
 
@@ -69,24 +80,24 @@ export async function deliverNotification(payload: Record<string, unknown>): Pro
   const email = (payload.toAddress as string | null) ?? user?.email ?? contact?.email ?? null;
   const phone = user?.phone ?? contact?.phone ?? null;
 
-  // Lazy channel resolution: only upgrade to WhatsApp when explicitly preferred
-  // AND the provider is configured AND the recipient has active MESSAGING consent.
+  // Channel resolution. A message reaches WhatsApp only when it is explicitly
+  // preferred (or already on that channel) AND the provider is configured AND a
+  // phone exists AND the recipient has active MESSAGING consent. The gate is
+  // applied to the *resolved* channel, so a message created directly on WHATSAPP
+  // is gated too — never deliver over WhatsApp without an active grant.
   let channel = message.channel;
-  if ((payload.preferChannel as Channel | undefined) === "WHATSAPP" && channel !== "WHATSAPP") {
+  if ((payload.preferChannel as Channel | undefined) === "WHATSAPP") channel = "WHATSAPP";
+  if (channel === "WHATSAPP") {
     const consented = message.toUserId
-      ? await hasActiveMessagingConsent({ userId: message.toUserId })
+      ? await hasActiveMessagingConsent({ userId: message.toUserId }, message.workspaceId)
       : message.toContactId
-        ? await hasActiveMessagingConsent({ contactId: message.toContactId })
+        ? await hasActiveMessagingConsent({ contactId: message.toContactId }, message.workspaceId)
         : false;
-    if (whatsappConfigured() && consented && phone) channel = "WHATSAPP";
+    if (!whatsappConfigured() || !consented || !phone) channel = "EMAIL";
   }
 
-  // Address for the resolved channel; downgrade WhatsApp→email if no phone.
-  let to = channel === "WHATSAPP" ? phone : email;
-  if (channel === "WHATSAPP" && !to) {
-    channel = "EMAIL";
-    to = email;
-  }
+  // Address for the resolved channel. WhatsApp implies a phone (gated above).
+  const to = channel === "WHATSAPP" ? phone : email;
   if (!to) {
     await prisma.notificationMessage.update({ where: { id: messageId }, data: { status: "FAILED" } });
     return;

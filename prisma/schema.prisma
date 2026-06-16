@@ -39,7 +39,6 @@ model User {
   name        String
   locale      String   @default("en")
   isStaff     Boolean  @default(false)
-  waOptInAt   DateTime?
   createdAt   DateTime @default(now())
   memberships Membership[]
 }
@@ -476,7 +475,10 @@ enum LinkPurpose {
 model ConsentRecord {                // P5
   id            String        @id @default(uuid())
   workspaceId   String
-  contactId     String
+  // Exactly one subject: a Contact (tenant/landlord) or a workspace User.
+  // Both are append-only — a revocation sets revokedAt, never deletes.
+  contactId     String?
+  userId        String?
   purpose       ConsentPurpose
   source        ConsentSource
   noticeVersion String
@@ -484,6 +486,7 @@ model ConsentRecord {                // P5
   grantedAt     DateTime      @default(now())
   revokedAt     DateTime?
   @@index([workspaceId, contactId])
+  @@index([workspaceId, userId])
 }
 
 enum ConsentPurpose {
@@ -579,8 +582,45 @@ model NotificationMessage {          // insert-only message log; doubles as evid
   status      MessageStatus @default(QUEUED)
   relatedType ScopeType?
   relatedId   String?
+  // In-app feed + digest state (UPDATE-legal; the guard blocks DELETE only).
+  category       NotificationCategory?  // denormalized for feed grouping + digest scans
+  urgent         Boolean   @default(false)  // critical override → always email immediately
+  readAt         DateTime?            // in-app feed: null == unread
+  digestedAt     DateTime?            // set ONLY by the digest job once an item is digested
+  emailMessageId String?              // immediate INAPP item → its spawned EMAIL row (failed-send fallback)
   createdAt   DateTime  @default(now())
   @@index([workspaceId, channel, createdAt])
+  @@index([workspaceId, toUserId, channel, readAt])
+  @@index([workspaceId, toUserId, digestedAt])
+}
+
+model NotificationPreference {       // PR5: per-user, per-category email cadence
+  id           String   @id @default(uuid())
+  workspaceId  String
+  userId       String
+  category     NotificationCategory
+  cadence      Cadence  @default(DAILY)
+  inAppEnabled Boolean  @default(true)  // mute from the bell's unread count (feed item still stored)
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  @@unique([workspaceId, userId, category])
+  @@index([workspaceId, userId])
+}
+
+enum NotificationCategory {
+  DEADLINES
+  PAYMENTS
+  RENEWALS
+  PROOFS
+  RISK
+  DIGEST
+}
+
+enum Cadence {
+  IMMEDIATE
+  DAILY
+  WEEKLY
+  OFF
 }
 
 enum Channel {

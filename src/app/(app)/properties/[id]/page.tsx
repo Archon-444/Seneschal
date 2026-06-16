@@ -41,18 +41,22 @@ export default async function PropertyDetailPage({
   const tenancyFull = tenancy
     ? await import("@/server/services/tenancies").then((m) => m.getTenancy(ctx, tenancy.id))
     : null;
+  // Landlord, tenant and the renewal risk report only depend on tenancyFull and
+  // are independent of each other — resolve them together, not in series.
   const { getContact } = await import("@/server/services/contacts");
-  const landlord = tenancyFull?.landlordContactId
-    ? await getContact(ctx, tenancyFull.landlordContactId).catch(() => null)
-    : null;
-  const tenant = tenancyFull?.tenantContactId
-    ? await getContact(ctx, tenancyFull.tenantContactId).catch(() => null)
-    : null;
+  const [landlord, tenant, renewalRisk] = await Promise.all([
+    tenancyFull?.landlordContactId
+      ? getContact(ctx, tenancyFull.landlordContactId).catch(() => null)
+      : Promise.resolve(null),
+    tenancyFull?.tenantContactId
+      ? getContact(ctx, tenancyFull.tenantContactId).catch(() => null)
+      : Promise.resolve(null),
+    tenancyFull ? getRenewalRisk(ctx, tenancyFull.id).catch(() => null) : Promise.resolve(null),
+  ]);
 
   const title = `${property!.community}${property!.building ? ` · ${property!.building}` : ""}${property!.unitNo ? ` · ${property!.unitNo}` : ""}`;
   const daysToEnd = tenancyFull ? daysBetween(todayInDubai(), tenancyFull.endDate) : null;
   const approachingRenewal = daysToEnd != null && daysToEnd >= 0 && daysToEnd <= 120;
-  const renewalRisk = tenancyFull ? await getRenewalRisk(ctx, tenancyFull.id).catch(() => null) : null;
   const pos = renewalRisk?.position ?? null;
   const rentVsMarketPct = pos ? Math.round((1 - pos.currentRent / pos.marketRentAvg) * 100) : 0;
 

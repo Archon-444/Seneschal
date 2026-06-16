@@ -164,20 +164,29 @@ export interface EffectiveIndex {
   isBenchmark: boolean;
 }
 
-/** Latest benchmark for a community(+building): building-specific is preferred,
- *  else the community-wide (building null) figure. Latest capturedAt wins. */
-async function resolveBenchmark(workspaceId: string, community: string, building: string | null) {
+/** Benchmark fallback precedence — the single source of truth for both the
+ *  per-tenancy resolver and the pipeline's batch pick: a building-specific
+ *  capture wins over the community-wide (building null) one; among equals the
+ *  latest wins. `candidates` must be ordered capturedAt desc. */
+function pickBenchmark<T extends { community: string; building: string | null }>(
+  candidates: T[],
+  community: string,
+  building: string | null,
+): T | null {
   if (building) {
-    const b = await prisma.rentIndexBenchmark.findFirst({
-      where: { workspaceId, community, building },
-      orderBy: { capturedAt: "desc" },
-    });
+    const b = candidates.find((x) => x.community === community && x.building === building);
     if (b) return b;
   }
-  return prisma.rentIndexBenchmark.findFirst({
-    where: { workspaceId, community, building: null },
+  return candidates.find((x) => x.community === community && x.building === null) ?? null;
+}
+
+/** Latest benchmark for a community(+building), applying {@link pickBenchmark}. */
+async function resolveBenchmark(workspaceId: string, community: string, building: string | null) {
+  const candidates = await prisma.rentIndexBenchmark.findMany({
+    where: { workspaceId, community, OR: [{ building }, { building: null }] },
     orderBy: { capturedAt: "desc" },
   });
+  return pickBenchmark(candidates, community, building);
 }
 
 /** Resolve the index figure that applies to a tenancy — the single source of
@@ -405,19 +414,12 @@ export async function listRenewalPipeline(
   const latestByTenancy = new Map<string, (typeof captures)[number]>();
   for (const c of captures) if (!latestByTenancy.has(c.tenancyId)) latestByTenancy.set(c.tenancyId, c);
 
-  // Benchmarks for fallback (no per-tenancy query). Ordered desc, so the first
-  // match is the latest; building-specific is preferred over community-wide.
+  // Benchmarks for fallback in one query; pickBenchmark applies the shared
+  // precedence per tenancy (no per-tenancy DB round-trip).
   const benchmarks = await prisma.rentIndexBenchmark.findMany({
     where: { workspaceId: ctx.workspaceId },
     orderBy: { capturedAt: "desc" },
   });
-  const pickBenchmark = (community: string, building: string | null) => {
-    if (building) {
-      const b = benchmarks.find((x) => x.community === community && x.building === building);
-      if (b) return b;
-    }
-    return benchmarks.find((x) => x.community === community && x.building === null) ?? null;
-  };
 
   return tenancies.map((t) => {
     const gate = noticeGate(t.endDate, t.noticePeriodDays);
@@ -427,7 +429,7 @@ export async function listRenewalPipeline(
     let isBenchmark = false;
     let marketRentAvg: number | null = latest ? Number(latest.marketRentAvg) : null;
     if (marketRentAvg == null) {
-      const b = pickBenchmark(p.community, p.building ?? null);
+      const b = pickBenchmark(benchmarks, p.community, p.building ?? null);
       if (b) {
         marketRentAvg = Number(b.marketRentAvg);
         isBenchmark = true;

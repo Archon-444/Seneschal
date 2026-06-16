@@ -53,9 +53,20 @@ export async function applyWhatsappEvents(payload: Record<string, unknown>): Pro
 
       for (const m of value.messages ?? []) {
         if (!m.from) continue;
-        // Best-effort inbound → evidence. Resolve the workspace via the contact phone.
-        const contact = await prisma.contact.findFirst({ where: { phone: { contains: m.from } } });
-        if (!contact) continue;
+        // Best-effort inbound → evidence. Resolve the contact by EXACT
+        // digits-only phone equality, normalizing both sides on the DB so a
+        // stored "+971 50 123 4567" still matches an inbound "971501234567".
+        // Require a single match — a cross-workspace collision must not write
+        // evidence to the wrong workspace (evidence is insert-only, permanent).
+        // [^0-9] not \D: Prisma's tagged template cooks \D to D.
+        const fromDigits = m.from.replace(/\D/g, "");
+        if (!fromDigits) continue;
+        const matches = await prisma.$queryRaw<{ id: string; workspaceId: string }[]>`
+          SELECT id, "workspaceId" FROM "Contact"
+          WHERE phone IS NOT NULL AND regexp_replace(phone, '[^0-9]', '', 'g') = ${fromDigits}
+        `;
+        if (matches.length !== 1) continue; // 0 = unknown sender, >1 = ambiguous
+        const contact = matches[0];
         await recordEvidence({
           workspaceId: contact.workspaceId,
           type: "TENANT_ACKNOWLEDGED",

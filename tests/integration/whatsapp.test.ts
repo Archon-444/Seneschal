@@ -112,7 +112,7 @@ describe("whatsapp delivery gating", () => {
     expect(calledMeta(spy)).toBe(false);
   });
 
-  it("delivers to a workspace user with waOptInAt + phone over WhatsApp", async () => {
+  it("delivers to a consented workspace user with a phone over WhatsApp", async () => {
     const spy = stubMetaProvider();
     await grantMessagingConsent(W.ctx, { userId: W.ctx.userId });
     await prisma.user.update({ where: { id: W.ctx.userId }, data: { phone: "+971500000099" } });
@@ -127,6 +127,25 @@ describe("whatsapp delivery gating", () => {
     await drain();
     expect(calledMeta(spy)).toBe(true);
     expect((await onlyMessage(W.workspaceId)).channel).toBe("WHATSAPP");
+  });
+
+  it("REGRESSION: a message created directly on WHATSAPP is still consent-gated", async () => {
+    const spy = stubMetaProvider();
+    const c = await makeContact("+971500000006");
+    // No consent grant. The gate is on the resolved channel, so even a message
+    // built straight on WHATSAPP must fall back to email without a grant.
+    await notify({
+      workspaceId: W.workspaceId,
+      channel: "WHATSAPP",
+      templateCode: "notice_gate_v1",
+      body: "test",
+      toContactId: c.id,
+      toAddress: "t@example.com",
+    });
+    await drain();
+    const m = await onlyMessage(W.workspaceId);
+    expect(m.channel).toBe("EMAIL");
+    expect(calledMeta(spy)).toBe(false);
   });
 
   it("REGRESSION: plain EMAIL notify (no preferChannel) never touches WhatsApp", async () => {
@@ -159,10 +178,24 @@ describe("messaging consent", () => {
     expect(await hasActiveMessagingConsent({ contactId: c.id })).toBe(false);
   });
 
-  it("user opt-in sets waOptInAt", async () => {
+  it("user opt-in writes an append-only ConsentRecord; revoke sets revokedAt", async () => {
     await grantMessagingConsent(W.ctx, { userId: W.ctx.userId });
-    expect((await prisma.user.findUnique({ where: { id: W.ctx.userId } }))?.waOptInAt).toBeTruthy();
-    expect(await hasActiveMessagingConsent({ userId: W.ctx.userId })).toBe(true);
+    const granted = await prisma.consentRecord.findFirst({
+      where: { workspaceId: W.workspaceId, userId: W.ctx.userId, purpose: "MESSAGING" },
+    });
+    expect(granted).toBeTruthy();
+    expect(granted!.revokedAt).toBeNull();
+    expect(await hasActiveMessagingConsent({ userId: W.ctx.userId }, W.workspaceId)).toBe(true);
+
+    await revokeMessagingConsent(W.ctx, { userId: W.ctx.userId });
+    expect(await hasActiveMessagingConsent({ userId: W.ctx.userId }, W.workspaceId)).toBe(false);
+    // The original grant row survives — revocation is a new state, not a delete.
+    expect(
+      await prisma.consentRecord.count({ where: { userId: W.ctx.userId, purpose: "MESSAGING" } }),
+    ).toBe(1);
+    expect(
+      (await prisma.consentRecord.findFirst({ where: { userId: W.ctx.userId } }))?.revokedAt,
+    ).not.toBeNull();
   });
 
   it("grant/revoke write CONSENT_GRANTED / CONSENT_REVOKED evidence", async () => {
@@ -202,6 +235,79 @@ describe("whatsapp webhook", () => {
       new Request("https://x/api/v1/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=WRONG&hub.challenge=42"),
     );
     expect(res.status).toBe(403);
+  });
+
+  it("POST without an app secret configured → 500 (fail closed)", async () => {
+    vi.stubEnv("WHATSAPP_APP_SECRET", "");
+    const body = JSON.stringify({ entry: [] });
+    const res = await POST(
+      new Request("https://x/api/v1/webhooks/whatsapp", {
+        method: "POST",
+        headers: { "x-hub-signature-256": sign(body, "") },
+        body,
+      }),
+    );
+    expect(res.status).toBe(500);
+  });
+
+  it("inbound message records evidence against the exact-phone contact", async () => {
+    const c = await makeContact("+971500000020");
+    const body = JSON.stringify({
+      entry: [{ changes: [{ value: { messages: [{ from: "971500000020", id: "wamid.IN1", text: { body: "ok" } }] } }] }],
+    });
+    await POST(
+      new Request("https://x/api/v1/webhooks/whatsapp", {
+        method: "POST",
+        headers: { "x-hub-signature-256": sign(body, "shh") },
+        body,
+      }),
+    );
+    await drain();
+    const ev = await prisma.evidenceEvent.findFirst({
+      where: { workspaceId: W.workspaceId, type: "TENANT_ACKNOWLEDGED" },
+    });
+    expect(ev).toBeTruthy();
+    expect((ev!.payload as { from?: string }).from).toBe("971500000020");
+    void c;
+  });
+
+  it("inbound matches a contact whose stored phone has separators", async () => {
+    await makeContact("+971 50 123 4567");
+    const body = JSON.stringify({
+      entry: [{ changes: [{ value: { messages: [{ from: "971501234567", id: "wamid.SPACED", text: { body: "ok" } }] } }] }],
+    });
+    await POST(
+      new Request("https://x/api/v1/webhooks/whatsapp", {
+        method: "POST",
+        headers: { "x-hub-signature-256": sign(body, "shh") },
+        body,
+      }),
+    );
+    await drain();
+    const ev = await prisma.evidenceEvent.findFirst({
+      where: { workspaceId: W.workspaceId, type: "TENANT_ACKNOWLEDGED" },
+    });
+    expect(ev).toBeTruthy();
+  });
+
+  it("inbound message with only a substring phone match records no evidence", async () => {
+    // '+9715000000201' contains '971500000020' but is not an exact match.
+    await makeContact("+9715000000201");
+    const body = JSON.stringify({
+      entry: [{ changes: [{ value: { messages: [{ from: "971500000020", id: "wamid.IN2", text: { body: "ok" } }] } }] }],
+    });
+    await POST(
+      new Request("https://x/api/v1/webhooks/whatsapp", {
+        method: "POST",
+        headers: { "x-hub-signature-256": sign(body, "shh") },
+        body,
+      }),
+    );
+    await drain();
+    const ev = await prisma.evidenceEvent.findFirst({
+      where: { workspaceId: W.workspaceId, type: "TENANT_ACKNOWLEDGED" },
+    });
+    expect(ev).toBeNull();
   });
 
   it("POST with a bad signature → 401", async () => {

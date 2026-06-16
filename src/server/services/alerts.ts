@@ -1,5 +1,7 @@
 import { prisma } from "../db";
-import { notify } from "../notify";
+import { recordNotification } from "../notify/record";
+import { workspaceOverseers } from "../notify/recipients";
+import { loadPreferenceMap } from "../notify/preferences";
 import { recordEvidence } from "../evidence";
 import { resolveEffectiveIndex } from "./renewals";
 import { decree43 } from "../calculators/rent";
@@ -38,11 +40,10 @@ export const LADDERS: Record<string, { kinds: string[]; rungs: LadderRung[] }> =
 /** Run all ladders for a workspace. Called daily by the worker. */
 export async function runAlertLadders(workspaceId: string): Promise<number> {
   const today = todayInDubai();
-  const admins = await prisma.membership.findMany({
-    where: { workspaceId, revokedAt: null, role: { in: ["WORKSPACE_ADMIN", "FIDUCIARY", "MANAGER"] } },
-    include: { user: true },
-  });
-  if (admins.length === 0) return 0;
+  const overseerIds = await workspaceOverseers(workspaceId);
+  if (overseerIds.length === 0) return 0;
+  // Batch the cadence prefs once for the whole run (no per-event N+1).
+  const prefs = await loadPreferenceMap(workspaceId, overseerIds);
 
   let sent = 0;
   for (const [templateCode, ladder] of Object.entries(LADDERS)) {
@@ -89,22 +90,22 @@ export async function runAlertLadders(workspaceId: string): Promise<number> {
           }
         }
 
-        for (const admin of admins) {
-          await notify({
-            workspaceId,
-            channel: "EMAIL",
-            templateCode,
-            subject: `${deadline.kind.replace(/_/g, " ")} — ${where} — ${formatDubaiDate(deadline.dueAt)}${subjectSuffix}`,
-            body:
-              `Deadline reminder (${rung.code}).\n\n` +
-              `Kind: ${deadline.kind}\nProperty: ${where}\nDue: ${formatDubaiDate(deadline.dueAt)}\n\n` +
-              `Review before action. This is record-keeping assistance, not legal advice.` +
-              bodySuffix,
-            toUserId: admin.userId,
-            relatedType: "TENANCY",
-            relatedId: deadline.tenancyId ?? undefined,
-          });
-        }
+        await recordNotification({
+          workspaceId,
+          templateCode,
+          subject: `${deadline.kind.replace(/_/g, " ")} — ${where} — ${formatDubaiDate(deadline.dueAt)}${subjectSuffix}`,
+          body:
+            `Deadline reminder (${rung.code}).\n\n` +
+            `Kind: ${deadline.kind}\nProperty: ${where}\nDue: ${formatDubaiDate(deadline.dueAt)}\n\n` +
+            `Review before action. This is record-keeping assistance, not legal advice.` +
+            bodySuffix,
+          recipientUserIds: overseerIds,
+          // The final 72h rung is the can't-miss one — always email immediately.
+          urgent: rung.code === "72h-in-window",
+          relatedType: "TENANCY",
+          relatedId: deadline.tenancyId ?? undefined,
+          prefs,
+        });
         await recordEvidence({
           workspaceId,
           type: "REMINDER_SENT",
@@ -120,38 +121,4 @@ export async function runAlertLadders(workspaceId: string): Promise<number> {
     }
   }
   return sent;
-}
-
-/**
- * Weekly digest email (T9.2). Self-throttling: skips if a digest was already
- * sent for this workspace in the last 6 days, so the daily runner can call it
- * every pass and it still fires only once a week.
- */
-export async function sendWeeklyDigest(workspaceId: string): Promise<void> {
-  const sixDaysAgo = new Date(Date.now() - 6 * 86_400_000);
-  const recent = await prisma.notificationMessage.findFirst({
-    where: { workspaceId, templateCode: "weekly_digest_v1", createdAt: { gte: sixDaysAgo } },
-  });
-  if (recent) return;
-
-  const today = todayInDubai();
-  const in7 = new Date(today.getTime() + 7 * 86_400_000);
-  const [deadlines, flags, proofs] = await Promise.all([
-    prisma.deadline.count({ where: { workspaceId, status: "OPEN", dueAt: { gte: today, lte: in7 } } }),
-    prisma.riskFlag.count({ where: { workspaceId, status: { in: ["OPEN", "ACKNOWLEDGED"] } } }),
-    prisma.proofRequest.count({ where: { workspaceId, status: { notIn: ["APPROVED", "CLOSED"] } } }),
-  ]);
-  const admins = await prisma.membership.findMany({
-    where: { workspaceId, revokedAt: null, role: { in: ["WORKSPACE_ADMIN", "FIDUCIARY"] } },
-  });
-  for (const admin of admins) {
-    await notify({
-      workspaceId,
-      channel: "EMAIL",
-      templateCode: "weekly_digest_v1",
-      subject: `Seneschal weekly digest — ${formatDubaiDate(today)}`,
-      body: `This week: ${deadlines} deadlines due in 7 days · ${flags} open risk flags · ${proofs} open proof requests.`,
-      toUserId: admin.userId,
-    });
-  }
 }

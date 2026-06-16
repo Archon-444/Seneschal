@@ -3,9 +3,11 @@ import { makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
 import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
 import * as payments from "@/server/services/payments";
-import { runAlertLadders, sendWeeklyDigest } from "@/server/services/alerts";
+import { runAlertLadders } from "@/server/services/alerts";
+import { sendUserWeeklyDigests } from "@/server/services/digests";
 import { captureRentIndex } from "@/server/services/renewals";
 import { todayInDubai } from "@/server/calculators/dates";
+import { findBannedCopy } from "../copyConstraints";
 
 // T9.2 — ladders run from Deadline rows; every send is REMINDER_SENT evidence;
 // each rung fires once (idempotent across daily reruns).
@@ -48,10 +50,16 @@ describe("alert ladders", () => {
     expect(evidence).toHaveLength(1);
     expect((evidence[0].payload as { rung: string }).rung).toBe("T-7");
 
-    const messages = await prisma.notificationMessage.count({
-      where: { workspaceId: W.workspaceId, templateCode: "cheque_v1" },
+    // One in-app feed item for the admin; no immediate email — the T-7 rung is
+    // routine (DEADLINES/DAILY), so the email is deferred to the daily digest.
+    const inApp = await prisma.notificationMessage.count({
+      where: { workspaceId: W.workspaceId, templateCode: "cheque_v1", channel: "INAPP" },
     });
-    expect(messages).toBe(1); // one admin in the workspace
+    expect(inApp).toBe(1);
+    const email = await prisma.notificationMessage.count({
+      where: { workspaceId: W.workspaceId, templateCode: "cheque_v1", channel: "EMAIL" },
+    });
+    expect(email).toBe(0);
 
     // rerun: the rung does not fire twice
     expect(await runAlertLadders(W.workspaceId)).toBe(0);
@@ -81,8 +89,8 @@ describe("alert ladders", () => {
   });
 
   it("weekly digest sends to fiduciary/admin members, throttled to once a week", async () => {
-    await sendWeeklyDigest(W.workspaceId);
-    await sendWeeklyDigest(W.workspaceId); // second call within the week is skipped
+    await sendUserWeeklyDigests(W.workspaceId);
+    await sendUserWeeklyDigests(W.workspaceId); // second call within the week is skipped
     const digests = await prisma.notificationMessage.findMany({
       where: { workspaceId: W.workspaceId, templateCode: "weekly_digest_v1" },
     });
@@ -126,10 +134,8 @@ async function noticeGateBody(workspaceId: string): Promise<string> {
   return msg?.bodyRef ?? "";
 }
 
-const BANNED = ["lawful", "by law", "enforceable", "legal band"];
 function expectNoBannedTerms(body: string) {
-  const lower = body.toLowerCase();
-  for (const term of BANNED) expect(lower).not.toContain(term);
+  expect(findBannedCopy(body)).toBeNull();
 }
 
 describe("notice-gate alert — RERA enrichment (PR2)", () => {
