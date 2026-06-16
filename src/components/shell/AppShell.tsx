@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Sidebar, type NavItem } from "./Sidebar";
+import { Sidebar } from "./Sidebar";
+import type { NavItem } from "./nav";
 import { UserMenu } from "./UserMenu";
 import { NotificationBell } from "./NotificationBell";
 import { CloseIcon, MenuIcon, PanelLeftIcon } from "../icons";

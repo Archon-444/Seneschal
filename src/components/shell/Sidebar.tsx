@@ -2,20 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-export interface NavItem {
-  href: string;
-  label: string;
-}
-
-function monogram(label: string): string {
-  return label
-    .split(/\s+/)
-    .filter((w) => /[a-z]/i.test(w[0] ?? ""))
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
-}
+import { NAV_ICONS, type IconKey, type NavItem } from "./nav";
 
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -34,8 +21,9 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
 
-  const link = (href: string, label: string, accent = false) => {
+  const link = (href: string, label: string, icon: IconKey, accent = false) => {
     const active = isActive(pathname, href);
+    const Glyph = NAV_ICONS[icon];
     const base = "flex items-center rounded px-3 py-1.5 text-sm transition-colors";
     const tone = active
       ? "bg-navy-800 text-ivory-50"
@@ -50,21 +38,19 @@ export function Sidebar({
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
         title={collapsed ? label : undefined}
+        aria-label={collapsed ? label : undefined}
         className={`${base} ${tone} ${collapsed ? "justify-center" : "gap-3"}`}
       >
-        {collapsed ? (
-          <span className="figure w-6 text-center text-[11px] tracking-tight">{monogram(label)}</span>
-        ) : (
-          label
-        )}
+        <Glyph className="shrink-0" />
+        {!collapsed && label}
       </Link>
     );
   };
 
   return (
     <nav className="flex-1 space-y-0.5 px-3 py-4">
-      {nav.map((item) => link(item.href, item.label))}
-      {isStaff && <div className="mt-4">{link("/admin", "Staff console", true)}</div>}
+      {nav.map((item) => link(item.href, item.label, item.icon))}
+      {isStaff && <div className="mt-4">{link("/admin", "Staff console", "staff", true)}</div>}
     </nav>
   );
 }
