@@ -4,23 +4,7 @@ import { currentUser, requireCtx } from "@/server/auth/request";
 import { unreadCount } from "@/server/services/notifications";
 import { logoutAction } from "../(auth)/login/actions";
 import { AppShell } from "@/components/shell/AppShell";
-
-const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/onboarding/new", label: "Onboard tenancy" },
-  { href: "/properties", label: "Properties" },
-  { href: "/clients", label: "Clients" },
-  { href: "/contacts", label: "Contacts" },
-  { href: "/calendar", label: "Calendar" },
-  { href: "/renewals", label: "Renewals" },
-  { href: "/payments", label: "Payments" },
-  { href: "/vault", label: "Document vault" },
-  { href: "/imports", label: "Import & extract" },
-  { href: "/proofs", label: "Proof requests" },
-  { href: "/evidence", label: "Evidence" },
-  { href: "/risk", label: "Risk flags" },
-  { href: "/reports", label: "Reports" },
-];
+import { NAV } from "@/components/shell/nav";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
