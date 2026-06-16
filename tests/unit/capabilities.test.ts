@@ -51,6 +51,21 @@ describe("role capability matrix", () => {
       AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
       LANDLORD: true, TENANT: false,
     },
+    "listings.read": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: true, TENANT: false,
+    },
+    "listings.write": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: true, TENANT: false,
+    },
+    "listings.publish": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: true, TENANT: false,
+    },
     "payments.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: true,
@@ -131,9 +146,12 @@ describe("role capability matrix", () => {
     }
   });
 
-  it("LANDLORD is read-only", () => {
+  // LANDLORD is read-only across the portfolio EXCEPT for managing its own listings
+  // (1B supply side): listings.read/write/publish. Scoping to one Contact's owned
+  // properties is enforced separately in authz/contactScope.
+  it("LANDLORD is read-only apart from managing its own listings", () => {
     for (const cap of ROLE_CAPABILITIES.LANDLORD) {
-      expect(/\.read$/.test(cap)).toBe(true);
+      expect(cap.endsWith(".read") || cap.startsWith("listings.")).toBe(true);
     }
   });
 });

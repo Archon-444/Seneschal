@@ -131,7 +131,8 @@ export type ContactScopeTable =
   | "PAYMENT_ITEM"
   | "DEADLINE"
   | "DOCUMENT"
-  | "PROOF_REQUEST";
+  | "PROOF_REQUEST"
+  | "LISTING";
 
 /**
  * The ONLY sanctioned way a list/findMany read serves a persona context: returns
@@ -146,6 +147,7 @@ export function contactScopedWhere(ctx: AuthzContext, table: "PAYMENT_ITEM"): Pr
 export function contactScopedWhere(ctx: AuthzContext, table: "DEADLINE"): Promise<Prisma.DeadlineWhereInput>;
 export function contactScopedWhere(ctx: AuthzContext, table: "DOCUMENT"): Promise<Prisma.DocumentWhereInput>;
 export function contactScopedWhere(ctx: AuthzContext, table: "PROOF_REQUEST"): Promise<Prisma.ProofRequestWhereInput>;
+export function contactScopedWhere(ctx: AuthzContext, table: "LISTING"): Promise<Prisma.ListingWhereInput>;
 export async function contactScopedWhere(
   ctx: AuthzContext,
   table: ContactScopeTable,
@@ -156,6 +158,7 @@ export async function contactScopedWhere(
   | Prisma.DeadlineWhereInput
   | Prisma.DocumentWhereInput
   | Prisma.ProofRequestWhereInput
+  | Prisma.ListingWhereInput
 > {
   if (!ctx.subjectContactId || (ctx.role !== "TENANT" && ctx.role !== "LANDLORD")) {
     throw new AuthzError("contactScopedWhere requires a persona context");
@@ -178,6 +181,10 @@ export async function contactScopedWhere(
       return { workspaceId: ws, OR: scopeMatchClausesContact(ids) };
     case "PROOF_REQUEST":
       return { workspaceId: ws, id: { in: ids.proofRequestIds } };
+    case "LISTING":
+      // A listing belongs to its property; a persona sees only listings on the
+      // properties in their owned-property id-set.
+      return { workspaceId: ws, propertyId: { in: ids.propertyIds } };
   }
 }
 
@@ -193,7 +200,8 @@ export type ReadableTarget =
   | { kind: "tenancy"; row: { workspaceId: string; id: string; property: { clientPrincipalId: string | null } } | null }
   | { kind: "property"; row: { workspaceId: string; id: string; clientPrincipalId: string | null } | null }
   | { kind: "document"; row: { workspaceId: string; scopeType: ScopeType; scopeId: string | null } | null }
-  | { kind: "proofRequest"; row: { workspaceId: string; id: string; scopeType: ScopeType; scopeId: string | null } | null };
+  | { kind: "proofRequest"; row: { workspaceId: string; id: string; scopeType: ScopeType; scopeId: string | null } | null }
+  | { kind: "listing"; row: { workspaceId: string; propertyId: string } | null };
 
 export async function assertReadable(ctx: AuthzContext, target: ReadableTarget): Promise<void> {
   const row = target.row;
@@ -212,7 +220,9 @@ export async function assertReadable(ctx: AuthzContext, target: ReadableTarget):
           ? target.row!.clientPrincipalId === ctx.clientPrincipalId
           : target.kind === "proofRequest"
             ? ids.proofRequestIds.includes(target.row!.id)
-            : scopeBelongsToClient(ids, target.row!.scopeType, target.row!.scopeId);
+            : target.kind === "listing"
+              ? false // listings are not client-scoped; CLIENT_VIEWER lacks listings.read — fail closed
+              : scopeBelongsToClient(ids, target.row!.scopeType, target.row!.scopeId);
     if (!ok) throw new AuthzError("Not found", 404);
     return;
   }
@@ -227,7 +237,9 @@ export async function assertReadable(ctx: AuthzContext, target: ReadableTarget):
           ? ids.propertyIds.includes(target.row!.id)
           : target.kind === "proofRequest"
             ? ids.proofRequestIds.includes(target.row!.id)
-            : scopeBelongsToContact(ids, target.row!.scopeType, target.row!.scopeId);
+            : target.kind === "listing"
+              ? ids.propertyIds.includes(target.row!.propertyId)
+              : scopeBelongsToContact(ids, target.row!.scopeType, target.row!.scopeId);
     if (!ok) throw new AuthzError("Not found", 404);
     return;
   }

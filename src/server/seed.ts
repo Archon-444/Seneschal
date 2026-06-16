@@ -5,6 +5,7 @@ import { toUtcDateOnly } from "./calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./services/deadlines";
 import { evaluateRiskForTenancy } from "./services/risk";
 import { newStorageKey, storage } from "./storage";
+import { listingReadiness } from "./calculators/listingReadiness";
 
 // Idempotent seed (T0.2): creates the Farina workspace fixture set per the
 // build handoff. Safe to run repeatedly — every create is find-or-create.
@@ -514,7 +515,7 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
   if (marina.ownerContactId !== owner.id) {
     await prisma.property.update({ where: { id: marina.id }, data: { ownerContactId: owner.id } });
   }
-  await findOrCreate(
+  const palmVista = await findOrCreate(
     () => prisma.property.findFirst({ where: { workspaceId: workspace.id, building: "Palm Vista", unitNo: "12" } }),
     () =>
       prisma.property.create({
@@ -548,6 +549,39 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
       subjectContactId: owner.id,
     },
   });
+
+  // ── Listings (1B): a draft listing on the vacant Palm Vista villa. Deliberately
+  // missing the RERA permit, so it sits below the publish gate — a live demo of the
+  // readiness score the landlord portal surfaces.
+  const existingListing = await prisma.listing.findFirst({
+    where: { workspaceId: workspace.id, propertyId: palmVista.id },
+  });
+  if (!existingListing) {
+    const readiness = listingReadiness({
+      askingRent: 220000,
+      availableFrom: date("2026-08-01"),
+      furnished: true,
+      description: "Upgraded 3-bed Palm villa with private beach access, maid's room and two covered parking bays.",
+      permitRef: null, // intentionally absent → cannot publish yet
+      bedrooms: palmVista.bedrooms,
+      sizeSqft: palmVista.sizeSqft,
+    });
+    await prisma.listing.create({
+      data: {
+        workspaceId: workspace.id,
+        propertyId: palmVista.id,
+        status: "DRAFT",
+        headline: "Palm Jumeirah 3BR villa — beach access",
+        askingRent: new Prisma.Decimal(220000),
+        availableFrom: date("2026-08-01"),
+        furnished: true,
+        description: "Upgraded 3-bed Palm villa with private beach access, maid's room and two covered parking bays.",
+        readinessScore: readiness.score,
+        readiness: readiness as unknown as Prisma.InputJsonValue,
+        createdById: farina.id,
+      },
+    });
+  }
 
   return { proofLinkUrl };
 }

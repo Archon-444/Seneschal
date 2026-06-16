@@ -145,6 +145,7 @@ model Property {
   createdAt         DateTime @default(now())
   archivedAt        DateTime?
   tenancies         Tenancy[]
+  listings          Listing[]
   @@index([workspaceId, clientPrincipalId])
 }
 // TODO [later]: optional Unit entity under Property for multi-unit assets.
@@ -189,6 +190,42 @@ enum RecordSource {
   OCR
   EXCEL
   MANUAL
+}
+
+// ───────────────────────────── Listings [1B] — landlord supply side
+
+// A landlord's marketing record for a (typically vacant) owned unit. Scoped to
+// the owning Property, so the LANDLORD persona reaches it through the same
+// owned-property id-set as everything else (services/contactScope.ts). The
+// readiness score is a deterministic calculator (calculators/listingReadiness.ts)
+// whose { rule, version, inputs } breakdown is cached in `readiness`.
+model Listing {
+  id             String        @id @default(uuid())
+  workspaceId    String
+  propertyId     String
+  status         ListingStatus @default(DRAFT)
+  headline       String?
+  askingRent     Decimal?      @db.Decimal(12, 2)
+  availableFrom  DateTime?     // date-only semantics; store UTC midnight via toUtcDateOnly
+  furnished      Boolean?
+  description    String?
+  permitRef      String?       // RERA/Trakheesi (Madmoun) permit — expiry/alerts wiring lands in 1B issue #3
+  permitExpiry   DateTime?     // date-only
+  readinessScore Int?          // cached 0..100; calculators/listingReadiness.ts is authoritative
+  readiness      Json?         // { rule, version, score, checks: [{ key, label, ok, weight }] }
+  publishedAt    DateTime?
+  createdById    String
+  createdAt      DateTime      @default(now())
+  archivedAt     DateTime?
+  property       Property      @relation(fields: [propertyId], references: [id])
+  @@index([workspaceId, status])
+  @@index([workspaceId, propertyId])
+}
+
+enum ListingStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
 }
 
 // ───────────────────────────── Deadlines & calendar [1A]
@@ -302,6 +339,7 @@ enum ScopeType {
   TASK
   RENEWAL_CASE
   OFFER
+  LISTING
 }
 enum DocumentKind {
   TENANCY_CONTRACT
@@ -736,6 +774,10 @@ enum EvidenceType {
   CONSENT_REVOKED
   RISK_FLAG_RAISED
   RISK_FLAG_CLEARED
+  LISTING_CREATED
+  LISTING_UPDATED
+  LISTING_PUBLISHED
+  LISTING_ARCHIVED
 }
 
 model AuditEvent {                   // security/admin log; insert-only; hash chain in v1.1 (D6)
