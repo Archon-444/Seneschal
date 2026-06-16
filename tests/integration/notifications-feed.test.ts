@@ -5,6 +5,7 @@ import {
   listMyNotifications,
   markAllRead,
   markRead,
+  setNotificationPreference,
   unreadCount,
 } from "@/server/services/notifications";
 import { AuthzError } from "@/server/authz";
@@ -44,6 +45,15 @@ describe("in-app notification feed", () => {
     // The read item now sorts after the still-unread one.
     const after = await listMyNotifications(W.ctx);
     expect(after.items[0].subject).toBe("First");
+  });
+
+  it("a muted category is dropped from the badge but stays in the feed", async () => {
+    await fire("Muted deadline"); // cheque_v1 → DEADLINES
+    expect(await unreadCount(W.ctx)).toBe(1);
+
+    await setNotificationPreference(W.ctx, "DEADLINES", "DAILY", false);
+    expect(await unreadCount(W.ctx)).toBe(0); // muted from the badge
+    expect((await listMyNotifications(W.ctx)).items).toHaveLength(1); // still in the feed
   });
 
   it("markAllRead clears every unread item", async () => {

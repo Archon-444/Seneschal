@@ -30,7 +30,20 @@ export async function listMyNotifications(
 }
 
 export async function unreadCount(ctx: AuthzContext): Promise<number> {
-  return prisma.notificationMessage.count({ where: { ...feedScope(ctx), readAt: null } });
+  // A category muted from the bell (inAppEnabled: false) still keeps its feed
+  // items in the list, but is excluded from the unread badge count.
+  const muted = await prisma.notificationPreference.findMany({
+    where: { workspaceId: ctx.workspaceId, userId: ctx.userId, inAppEnabled: false },
+    select: { category: true },
+  });
+  const mutedCategories = muted.map((m) => m.category);
+  return prisma.notificationMessage.count({
+    where: {
+      ...feedScope(ctx),
+      readAt: null,
+      ...(mutedCategories.length ? { category: { notIn: mutedCategories } } : {}),
+    },
+  });
 }
 
 export async function markRead(ctx: AuthzContext, messageId: string): Promise<void> {

@@ -271,6 +271,25 @@ describe("whatsapp webhook", () => {
     void c;
   });
 
+  it("inbound matches a contact whose stored phone has separators", async () => {
+    await makeContact("+971 50 123 4567");
+    const body = JSON.stringify({
+      entry: [{ changes: [{ value: { messages: [{ from: "971501234567", id: "wamid.SPACED", text: { body: "ok" } }] } }] }],
+    });
+    await POST(
+      new Request("https://x/api/v1/webhooks/whatsapp", {
+        method: "POST",
+        headers: { "x-hub-signature-256": sign(body, "shh") },
+        body,
+      }),
+    );
+    await drain();
+    const ev = await prisma.evidenceEvent.findFirst({
+      where: { workspaceId: W.workspaceId, type: "TENANT_ACKNOWLEDGED" },
+    });
+    expect(ev).toBeTruthy();
+  });
+
   it("inbound message with only a substring phone match records no evidence", async () => {
     // '+9715000000201' contains '971500000020' but is not an exact match.
     await makeContact("+9715000000201");
