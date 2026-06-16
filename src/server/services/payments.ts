@@ -5,7 +5,9 @@ import { recordEvidence } from "../evidence";
 import { formatDubaiDate, toUtcDateOnly, todayInDubai } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
 import { clearPaymentLate, evaluateRiskForTenancy, raisePaymentLate } from "./risk";
-import { notify } from "../notify";
+import { recordNotification } from "../notify/record";
+import { workspaceOverseers } from "../notify/recipients";
+import { loadPreferenceMap, type PreferenceMap } from "../notify/preferences";
 import { getTenancy } from "./tenancies";
 
 // Payments register (E4) — record-keeping only, Seneschal never holds funds.
@@ -93,7 +95,7 @@ export async function transitionPayment(
   require_(ctx, "payments.write");
   const item = await prisma.paymentItem.findUnique({
     where: { id: paymentItemId },
-    include: { tenancy: true },
+    include: { tenancy: { include: { property: true } } },
   });
   assertSameWorkspace(ctx, item);
 
@@ -143,6 +145,27 @@ export async function transitionPayment(
   if (["RECEIVED", "CLEARED", "CANCELLED"].includes(to)) {
     await clearPaymentLate(paymentItemId);
   }
+
+  // A bounced cheque is can't-miss — alert overseers immediately (urgent bypasses
+  // any digest cadence), in addition to the CHEQUE_BOUNCED evidence above.
+  if (to === "BOUNCED") {
+    const where = item!.tenancy.property
+      ? `${item!.tenancy.property.community} ${item!.tenancy.property.unitNo ?? ""}`.trim()
+      : "a property";
+    await recordNotification({
+      workspaceId: ctx.workspaceId,
+      templateCode: "payment_bounced_v1",
+      subject: `Cheque bounced — ${where} — ${item!.chequeNo ?? `#${item!.seq}`}`,
+      body:
+        `A cheque has been recorded as BOUNCED.\n\n` +
+        `Property: ${where}\nCheque: ${item!.chequeNo ?? `#${item!.seq}`} · ${String(item!.amount)} AED\n\n` +
+        `Record-keeping reminder only — Seneschal holds no funds. Review before action.`,
+      recipientUserIds: await workspaceOverseers(ctx.workspaceId),
+      urgent: true,
+      relatedType: "TENANCY",
+      relatedId: item!.tenancyId,
+    });
+  }
   return updated;
 }
 
@@ -163,22 +186,16 @@ export async function detectLatePayments(workspaceId?: string): Promise<number> 
     include: { tenancy: { include: { property: true } } },
   });
 
-  // resolve each workspace's overseers once
-  const adminsByWorkspace = new Map<string, { userId: string }[]>();
-  async function adminsFor(wsId: string) {
-    let admins = adminsByWorkspace.get(wsId);
-    if (!admins) {
-      admins = await prisma.membership.findMany({
-        where: {
-          workspaceId: wsId,
-          revokedAt: null,
-          role: { in: ["WORKSPACE_ADMIN", "FIDUCIARY", "MANAGER"] },
-        },
-        select: { userId: true },
-      });
-      adminsByWorkspace.set(wsId, admins);
+  // Resolve each workspace's overseers + cadence prefs once (no per-item N+1).
+  const overseersByWorkspace = new Map<string, { ids: string[]; prefs: PreferenceMap }>();
+  async function overseersFor(wsId: string) {
+    let entry = overseersByWorkspace.get(wsId);
+    if (!entry) {
+      const ids = await workspaceOverseers(wsId);
+      entry = { ids, prefs: await loadPreferenceMap(wsId, ids) };
+      overseersByWorkspace.set(wsId, entry);
     }
-    return admins;
+    return entry;
   }
 
   for (const item of due) {
@@ -188,22 +205,21 @@ export async function detectLatePayments(workspaceId?: string): Promise<number> 
     const where = item.tenancy.property
       ? `${item.tenancy.property.community} ${item.tenancy.property.unitNo ?? ""}`.trim()
       : "a property";
-    for (const admin of await adminsFor(item.workspaceId)) {
-      await notify({
-        workspaceId: item.workspaceId,
-        channel: "EMAIL",
-        templateCode: "payment_late_v1",
-        subject: `Cheque overdue — ${where} — ${formatDubaiDate(item.dueDate)}`,
-        body:
-          `A scheduled payment is past due and not yet recorded as received.\n\n` +
-          `Property: ${where}\nCheque: ${item.chequeNo ?? `#${item.seq}`} · ${String(item.amount)} AED\n` +
-          `Was due: ${formatDubaiDate(item.dueDate)}\n\n` +
-          `Record-keeping reminder only — Seneschal holds no funds. Review before action.`,
-        toUserId: admin.userId,
-        relatedType: "TENANCY",
-        relatedId: item.tenancyId,
-      });
-    }
+    const { ids, prefs } = await overseersFor(item.workspaceId);
+    await recordNotification({
+      workspaceId: item.workspaceId,
+      templateCode: "payment_late_v1",
+      subject: `Cheque overdue — ${where} — ${formatDubaiDate(item.dueDate)}`,
+      body:
+        `A scheduled payment is past due and not yet recorded as received.\n\n` +
+        `Property: ${where}\nCheque: ${item.chequeNo ?? `#${item.seq}`} · ${String(item.amount)} AED\n` +
+        `Was due: ${formatDubaiDate(item.dueDate)}\n\n` +
+        `Record-keeping reminder only — Seneschal holds no funds. Review before action.`,
+      recipientUserIds: ids,
+      relatedType: "TENANCY",
+      relatedId: item.tenancyId,
+      prefs,
+    });
   }
   return due.length;
 }
