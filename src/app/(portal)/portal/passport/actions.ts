@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { DocumentKind } from "@prisma/client";
 import { requireCtx } from "@/server/auth/request";
 import * as passport from "@/server/services/tenantPassport";
 
@@ -24,6 +25,19 @@ export async function updatePassportAction(formData: FormData) {
     moveInBy: s(formData, "moveInBy") ? new Date(s(formData, "moveInBy")) : null,
     summary: opt(formData, "summary") ?? null,
     status: s(formData, "status") === "READY" ? "READY" : "DRAFT",
+  });
+  revalidatePath("/portal/passport");
+}
+
+export async function uploadPassportDocumentAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return;
+  await passport.uploadPassportDocument(ctx, {
+    fileName: file.name,
+    mime: file.type || "application/octet-stream",
+    data: Buffer.from(await file.arrayBuffer()),
+    kind: (opt(formData, "kind") as DocumentKind | undefined) ?? undefined,
   });
   revalidatePath("/portal/passport");
 }

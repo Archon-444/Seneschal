@@ -1,6 +1,8 @@
-import { Prisma, type TenantPassport } from "@prisma/client";
+import { Prisma, type DocumentKind, type TenantPassport } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, require_ } from "../authz";
+import { ingestDocument, logDocumentAccess } from "./documents";
+import { recordEvidence } from "../evidence";
 import { toUtcDateOnly } from "../calculators/dates";
 
 // Tenant passport (1C) — a tenant's reusable rental profile, scoped to their own
@@ -58,6 +60,64 @@ export async function updateMyPassport(ctx: AuthzContext, input: PassportInput):
   return prisma.tenantPassport.update({
     where: { workspaceId_contactId: { workspaceId: ctx.workspaceId, contactId } },
     data,
+  });
+}
+
+/**
+ * Attach a supporting document to the tenant's own passport (1C #6). Reuses the
+ * shared storage/ingest path; the document is scoped TENANT_PASSPORT so it is
+ * reachable only through the owner's contact scope. Records DOCUMENT_UPLOADED.
+ * Gated on passport.write so the tenant needs no broad documents.write.
+ */
+export async function uploadPassportDocument(
+  ctx: AuthzContext,
+  file: { fileName: string; mime: string; data: Buffer; kind?: DocumentKind },
+) {
+  require_(ctx, "passport.write");
+  tenantContactId(ctx);
+  const passport = await getOrCreateMyPassport(ctx);
+  const doc = await ingestDocument({
+    workspaceId: ctx.workspaceId,
+    scopeType: "TENANT_PASSPORT",
+    scopeId: passport.id,
+    kind: file.kind ?? "ID_DOCUMENT",
+    fileName: file.fileName,
+    mime: file.mime,
+    data: file.data,
+    uploadedById: ctx.userId,
+  });
+  await logDocumentAccess({
+    workspaceId: ctx.workspaceId,
+    documentId: doc.id,
+    actorUserId: ctx.userId,
+    action: "UPLOADED",
+  });
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: "DOCUMENT_UPLOADED",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "TENANT_PASSPORT",
+    scopeId: passport.id,
+    payload: { documentId: doc.id, fileName: file.fileName, kind: doc.kind },
+  });
+  return doc;
+}
+
+/** The documents attached to the tenant's own passport (newest first). */
+export async function listPassportDocuments(ctx: AuthzContext, passportId?: string) {
+  require_(ctx, "passport.read");
+  // Default to the caller's own passport; an explicit id is verified via getPassport.
+  const passport = passportId ? await getPassport(ctx, passportId) : await getOrCreateMyPassport(ctx);
+  return prisma.document.findMany({
+    where: {
+      workspaceId: ctx.workspaceId,
+      scopeType: "TENANT_PASSPORT",
+      scopeId: passport.id,
+      archivedAt: null,
+    },
+    orderBy: { createdAt: "desc" },
   });
 }
 

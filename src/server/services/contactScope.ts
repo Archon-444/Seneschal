@@ -20,6 +20,8 @@ export interface ContactScopeIds {
   tenancyIds: string[];
   paymentItemIds: string[];
   proofRequestIds: string[];
+  /** TENANT only: the tenant's own passport(s); passport documents scope here. */
+  passportIds: string[];
 }
 
 type Db = Prisma.TransactionClient;
@@ -46,6 +48,7 @@ export async function resolveContactScopeIds(
 ): Promise<ContactScopeIds> {
   let propertyIds: string[] = [];
   let tenancyIds: string[] = [];
+  let passportIds: string[] = [];
 
   if (role === "TENANT") {
     const tenancies = await db.tenancy.findMany({
@@ -54,6 +57,11 @@ export async function resolveContactScopeIds(
     });
     tenancyIds = tenancies.map((t) => t.id);
     propertyIds = unique(tenancies.map((t) => t.propertyId));
+    const passports = await db.tenantPassport.findMany({
+      where: { workspaceId, contactId },
+      select: { id: true },
+    });
+    passportIds = passports.map((p) => p.id);
   } else {
     // LANDLORD: union of owned properties and landlord-of-record tenancies.
     const owned = await db.property.findMany({
@@ -86,12 +94,12 @@ export async function resolveContactScopeIds(
   });
   const proofRequestIds = proofRequests.map((r) => r.id);
 
-  return { contactId, propertyIds, tenancyIds, paymentItemIds, proofRequestIds };
+  return { contactId, propertyIds, tenancyIds, paymentItemIds, proofRequestIds, passportIds };
 }
 
 /** Prisma OR-clause matching scope-polymorphic rows inside a persona's scope. */
 export function scopeMatchClausesContact(ids: ContactScopeIds): {
-  scopeType: "PROPERTY" | "TENANCY" | "PAYMENT_ITEM" | "PROOF_REQUEST";
+  scopeType: "PROPERTY" | "TENANCY" | "PAYMENT_ITEM" | "PROOF_REQUEST" | "TENANT_PASSPORT";
   scopeId: { in: string[] };
 }[] {
   return [
@@ -99,6 +107,7 @@ export function scopeMatchClausesContact(ids: ContactScopeIds): {
     { scopeType: "TENANCY", scopeId: { in: ids.tenancyIds } },
     { scopeType: "PAYMENT_ITEM", scopeId: { in: ids.paymentItemIds } },
     { scopeType: "PROOF_REQUEST", scopeId: { in: ids.proofRequestIds } },
+    { scopeType: "TENANT_PASSPORT", scopeId: { in: ids.passportIds } },
   ];
 }
 
@@ -118,6 +127,8 @@ export function scopeBelongsToContact(
       return ids.paymentItemIds.includes(scopeId);
     case "PROOF_REQUEST":
       return ids.proofRequestIds.includes(scopeId);
+    case "TENANT_PASSPORT":
+      return ids.passportIds.includes(scopeId);
     default:
       // CLIENT (or anything else) is never inside a persona's contact scope.
       return false;
