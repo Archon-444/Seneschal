@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Dropdown } from "../menu";
 import { BellIcon, CheckAllIcon } from "../icons";
+import { shouldApplyCount } from "./notificationBadge";
+
+const POLL_MS = 60_000;
 
 interface FeedItem {
   id: string;
@@ -26,22 +29,90 @@ export function NotificationBell({ initialUnread }: { initialUnread: number }) {
   const [unread, setUnread] = useState(initialUnread);
   const [items, setItems] = useState<FeedItem[] | null>(null);
 
+  // Monotonic sequence so out-of-order async responses settle to the newest write.
+  const seqRef = useRef(0);
+  const appliedRef = useRef(0);
+  // Suspend interval polling while the user's own mark POSTs are outstanding.
+  const pendingMarks = useRef(0);
+
   const load = useCallback(async () => {
     const res = await fetch("/api/v1/notifications?limit=8", { cache: "no-store" });
     if (res.ok) setItems(((await res.json()).items as FeedItem[]) ?? []);
   }, []);
 
+  const refreshCount = useCallback(async () => {
+    const mySeq = ++seqRef.current;
+    const res = await fetch("/api/v1/notifications/unread-count", { cache: "no-store" });
+    if (!res.ok) return;
+    const count = (await res.json()).count as number;
+    if (shouldApplyCount(mySeq, appliedRef.current)) {
+      appliedRef.current = mySeq;
+      setUnread(count);
+    }
+  }, []);
+
   async function markRead(id: string) {
     setItems((prev) => prev?.map((i) => (i.id === id ? { ...i, readAt: new Date().toISOString() } : i)) ?? null);
+    appliedRef.current = ++seqRef.current;
     setUnread((n) => Math.max(0, n - 1));
-    await fetch(`/api/v1/notifications/${id}/read`, { method: "POST" });
+    pendingMarks.current += 1;
+    try {
+      await fetch(`/api/v1/notifications/${id}/read`, { method: "POST" });
+    } finally {
+      pendingMarks.current -= 1;
+    }
+    await refreshCount();
   }
 
   async function markAll() {
     setItems((prev) => prev?.map((i) => ({ ...i, readAt: i.readAt ?? new Date().toISOString() })) ?? null);
+    appliedRef.current = ++seqRef.current;
     setUnread(0);
-    await fetch("/api/v1/notifications/read-all", { method: "POST" });
+    pendingMarks.current += 1;
+    try {
+      await fetch("/api/v1/notifications/read-all", { method: "POST" });
+    } finally {
+      pendingMarks.current -= 1;
+    }
+    await refreshCount();
   }
+
+  // Opening the panel loads items and reconciles the badge immediately.
+  const onPanelOpen = useCallback(() => {
+    void load();
+    void refreshCount();
+  }, [load, refreshCount]);
+
+  // Live badge: poll the count while the tab is visible, and reconcile on focus.
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const tick = () => {
+      if (pendingMarks.current === 0) void refreshCount();
+    };
+    const start = () => {
+      if (timer === null) timer = setInterval(tick, POLL_MS);
+    };
+    const stop = () => {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        void refreshCount();
+        start();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (!document.hidden) start();
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
+    };
+  }, [refreshCount]);
 
   return (
     <Dropdown
@@ -60,7 +131,7 @@ export function NotificationBell({ initialUnread }: { initialUnread: number }) {
         </>
       }
     >
-      <BellPanel items={items} onOpen={load} onMarkRead={markRead} onMarkAll={markAll} unread={unread} />
+      <BellPanel items={items} onOpen={onPanelOpen} onMarkRead={markRead} onMarkAll={markAll} unread={unread} />
     </Dropdown>
   );
 }
