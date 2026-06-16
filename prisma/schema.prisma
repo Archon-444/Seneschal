@@ -518,7 +518,8 @@ enum LinkPurpose {
   DOCUMENT_SHARE
   APPROVAL
   TENANT_OFFER
-} // TENANT_OFFER activates Stage 2
+  LISTING_VIEW
+} // TENANT_OFFER activates Stage 2; LISTING_VIEW is the public 1B listing page
 
 model ConsentRecord {                // P5
   id            String        @id @default(uuid())
@@ -784,6 +785,7 @@ enum EvidenceType {
   LISTING_UPDATED
   LISTING_PUBLISHED
   LISTING_ARCHIVED
+  LISTING_VIEWED
   LANDLORD_VERIFIED
 }
 

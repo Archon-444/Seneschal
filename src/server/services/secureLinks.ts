@@ -1,6 +1,7 @@
 import type { LinkPurpose, ScopeType } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, assertSameWorkspace, require_, scope } from "../authz";
+import type { Capability } from "../capabilities";
 import { generateToken, hashToken } from "../crypto";
 import { recordAudit } from "../audit";
 
@@ -19,9 +20,12 @@ export async function createSecureLink(
     contactId?: string;
     expiresInDays?: number;
     maxUses?: number;
+    /** Capability the caller must hold to mint this link. Defaults to proofs.write
+     *  (the evidence-collection links); listing-share links pass listings.publish. */
+    requiredCapability?: Capability;
   },
 ): Promise<{ linkId: string; url: string }> {
-  require_(ctx, "proofs.write");
+  require_(ctx, args.requiredCapability ?? "proofs.write");
   const { token, tokenHash } = generateToken();
   const link = await prisma.secureLink.create({
     data: {

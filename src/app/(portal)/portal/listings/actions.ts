@@ -64,3 +64,18 @@ export async function archiveListingAction(formData: FormData) {
   await listings.archiveListing(ctx, s(formData, "id"));
   redirect("/portal/listings");
 }
+
+/** useActionState handler: mint a public share link and return its one-time URL
+ *  for display (the raw token is shown once, never logged or persisted in cleartext). */
+export async function createListingShareLinkAction(
+  _prev: { url?: string; error?: string },
+  formData: FormData,
+): Promise<{ url?: string; error?: string }> {
+  const ctx = await requireCtx();
+  try {
+    const { url } = await listings.createListingShareLink(ctx, s(formData, "id"));
+    return { url };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not create link" };
+  }
+}

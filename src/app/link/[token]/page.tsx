@@ -1,6 +1,7 @@
 import { validateLinkToken } from "@/server/services/secureLinks";
 import { getProofRequestForLink } from "@/server/services/externalProof";
 import { getOfferForLink } from "@/server/services/renewals";
+import { getListingForLink } from "@/server/services/listings";
 import { UploadProofForm } from "./UploadProofForm";
 import { TenantOfferForm } from "./TenantOfferForm";
 
@@ -19,6 +20,50 @@ export default async function ExternalLinkPage({ params }: { params: Promise<{ t
           The link may have expired, been used already, or been withdrawn. Please contact the person
           who sent it to request a new one.
         </p>
+      </SafeShell>
+    );
+  }
+
+  if (validation.link.purpose === "LISTING_VIEW") {
+    const listing = await getListingForLink(validation.link);
+    if (!listing) {
+      return (
+        <SafeShell>
+          <h1 className="font-display text-2xl text-navy-900">This listing is no longer available</h1>
+        </SafeShell>
+      );
+    }
+    const aed = (n: number) => `AED ${n.toLocaleString("en-AE")}`;
+    const unit = [listing.building, listing.unitNo ? `Unit ${listing.unitNo}` : null, listing.community]
+      .filter(Boolean)
+      .join(" · ");
+    return (
+      <SafeShell>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="font-display text-2xl text-navy-900">{listing.headline ?? unit}</h1>
+          {listing.ownerVerified && (
+            <span className="rounded-full bg-verde/10 px-2.5 py-1 text-xs font-medium text-verde">Verified landlord</span>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-navy-500">{unit}</p>
+
+        <dl className="mt-5 divide-y divide-ivory-200 rounded-md border border-ivory-300">
+          {listing.askingRent != null && <Row label="Asking rent" value={`${aed(listing.askingRent)} / year`} />}
+          {listing.bedrooms != null && <Row label="Bedrooms" value={String(listing.bedrooms)} />}
+          {listing.sizeSqft != null && <Row label="Size" value={`${listing.sizeSqft.toLocaleString("en-AE")} sqft`} />}
+          {listing.furnished != null && <Row label="Furnishing" value={listing.furnished ? "Furnished" : "Unfurnished"} />}
+          {listing.availableFrom && <Row label="Available from" value={listing.availableFrom.toISOString().slice(0, 10)} />}
+          {listing.propertyType && <Row label="Type" value={listing.propertyType} />}
+        </dl>
+        {listing.description && <p className="mt-4 text-sm leading-relaxed text-navy-700">{listing.description}</p>}
+
+        <div className="mt-8 rounded-md bg-ivory-100 p-4 text-xs leading-relaxed text-navy-500">
+          <p className="font-medium text-navy-700">About this page</p>
+          <p className="mt-1">
+            Seneschal is a technology platform, not a broker or legal adviser. This listing is shared by the
+            managing office on the owner&apos;s behalf. Your interaction with this link is recorded.
+          </p>
+        </div>
       </SafeShell>
     );
   }

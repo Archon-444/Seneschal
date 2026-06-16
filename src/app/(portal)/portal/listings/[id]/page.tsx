@@ -6,6 +6,7 @@ import { listingReadiness } from "@/server/calculators/listingReadiness";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, Button, Card, Field, inputClass, Money, PageHeader } from "@/components/ui";
 import { archiveListingAction, publishListingAction, updateListingAction } from "../actions";
+import { ShareListing } from "../ShareListing";
 
 function dateValue(d: Date | null): string {
   return d ? d.toISOString().slice(0, 10) : "";
@@ -76,6 +77,14 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               </form>
             ) : null}
           </div>
+
+          {listing.status === "PUBLISHED" && (
+            <div className="mt-5 border-t border-line pt-4">
+              <div className="mb-2 text-sm font-medium text-navy-900">Public link</div>
+              <p className="mb-2 text-xs text-muted">Anyone with the link can view this listing — no account needed. The link is shown once.</p>
+              <ShareListing listingId={listing.id} />
+            </div>
+          )}
         </Card>
 
         {/* Edit */}

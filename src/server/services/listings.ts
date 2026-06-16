@@ -1,9 +1,11 @@
-import { Prisma, type Listing, type Property } from "@prisma/client";
+import { Prisma, type Listing, type Property, type SecureLink } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, require_, scope } from "../authz";
 import { recordEvidence } from "../evidence";
 import { assertReadable, contactScopedWhere } from "./contactScope";
 import { syncListingPermitDeadline } from "./deadlines";
+import { createSecureLink, consumeLinkUse } from "./secureLinks";
+import { isLandlordVerified } from "./landlords";
 import { listingReadiness, type ListingReadinessResult } from "../calculators/listingReadiness";
 import { toUtcDateOnly } from "../calculators/dates";
 
@@ -182,6 +184,80 @@ export async function archiveListing(ctx: AuthzContext, id: string) {
     propertyId: updated.propertyId,
   });
   return updated;
+}
+
+/**
+ * Mint a public, no-login share link for a PUBLISHED listing (1B #4). The raw
+ * token is returned once in the URL; only its hash is stored. Gated on
+ * listings.publish (a landlord holds it), not proofs.write.
+ */
+export async function createListingShareLink(ctx: AuthzContext, id: string) {
+  require_(ctx, "listings.publish");
+  const listing = await getListing(ctx, id); // scope check
+  if (listing.status !== "PUBLISHED") {
+    throw new AuthzError("Only a published listing can be shared", 422);
+  }
+  return createSecureLink(ctx, {
+    purpose: "LISTING_VIEW",
+    scopeType: "LISTING",
+    scopeId: id,
+    requiredCapability: "listings.publish",
+    expiresInDays: 90,
+  });
+}
+
+/** Public view model rendered behind a LISTING_VIEW secure link — marketing fields
+ *  only, never owner/tenant PII. Each fetch records a LISTING_VIEWED event. */
+export interface PublicListingView {
+  headline: string | null;
+  community: string;
+  building: string | null;
+  unitNo: string | null;
+  propertyType: string | null;
+  bedrooms: number | null;
+  sizeSqft: number | null;
+  askingRent: number | null;
+  availableFrom: Date | null;
+  furnished: boolean | null;
+  description: string | null;
+  ownerVerified: boolean;
+}
+
+export async function getListingForLink(link: SecureLink): Promise<PublicListingView | null> {
+  if (link.purpose !== "LISTING_VIEW" || link.scopeType !== "LISTING" || !link.scopeId) return null;
+  const listing = await prisma.listing.findUnique({
+    where: { id: link.scopeId },
+    include: { property: true },
+  });
+  // Only ever expose a currently-PUBLISHED listing — never a draft or archived one.
+  if (!listing || listing.status !== "PUBLISHED") return null;
+
+  const ownerVerified = await isLandlordVerified(listing.workspaceId, listing.property.ownerContactId);
+  await recordEvidence({
+    workspaceId: listing.workspaceId,
+    type: "LISTING_VIEWED",
+    actorType: "TENANT_LINK",
+    scopeType: "LISTING",
+    scopeId: listing.id,
+    propertyId: listing.propertyId,
+    payload: { secureLinkId: link.id },
+  });
+  await consumeLinkUse(link.id);
+
+  return {
+    headline: listing.headline,
+    community: listing.property.community,
+    building: listing.property.building,
+    unitNo: listing.property.unitNo,
+    propertyType: listing.property.propertyType,
+    bedrooms: listing.property.bedrooms,
+    sizeSqft: listing.property.sizeSqft,
+    askingRent: listing.askingRent != null ? Number(listing.askingRent) : null,
+    availableFrom: listing.availableFrom,
+    furnished: listing.furnished,
+    description: listing.description,
+    ownerVerified,
+  };
 }
 
 /** Recompute the readiness score from current fields and cache it on the row. */
