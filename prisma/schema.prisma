@@ -548,7 +548,8 @@ enum LinkPurpose {
   APPROVAL
   TENANT_OFFER
   LISTING_VIEW
-} // TENANT_OFFER activates Stage 2; LISTING_VIEW is the public 1B listing page
+  PASSPORT_SHARE
+} // TENANT_OFFER activates Stage 2; LISTING_VIEW + PASSPORT_SHARE are 1B/1C public pages
 
 model ConsentRecord {                // P5
   id            String        @id @default(uuid())
@@ -572,6 +573,7 @@ enum ConsentPurpose {
   MESSAGING
   DOCUMENT_STORAGE
   LINK_INTERACTION
+  PASSPORT_SHARING
 }
 enum ConsentSource {
   SECURE_LINK
@@ -816,6 +818,9 @@ enum EvidenceType {
   LISTING_ARCHIVED
   LISTING_VIEWED
   LANDLORD_VERIFIED
+  PASSPORT_SHARED
+  PASSPORT_VIEWED
+  ENQUIRY_RECEIVED
 }
 
 model AuditEvent {                   // security/admin log; insert-only; hash chain in v1.1 (D6)

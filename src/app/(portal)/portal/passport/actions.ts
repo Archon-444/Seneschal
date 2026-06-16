@@ -29,6 +29,25 @@ export async function updatePassportAction(formData: FormData) {
   revalidatePath("/portal/passport");
 }
 
+/** useActionState handler: consent-gated passport share. Returns the one-time URL
+ *  (or an error) for display; the raw token is never logged or persisted in cleartext. */
+export async function sharePassportAction(
+  _prev: { url?: string; error?: string },
+  formData: FormData,
+): Promise<{ url?: string; error?: string }> {
+  const ctx = await requireCtx();
+  try {
+    const { url } = await passport.sharePassport(ctx, {
+      consent: formData.get("consent") === "on",
+      recipientName: opt(formData, "recipientName"),
+      recipientEmail: opt(formData, "recipientEmail"),
+    });
+    return { url };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not create link" };
+  }
+}
+
 export async function uploadPassportDocumentAction(formData: FormData) {
   const ctx = await requireCtx();
   const file = formData.get("file") as File | null;

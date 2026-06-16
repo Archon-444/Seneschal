@@ -5,6 +5,7 @@ import { getDocumentUrl } from "@/server/services/documents";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, Button, Card, EmptyState, Field, inputClass, PageHeader, Table, Td } from "@/components/ui";
 import { updatePassportAction, uploadPassportDocumentAction } from "./actions";
+import { SharePassport } from "./SharePassport";
 
 function dateValue(d: Date | null): string {
   return d ? d.toISOString().slice(0, 10) : "";
@@ -107,22 +108,30 @@ export default async function PassportPage() {
               </Table>
             )}
           </div>
-          <Card>
-            <h3 className="mb-3 text-sm font-medium text-navy-900">Add a document</h3>
-            <form action={uploadPassportDocumentAction} className="space-y-3">
-              <Field label="Type">
-                <select name="kind" className={inputClass}>
-                  <option value="ID_DOCUMENT">ID / passport</option>
-                  <option value="BANK_CONFIRMATION">Salary / bank confirmation</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </Field>
-              <Field label="File">
-                <input name="file" type="file" required className={inputClass} />
-              </Field>
-              <Button type="submit">Upload</Button>
-            </form>
-          </Card>
+          <div className="space-y-6">
+            <Card>
+              <h3 className="mb-3 text-sm font-medium text-navy-900">Add a document</h3>
+              <form action={uploadPassportDocumentAction} className="space-y-3">
+                <Field label="Type">
+                  <select name="kind" className={inputClass}>
+                    <option value="ID_DOCUMENT">ID / passport</option>
+                    <option value="BANK_CONFIRMATION">Salary / bank confirmation</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </Field>
+                <Field label="File">
+                  <input name="file" type="file" required className={inputClass} />
+                </Field>
+                <Button type="submit">Upload</Button>
+              </form>
+            </Card>
+
+            <Card>
+              <h3 className="mb-1 text-sm font-medium text-navy-900">Share your passport</h3>
+              <p className="mb-3 text-xs text-muted">Creates a secure link — no account needed to view. Shown once.</p>
+              <SharePassport />
+            </Card>
+          </div>
         </div>
       </section>
     </>
