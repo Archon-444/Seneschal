@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { type AuthzContext, AuthzError, require_, scope } from "../authz";
 import { recordEvidence } from "../evidence";
 import { assertReadable, contactScopedWhere } from "./contactScope";
+import { syncListingPermitDeadline } from "./deadlines";
 import { listingReadiness, type ListingReadinessResult } from "../calculators/listingReadiness";
 import { toUtcDateOnly } from "../calculators/dates";
 
@@ -68,6 +69,7 @@ export async function createListing(ctx: AuthzContext, propertyId: string, input
     },
   });
   const stored = await storeReadiness(created, property!);
+  await syncListingPermitDeadline(stored);
 
   await recordEvidence({
     workspaceId: ctx.workspaceId,
@@ -89,6 +91,7 @@ export async function updateListing(ctx: AuthzContext, id: string, input: Listin
   await prisma.listing.update({ where: { id }, data: toData(input) });
   const refreshed = await prisma.listing.findUnique({ where: { id } });
   const stored = await storeReadiness(refreshed!, existing.property);
+  await syncListingPermitDeadline(stored);
 
   await recordEvidence({
     workspaceId: ctx.workspaceId,
@@ -145,6 +148,7 @@ export async function publishListing(ctx: AuthzContext, id: string) {
       readiness: readiness as unknown as Prisma.InputJsonValue,
     },
   });
+  await syncListingPermitDeadline(updated);
   await recordEvidence({
     workspaceId: ctx.workspaceId,
     type: "LISTING_PUBLISHED",
@@ -166,6 +170,7 @@ export async function archiveListing(ctx: AuthzContext, id: string) {
     where: { id },
     data: { status: "ARCHIVED", archivedAt: new Date() },
   });
+  await syncListingPermitDeadline(updated);
   await recordEvidence({
     workspaceId: ctx.workspaceId,
     type: "LISTING_ARCHIVED",

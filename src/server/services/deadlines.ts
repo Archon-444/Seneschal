@@ -111,6 +111,59 @@ export async function regenerateDeadlinesForTenancy(tenancyId: string, db: Db = 
   }
 }
 
+/**
+ * Keep a listing's RERA permit-expiry deadline (1B #3) in sync with its current
+ * state. A live listing with a permit expiry date carries one OPEN PERMIT_EXPIRY
+ * deadline (property-scoped, no tenancy); clearing the date or archiving the
+ * listing cancels it. Discriminated by listing id so re-runs never duplicate.
+ */
+export async function syncListingPermitDeadline(
+  listing: {
+    id: string;
+    workspaceId: string;
+    propertyId: string;
+    permitExpiry: Date | null;
+    permitRef: string | null;
+    status: string;
+    archivedAt: Date | null;
+  },
+  db: Db = prisma,
+) {
+  const existing = await db.deadline.findFirst({
+    where: {
+      workspaceId: listing.workspaceId,
+      kind: "PERMIT_EXPIRY",
+      status: "OPEN",
+      computedFrom: { path: ["discriminator"], equals: listing.id },
+    },
+  });
+  const active = listing.permitExpiry != null && listing.status !== "ARCHIVED" && listing.archivedAt == null;
+  if (!active) {
+    if (existing) await db.deadline.update({ where: { id: existing.id }, data: { status: "CANCELLED" } });
+    return existing ? { ...existing, status: "CANCELLED" } : null;
+  }
+  const data = {
+    dueAt: toUtcDateOnly(listing.permitExpiry!),
+    computedFrom: {
+      rule: "listing_permit_v1",
+      discriminator: listing.id,
+      listingId: listing.id,
+      permitRef: listing.permitRef,
+    } as Prisma.InputJsonValue,
+  };
+  if (existing) return db.deadline.update({ where: { id: existing.id }, data });
+  return db.deadline.create({
+    data: {
+      workspaceId: listing.workspaceId,
+      propertyId: listing.propertyId,
+      tenancyId: null,
+      kind: "PERMIT_EXPIRY",
+      status: "OPEN",
+      ...data,
+    },
+  });
+}
+
 // ── Calendar + list views (T3.3)
 
 export interface DeadlineFilters {

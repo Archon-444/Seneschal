@@ -35,6 +35,16 @@ export const LADDERS: Record<string, { kinds: string[]; rungs: LadderRung[] }> =
       { daysBefore: -3, code: "T+3" },
     ],
   },
+  // RERA permit expiry on a listing (1B #3): a lapsed permit means the unit can no
+  // longer be advertised, so warn well ahead and again as it closes in.
+  listing_permit_v1: {
+    kinds: ["PERMIT_EXPIRY"],
+    rungs: [
+      { daysBefore: 60, code: "T-60" },
+      { daysBefore: 30, code: "T-30" },
+      { daysBefore: 7, code: "T-7" },
+    ],
+  },
 };
 
 /** Run all ladders for a workspace. Called daily by the worker. */
@@ -53,23 +63,32 @@ export async function runAlertLadders(workspaceId: string): Promise<number> {
     });
     for (const deadline of deadlines) {
       const daysOut = daysBetween(today, deadline.dueAt);
+      // Permit-expiry deadlines carry no tenancy; resolve the property directly so the
+      // reminder still names the unit and the evidence is property- (not tenancy-) scoped.
+      const prop =
+        deadline.tenancy?.property ??
+        (deadline.propertyId
+          ? await prisma.property.findUnique({
+              where: { id: deadline.propertyId },
+              select: { community: true, unitNo: true },
+            })
+          : null);
+      const where = prop ? `${prop.community} ${prop.unitNo ?? ""}`.trim() : "your portfolio";
+      const evScopeType = deadline.tenancyId ? "TENANCY" : "PROPERTY";
+      const evScopeId = deadline.tenancyId ?? deadline.propertyId ?? deadline.id;
       for (const rung of ladder.rungs) {
         if (daysOut !== rung.daysBefore) continue;
         const already = await prisma.evidenceEvent.findFirst({
           where: {
             workspaceId,
             type: "REMINDER_SENT",
-            scopeType: "TENANCY",
-            scopeId: deadline.tenancyId ?? deadline.id,
+            scopeType: evScopeType,
+            scopeId: evScopeId,
             payload: { path: ["deadlineId"], equals: deadline.id },
             AND: { payload: { path: ["rung"], equals: rung.code } },
           },
         });
         if (already) continue;
-
-        const where = deadline.tenancy?.property
-          ? `${deadline.tenancy.property.community} ${deadline.tenancy.property.unitNo ?? ""}`.trim()
-          : "your portfolio";
 
         // RERA enrichment: notice-gate ladder only, and only when an index resolves.
         // Carries the index-based ceiling estimate + value-at-risk into the reminder.
@@ -102,16 +121,16 @@ export async function runAlertLadders(workspaceId: string): Promise<number> {
           recipientUserIds: overseerIds,
           // The final 72h rung is the can't-miss one — always email immediately.
           urgent: rung.code === "72h-in-window",
-          relatedType: "TENANCY",
-          relatedId: deadline.tenancyId ?? undefined,
+          relatedType: evScopeType,
+          relatedId: evScopeId,
           prefs,
         });
         await recordEvidence({
           workspaceId,
           type: "REMINDER_SENT",
           actorType: "SYSTEM",
-          scopeType: "TENANCY",
-          scopeId: deadline.tenancyId ?? deadline.id,
+          scopeType: evScopeType,
+          scopeId: evScopeId,
           tenancyId: deadline.tenancyId,
           propertyId: deadline.propertyId,
           payload: { deadlineId: deadline.id, rung: rung.code, template: templateCode },

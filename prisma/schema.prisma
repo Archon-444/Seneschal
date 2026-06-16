@@ -262,6 +262,7 @@ enum DeadlineKind {
   APPROVAL_DUE
   TENANT_RESPONSE_DUE
   EJARI_RENEWAL
+  PERMIT_EXPIRY
   CUSTOM
 }
 enum DeadlineStatus {
