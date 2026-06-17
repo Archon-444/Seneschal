@@ -26,6 +26,7 @@ export const CAPABILITIES = [
   "landlords.verify",
   "tenancies.read",
   "tenancies.write",
+  "tenancies.upload",
   "payments.read",
   "payments.write",
   "deadlines.read",
@@ -142,6 +143,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   // offers.* / renewals.* arrive with their authenticated services in Stage 2.
   TENANT: [
     "tenancies.read",
+    "tenancies.upload",
     "payments.read",
     "deadlines.read",
     "documents.read",

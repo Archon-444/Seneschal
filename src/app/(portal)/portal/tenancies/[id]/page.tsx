@@ -5,7 +5,8 @@ import { isPersonaRole } from "@/server/authz";
 import { getTenancy } from "@/server/services/tenancies";
 import { listDocuments, getDocumentUrl } from "@/server/services/documents";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Card, EmptyState, KpiCard, Money, PageHeader, Reminder, Table, Td } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Field, inputClass, KpiCard, Money, PageHeader, Reminder, Table, Td } from "@/components/ui";
+import { uploadTenancyDocumentAction } from "./actions";
 
 function propLabel(p: { community: string; building: string | null; unitNo: string | null }): string {
   return [p.building, p.unitNo ? `Unit ${p.unitNo}` : null, p.community].filter(Boolean).join(" · ");
@@ -79,6 +80,18 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
                   </li>
                 ))}
               </ul>
+            </Card>
+          )}
+          {ctx.role === "TENANT" && (
+            <Card className="mt-4">
+              <h3 className="mb-2 text-sm font-medium text-navy-900">Add a document</h3>
+              <form action={uploadTenancyDocumentAction} className="flex items-end gap-2">
+                <input type="hidden" name="tenancyId" value={id} />
+                <Field label="File">
+                  <input name="file" type="file" required className={inputClass} />
+                </Field>
+                <Button type="submit">Upload</Button>
+              </form>
             </Card>
           )}
         </div>

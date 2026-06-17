@@ -41,6 +41,11 @@ describe("role capability matrix", () => {
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
+    "tenancies.upload": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: false, TENANT: true,
+    },
     "tenancies.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
       AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
@@ -198,9 +203,14 @@ describe("role capability matrix", () => {
   // TENANT is read-only across the portfolio EXCEPT for managing/sharing its own
   // rental passport (1C): passport.read/write/share. Scoping to one Contact is
   // enforced separately in authz/contactScope.
-  it("TENANT is read-only apart from its own passport and move-in acknowledgement", () => {
+  it("TENANT is read-only apart from its own passport, move-in ack and tenancy upload", () => {
     for (const cap of ROLE_CAPABILITIES.TENANT) {
-      expect(cap.endsWith(".read") || cap.startsWith("passport.") || cap.startsWith("movein.")).toBe(true);
+      expect(
+        cap.endsWith(".read") ||
+          cap.startsWith("passport.") ||
+          cap.startsWith("movein.") ||
+          cap === "tenancies.upload",
+      ).toBe(true);
     }
   });
 
