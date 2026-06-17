@@ -7,6 +7,7 @@ import type { NavItem } from "./nav";
 import { UserMenu } from "./UserMenu";
 import { NotificationBell } from "./NotificationBell";
 import { CloseIcon, MenuIcon, PanelLeftIcon } from "../icons";
+import { Logo } from "../Logo";
 
 const SIDEBAR_COOKIE = "seneschal_sidebar";
 
@@ -41,8 +42,9 @@ export function AppShell({
   }
 
   const brand = (full: boolean) => (
-    <Link href="/dashboard" className="font-display text-2xl text-ivory-50">
-      {full ? "Seneschal" : "S"}
+    <Link href="/dashboard" className={`flex items-center text-ivory-50 ${full ? "gap-2" : "justify-center"}`}>
+      <Logo className="h-8 w-8 shrink-0" />
+      {full && <span className="font-display text-2xl">Seneschal</span>}
     </Link>
   );
 
