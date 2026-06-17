@@ -4,10 +4,11 @@ import { requireCtx } from "@/server/auth/request";
 import { isPersonaRole } from "@/server/authz";
 import { getTenancy } from "@/server/services/tenancies";
 import { listOffersForTenant } from "@/server/services/renewals";
+import { listTenancyReceipts } from "@/server/services/payments";
 import { listDocuments, getDocumentUrl } from "@/server/services/documents";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, Button, Card, EmptyState, Field, inputClass, KpiCard, Money, PageHeader, Reminder, Table, Td } from "@/components/ui";
-import { respondToOfferAction, uploadTenancyDocumentAction } from "./actions";
+import { respondToOfferAction, uploadTenancyDocumentAction, viewReceiptAction } from "./actions";
 
 function propLabel(p: { community: string; building: string | null; unitNo: string | null }): string {
   return [p.building, p.unitNo ? `Unit ${p.unitNo}` : null, p.community].filter(Boolean).join(" · ");
@@ -29,6 +30,9 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
   const nextPayment = tenancy.paymentItems.find((p) => p.status === "SCHEDULED" || p.status === "REQUESTED");
   const offers = ctx.role === "TENANT" ? await listOffersForTenant(ctx, id) : [];
   const openOffer = offers.find((o) => o.status === "SENT" || o.status === "COUNTERED");
+  // Receipt vault: map each payment item to its receipt document, if any.
+  const receipts = await listTenancyReceipts(ctx, id);
+  const receiptByItem = new Map(receipts.map((d) => [d.scopeId!, d]));
 
   return (
     <>
@@ -95,16 +99,30 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
       )}
 
       <h2 className="mb-3 font-display text-xl text-navy-900">Payment schedule</h2>
-      <Table headers={["#", "Due", "Amount", "Instrument", "Status"]}>
-        {tenancy.paymentItems.map((p) => (
-          <tr key={p.id}>
-            <Td className="figure">{p.seq}</Td>
-            <Td className="figure">{formatDubaiDate(p.dueDate)}</Td>
-            <Td><Money amount={String(p.amount)} /></Td>
-            <Td>{p.instrument}{p.chequeNo ? ` · ${p.chequeNo}` : ""}</Td>
-            <Td><Badge value={p.status} /></Td>
-          </tr>
-        ))}
+      <p className="mb-3 text-xs text-muted">Record-keeping only — Seneschal never holds funds.</p>
+      <Table headers={["#", "Due", "Amount", "Instrument", "Status", "Receipt"]}>
+        {tenancy.paymentItems.map((p) => {
+          const receipt = receiptByItem.get(p.id);
+          return (
+            <tr key={p.id}>
+              <Td className="figure">{p.seq}</Td>
+              <Td className="figure">{formatDubaiDate(p.dueDate)}</Td>
+              <Td><Money amount={String(p.amount)} /></Td>
+              <Td>{p.instrument}{p.chequeNo ? ` · ${p.chequeNo}` : ""}</Td>
+              <Td><Badge value={p.status} /></Td>
+              <Td>
+                {receipt ? (
+                  <form action={viewReceiptAction}>
+                    <input type="hidden" name="documentId" value={receipt.id} />
+                    <button type="submit" className="text-gold-700 hover:underline">View</button>
+                  </form>
+                ) : (
+                  <span className="text-muted">—</span>
+                )}
+              </Td>
+            </tr>
+          );
+        })}
       </Table>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">

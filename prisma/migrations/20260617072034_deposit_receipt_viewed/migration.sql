@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "EvidenceType" ADD VALUE 'DEPOSIT_RECEIPT_VIEWED';

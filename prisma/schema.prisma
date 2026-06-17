@@ -929,6 +929,7 @@ enum EvidenceType {
   CONTRACT_PACK_SIGNED
   MOVEIN_ACKNOWLEDGED
   MOVEIN_COMPLETED
+  DEPOSIT_RECEIPT_VIEWED
 }
 
 model AuditEvent {                   // security/admin log; insert-only; hash chain in v1.1 (D6)

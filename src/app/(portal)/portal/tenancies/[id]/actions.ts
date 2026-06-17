@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { uploadTenancyDocument } from "@/server/services/tenancies";
 import { respondToOfferAsTenant } from "@/server/services/renewals";
+import { viewPaymentReceipt } from "@/server/services/payments";
 
 function s(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -24,6 +26,15 @@ export async function uploadTenancyDocumentAction(formData: FormData) {
     });
   }
   revalidatePath(`/portal/tenancies/${tenancyId}`);
+}
+
+// View a cheque/deposit receipt (2B #18): records DEPOSIT_RECEIPT_VIEWED, then
+// redirects to the short-lived signed URL. The service gates on the payment item's
+// contact scope, so a tenant only ever views receipts on their own payments.
+export async function viewReceiptAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const { url } = await viewPaymentReceipt(ctx, String(formData.get("documentId") ?? ""));
+  redirect(url);
 }
 
 // Authenticated counter-offer (2B #17): the tenant accepts / counters / asks about a
