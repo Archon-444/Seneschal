@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import * as listings from "@/server/services/listings";
 import * as offers from "@/server/services/offers";
+import * as contractPack from "@/server/services/contractPack";
 import type { ListingInput } from "@/server/services/listings";
 
 // Portal server actions (1B) — thin glue from the landlord forms to the listings
@@ -81,6 +82,12 @@ export async function proposeOfferAction(formData: FormData) {
 export async function acceptOfferAction(formData: FormData) {
   const ctx = await requireCtx();
   await offers.acceptNewTenancyOffer(ctx, s(formData, "offerId"));
+  revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
+}
+
+export async function generateContractPackAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await contractPack.generateContractPack(ctx, s(formData, "offerId"));
   revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
 }
 

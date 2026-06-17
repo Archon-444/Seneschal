@@ -3,12 +3,15 @@ import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { getListing } from "@/server/services/listings";
 import { listListingOffers } from "@/server/services/offers";
+import { listContractPacks } from "@/server/services/contractPack";
+import { getDocumentUrl } from "@/server/services/documents";
 import { listingReadiness } from "@/server/calculators/listingReadiness";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, Button, Card, EmptyState, Field, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
 import {
   acceptOfferAction,
   archiveListingAction,
+  generateContractPackAction,
   proposeOfferAction,
   publishListingAction,
   updateListingAction,
@@ -38,7 +41,12 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   });
   const canPublish = readiness.canPublish && listing.status !== "PUBLISHED";
   const offers = await listListingOffers(ctx, listing.id);
-  const decided = offers.some((o) => o.status === "ACCEPTED");
+  const acceptedOffer = offers.find((o) => o.status === "ACCEPTED");
+  const decided = !!acceptedOffer;
+  const packs = await listContractPacks(ctx, listing.id);
+  const packLinks = await Promise.all(
+    packs.map(async (p) => ({ pack: p, url: (await getDocumentUrl(ctx, p.documentId)).url })),
+  );
 
   return (
     <>
@@ -176,7 +184,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 <Field label="From">
                   <select name="party" className={inputClass}>
                     <option value="LANDLORD">You (landlord terms)</option>
-                    <option value="TENANT">A prospect's offer</option>
+                    <option value="TENANT">A prospect&apos;s offer</option>
                   </select>
                 </Field>
                 <Field label="Annual rent (AED)">
@@ -194,6 +202,29 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               </form>
             )}
           </Card>
+
+          {decided && (
+            <Card className="mt-6">
+              <h2 className="font-display mb-3 text-lg text-navy-900">Contract pack</h2>
+              {packLinks.length === 0 ? (
+                <p className="text-sm text-muted">An offer is accepted. Generate the summary pack of agreed terms for signature.</p>
+              ) : (
+                <ul className="mb-3 space-y-1 text-sm">
+                  {packLinks.map(({ pack, url }) => (
+                    <li key={pack.id} className="flex items-center justify-between">
+                      <span>Pack · {formatDubaiDate(pack.createdAt)} · <Badge value={pack.status} /></span>
+                      <a href={url} target="_blank" rel="noreferrer" className="text-gold-700 hover:underline">View PDF</a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <form action={generateContractPackAction}>
+                <input type="hidden" name="offerId" value={acceptedOffer!.id} />
+                <input type="hidden" name="listingId" value={listing.id} />
+                <Button type="submit" variant="secondary">Generate contract pack</Button>
+              </form>
+            </Card>
+          )}
         </div>
       </div>
     </>

@@ -76,6 +76,11 @@ describe("role capability matrix", () => {
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: true, TENANT: false,
     },
+    "contracts.write": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: true, TENANT: false,
+    },
     "landlords.verify": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
@@ -192,9 +197,14 @@ describe("role capability matrix", () => {
   // LANDLORD is read-only across the portfolio EXCEPT for managing its own listings
   // (1B supply side) and negotiating offers on them (2A): listings.* and offers.*.
   // Scoping to one Contact's owned properties is enforced separately in contactScope.
-  it("LANDLORD is read-only apart from its own listings and offers", () => {
+  it("LANDLORD is read-only apart from its own listings, offers and contracts", () => {
     for (const cap of ROLE_CAPABILITIES.LANDLORD) {
-      expect(cap.endsWith(".read") || cap.startsWith("listings.") || cap.startsWith("offers.")).toBe(true);
+      expect(
+        cap.endsWith(".read") ||
+          cap.startsWith("listings.") ||
+          cap.startsWith("offers.") ||
+          cap.startsWith("contracts."),
+      ).toBe(true);
     }
   });
 });

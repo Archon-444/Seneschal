@@ -313,6 +313,31 @@ enum ViewingStatus {
   NO_SHOW
 }
 
+// Contract pack (2A #12) — a generated PDF of the agreed terms from an accepted
+// new-tenancy Offer, stored as a Document (PROPERTY-scoped so owner + operator can
+// read it). The e-sign reference (#13) is captured here, not in a separate table.
+model ContractPack {
+  id          String             @id @default(uuid())
+  workspaceId String
+  offerId     String
+  listingId   String?
+  propertyId  String
+  documentId  String             // the generated PDF Document
+  status      ContractPackStatus @default(GENERATED)
+  eSignRef    String?            // external e-sign provider reference (#13)
+  sentAt      DateTime?
+  signedAt    DateTime?
+  createdById String?
+  createdAt   DateTime           @default(now())
+  @@index([workspaceId, offerId])
+}
+
+enum ContractPackStatus {
+  GENERATED
+  SENT_FOR_SIGNATURE
+  SIGNED
+}
+
 // ───────────────────────────── Deadlines & calendar [1A]
 
 model Deadline {
@@ -876,6 +901,9 @@ enum EvidenceType {
   ENQUIRY_RECEIVED
   VIEWING_SCHEDULED
   VIEWING_COMPLETED
+  CONTRACT_PACK_GENERATED
+  CONTRACT_PACK_SENT
+  CONTRACT_PACK_SIGNED
 }
 
 model AuditEvent {                   // security/admin log; insert-only; hash chain in v1.1 (D6)
