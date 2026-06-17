@@ -319,7 +319,7 @@ describe("writes denied for sibling B (capability ≠ scope)", () => {
 });
 
 describe("writes allowed for assigned client A (and evidence/audit actually persist)", () => {
-  it("createProperty under A's client succeeds", async () => {
+  it("createProperty under A's client succeeds and stamps the audit row with the delegate", async () => {
     const p = await properties.createProperty(D.ctx, {
       clientPrincipalId: A.clientId,
       community: "A New",
@@ -327,6 +327,12 @@ describe("writes allowed for assigned client A (and evidence/audit actually pers
       unitNo: "9",
     });
     expect(p.clientPrincipalId).toBe(A.clientId);
+    // Step 6: the AuditEvent must carry the delegate's userId, not a fallback/operator id.
+    const audit = await prisma.auditEvent.findFirst({
+      where: { workspaceId: W.workspaceId, verb: "property.create", objectId: p.id },
+    });
+    expect(audit?.actorId).toBe(D.userId);
+    expect(audit?.actorType).toBe("USER");
   });
 
   it("updateProperty on A succeeds", async () => {

@@ -142,6 +142,8 @@ function composeBody(items: NotificationMessage[], summary: string): string {
 }
 
 async function portfolioSummary(workspaceId: string): Promise<string> {
+  // scope-audit: workspace-batch digest cron (no ctx); intentionally a whole-workspace
+  // roll-up for the operator digest, never served to a client-scoped or delegate context.
   const today = todayInDubai();
   const in7 = new Date(today.getTime() + 7 * 86_400_000);
   const [deadlines, flags, proofs] = await Promise.all([
