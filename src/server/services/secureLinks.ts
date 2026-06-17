@@ -10,6 +10,9 @@ import { recordAudit } from "../audit";
 // never appear in logs.
 
 const DEFAULT_TTL_DAYS = 14;
+/** Default cap for newly-minted proof-upload links (H5). Bounds replay on an
+ *  uncapped link; does not backfill links already issued. */
+export const PROOF_LINK_DEFAULT_MAX_USES = 20;
 
 export async function createSecureLink(
   ctx: AuthzContext,

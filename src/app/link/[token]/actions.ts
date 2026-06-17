@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { validateLinkToken, consumeLinkUse } from "@/server/services/secureLinks";
+import { consumeRateLimit } from "@/server/services/rateLimit";
 import { isQuarantined } from "@/server/config/features";
 import { submitProofViaLink } from "@/server/services/proofs";
 import { respondToOfferViaLink } from "@/server/services/renewals";
@@ -55,6 +56,12 @@ export async function respondToOfferAction(
 }
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
+// H5 upload caps. The total request body is already hard-capped by Next's
+// serverActions.bodySizeLimit; these guard the count and the per-(link, IP)
+// submission rate that the body limit doesn't.
+const MAX_FILES_PER_REQUEST = 10;
+const PROOF_RATE_LIMIT = 10; // submissions per window per (linkId, ip)
+const PROOF_RATE_WINDOW_MS = 5 * 60_000;
 
 export async function submitProofAction(_prev: SubmitState, formData: FormData): Promise<SubmitState> {
   const token = String(formData.get("token") ?? "");
@@ -65,10 +72,22 @@ export async function submitProofAction(_prev: SubmitState, formData: FormData):
 
   const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   if (files.length === 0) return { status: "error", message: "Choose at least one file." };
+  if (files.length > MAX_FILES_PER_REQUEST) {
+    return { status: "error", message: `Please upload at most ${MAX_FILES_PER_REQUEST} files at a time.` };
+  }
   for (const f of files) {
     if (f.size > MAX_FILE_BYTES) {
       return { status: "error", message: `${f.name} is larger than 15 MB.` };
     }
+  }
+
+  const h = await headers();
+  // H5: durable per-(link, IP) rate limit BEFORE consuming or ingesting — rejects
+  // an abusive burst cheaply, and survives serverless cold starts (Postgres-backed).
+  const ip = (h.get("x-forwarded-for") ?? "unknown").split(",")[0].trim() || "unknown";
+  const rl = await consumeRateLimit(`proof:${validation.link.id}:${ip}`, PROOF_RATE_LIMIT, PROOF_RATE_WINDOW_MS);
+  if (!rl.ok) {
+    return { status: "error", message: "Too many attempts. Please wait a few minutes and try again." };
   }
 
   // H4: consume the use atomically BEFORE the side effect. Under concurrent
@@ -80,7 +99,6 @@ export async function submitProofAction(_prev: SubmitState, formData: FormData):
   const { consumed } = await consumeLinkUse(validation.link.id);
   if (!consumed) return { status: "error", message: "This link is no longer available." };
 
-  const h = await headers();
   await submitProofViaLink(
     validation.link,
     await Promise.all(

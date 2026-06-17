@@ -203,6 +203,12 @@ describe("secure links (T7.2)", () => {
     expect(await secureLinks.consumeLinkUse(linkId)).toEqual({ consumed: false });
   });
 
+  it("H5: newly-minted proof links carry a default maxUses cap", async () => {
+    const { token } = await makeRequestWithLink();
+    const v = await secureLinks.validateLinkToken(token);
+    expect(v.ok && v.link.maxUses).toBe(20);
+  });
+
   it("unknown token is not found", async () => {
     expect(await secureLinks.validateLinkToken("garbage-token")).toEqual({
       ok: false,

@@ -1265,3 +1265,15 @@ model Session {
   createdAt  DateTime @default(now())
   @@index([userId])
 }
+
+// Durable rate limiter (H5/H8). Serverless invocations don't share memory, so a
+// per-process token bucket resets every cold start and never trips; this
+// Postgres-backed fixed-window counter survives the boundary. The increment is a
+// single atomic upsert (see consumeRateLimit) so concurrent hits on one key
+// can't race — the same TOCTOU class H4 fixed for secure links.
+model RateLimit {
+  key         String   @id           // e.g. "proof:<linkId>:<ip>" or "otp:<email>"
+  windowStart DateTime @default(now())
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+}
