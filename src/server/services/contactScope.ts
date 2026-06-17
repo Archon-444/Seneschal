@@ -66,22 +66,27 @@ export async function resolveContactScopeIds(
     });
     passportIds = passports.map((p) => p.id);
   } else {
-    // LANDLORD: union of owned properties and landlord-of-record tenancies.
+    // LANDLORD. Two distinct grants, deliberately NOT merged:
+    //  • OWNED property (ownerContactId) → every lease on the unit (ownership).
+    //  • landlord-of-record on a specific tenancy (landlordContactId) → ONLY that
+    //    tenancy — never the other leases on the same property. Otherwise an old
+    //    landlord-of-record (e.g. before the unit was sold to a new owner) would read
+    //    the new owner's tenancy, payments, deadlines and tenancy-scoped documents.
     const owned = await db.property.findMany({
       where: { workspaceId, ownerContactId: contactId },
       select: { id: true },
     });
+    const ownedPropertyIds = owned.map((p) => p.id);
     const landlordTenancies = await db.tenancy.findMany({
-      where: { workspaceId, landlordContactId: contactId },
+      where: { workspaceId, landlordContactId: contactId, archivedAt: null },
       select: { id: true, propertyId: true },
     });
-    propertyIds = unique([...owned.map((p) => p.id), ...landlordTenancies.map((t) => t.propertyId)]);
-    // Every tenancy on an owned/landlorded property belongs to this landlord.
-    const tenancies = await db.tenancy.findMany({
-      where: { workspaceId, propertyId: { in: propertyIds } },
-      select: { id: true },
-    });
-    tenancyIds = unique([...tenancies.map((t) => t.id), ...landlordTenancies.map((t) => t.id)]);
+    propertyIds = unique([...ownedPropertyIds, ...landlordTenancies.map((t) => t.propertyId)]);
+    // Every lease on an OWNED property, plus only the specific landlord-of-record ones.
+    const ownedTenancies = ownedPropertyIds.length
+      ? await db.tenancy.findMany({ where: { workspaceId, propertyId: { in: ownedPropertyIds } }, select: { id: true } })
+      : [];
+    tenancyIds = unique([...ownedTenancies.map((t) => t.id), ...landlordTenancies.map((t) => t.id)]);
   }
 
   const paymentItems = await db.paymentItem.findMany({
