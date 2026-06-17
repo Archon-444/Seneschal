@@ -59,6 +59,7 @@ export async function addMember(
   role: Role,
   clientPrincipalId?: string,
   subjectContactId?: string,
+  assignedClientIds?: string[],
 ): Promise<TestActor> {
   const user = await prisma.user.create({
     data: { email: `${randomUUID()}@test.example`, name: "member" },
@@ -70,7 +71,13 @@ export async function addMember(
       role,
       clientPrincipalId: clientPrincipalId ?? null,
       subjectContactId: subjectContactId ?? null,
+      assignedClientIds: assignedClientIds ?? [],
     },
   });
   return { ctx: contextFromMembership(user, membership), userId: user.id, workspaceId };
+}
+
+/** Add a MANAGING_AGENT (execution delegate) scoped to a set of ClientPrincipals. */
+export async function makeDelegate(workspaceId: string, assignedClientIds: string[]): Promise<TestActor> {
+  return addMember(workspaceId, "MANAGING_AGENT", undefined, undefined, assignedClientIds);
 }

@@ -1,6 +1,6 @@
 import { Prisma, type EvidenceType, type Instrument, type PaymentStatus } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
+import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, require_, scope } from "../authz";
 import { recordEvidence } from "../evidence";
 import { formatDubaiDate, toUtcDateOnly, todayInDubai } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
@@ -8,7 +8,8 @@ import { clearPaymentLate, evaluateRiskForTenancy, raisePaymentLate } from "./ri
 import { recordNotification } from "../notify/record";
 import { workspaceOverseers } from "../notify/recipients";
 import { loadPreferenceMap, type PreferenceMap } from "../notify/preferences";
-import { contactScopedWhere } from "./contactScope";
+import { assertReadable, contactScopedWhere } from "./contactScope";
+import { assertClientInDelegateScope, clientSetScopedWhere } from "./delegateScope";
 import { getTenancy } from "./tenancies";
 import { getDocument, logDocumentAccess } from "./documents";
 import { signedFileUrl } from "../storage";
@@ -100,7 +101,14 @@ export async function transitionPayment(
     where: { id: paymentItemId },
     include: { tenancy: { include: { property: true } } },
   });
-  assertSameWorkspace(ctx, item);
+  if (isDelegateRole(ctx.role)) {
+    assertClientInDelegateScope(
+      ctx,
+      item ? { workspaceId: item.workspaceId, clientPrincipalId: item.tenancy.property.clientPrincipalId } : null,
+    );
+  } else {
+    assertSameWorkspace(ctx, item);
+  }
 
   const allowed = TRANSITIONS[item!.status] ?? [];
   if (!allowed.includes(to)) {
@@ -108,7 +116,9 @@ export async function transitionPayment(
   }
   if (opts?.proofDocId) {
     const doc = await prisma.document.findUnique({ where: { id: opts.proofDocId } });
-    assertSameWorkspace(ctx, doc);
+    // assertReadable gates the proof doc by client scope for a delegate, workspace for an operator.
+    if (isDelegateRole(ctx.role)) await assertReadable(ctx, { kind: "document", row: doc });
+    else assertSameWorkspace(ctx, doc);
   }
 
   const updated = await prisma.paymentItem.update({
@@ -277,12 +287,14 @@ export async function listPayments(
   require_(ctx, "payments.read");
   const base = ctx.subjectContactId
     ? await contactScopedWhere(ctx, "PAYMENT_ITEM")
-    : {
-        ...scope(ctx),
-        ...(ctx.clientPrincipalId
-          ? { tenancy: { property: { clientPrincipalId: ctx.clientPrincipalId } } }
-          : {}),
-      };
+    : isDelegateRole(ctx.role)
+      ? await clientSetScopedWhere(ctx, "PAYMENT_ITEM")
+      : {
+          ...scope(ctx),
+          ...(ctx.clientPrincipalId
+            ? { tenancy: { property: { clientPrincipalId: ctx.clientPrincipalId } } }
+            : {}),
+        };
   return prisma.paymentItem.findMany({
     where: {
       ...base,

@@ -10,7 +10,7 @@ describe("role capability matrix", () => {
   it("covers every role", () => {
     expect(ROLES.sort()).toEqual(
       [
-        "WORKSPACE_ADMIN", "MANAGER", "FIDUCIARY", "CLIENT_VIEWER", "AGENT",
+        "WORKSPACE_ADMIN", "MANAGER", "FIDUCIARY", "CLIENT_VIEWER", "AGENT", "MANAGING_AGENT",
         "LICENSED_PARTNER", "VENDOR", "AUDITOR", "LANDLORD", "TENANT",
       ].sort(),
     );
@@ -28,155 +28,155 @@ describe("role capability matrix", () => {
   const matrix: Record<string, Partial<Record<Role, boolean>>> = {
     "workspace.manage": {
       WORKSPACE_ADMIN: true, FIDUCIARY: false, MANAGER: false, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "clients.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "tenancies.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: true, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "tenancies.upload": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: true, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: true,
     },
     "tenancies.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
-      AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
+      AGENT: true, MANAGING_AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
       LANDLORD: true, TENANT: true,
     },
     "properties.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
-      AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
+      AGENT: true, MANAGING_AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
       LANDLORD: true, TENANT: false,
     },
     "listings.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: true, TENANT: false,
     },
     "listings.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: true, TENANT: false,
     },
     "listings.publish": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: true, TENANT: false,
     },
     "offers.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: true, TENANT: false,
     },
     "offers.decide": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: true, TENANT: false,
     },
     "offers.respond": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: true,
     },
     "contracts.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: true, TENANT: false,
     },
     "movein.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "movein.acknowledge": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: true, TENANT: true,
     },
     "landlords.verify": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "passport.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: true,
     },
     "passport.share": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: true,
     },
     "enquiries.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "enquiries.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "viewings.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "payments.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: true,
+      AGENT: false, MANAGING_AGENT: true, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: true,
       LANDLORD: true, TENANT: true,
     },
     "payments.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: true, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "renewals.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
-      AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
+      AGENT: true, MANAGING_AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
     },
     "renewals.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
     },
     "renewals.decide": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
     },
     "messaging.manage": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
     },
     "imports.manage": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
     },
     "proofs.decide": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
     },
     "evidence.read": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: true,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: true,
       LANDLORD: false, TENANT: false,
     },
     "reports.generate": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
     },
     "documents.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, LICENSED_PARTNER: true, VENDOR: true, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: true, LICENSED_PARTNER: true, VENDOR: true, AUDITOR: false,
     },
   };
 
@@ -232,6 +232,30 @@ describe("role capability matrix", () => {
           cap.startsWith("contracts.") ||
           cap.startsWith("movein."),
       ).toBe(true);
+    }
+  });
+
+  // MANAGING_AGENT (F0d) is the execution delegate: read + broad operational write,
+  // but NEVER the fiduciary-control / roster / cross-client capabilities. Scoping to
+  // the assigned ClientPrincipal set is enforced separately in delegateScope.
+  it("MANAGING_AGENT holds operational read+write but no fiduciary-control caps", () => {
+    const forbidden = [
+      "proofs.decide", "clients.read", "clients.write", "members.manage", "workspace.manage",
+      "renewals.write", "renewals.decide", "landlords.verify", "reports.generate", "reports.read",
+      "imports.manage", "messaging.manage", "contacts.write", "offers.write", "offers.decide",
+      "listings.read", "listings.write", "contracts.write", "movein.write", "evidence.read",
+      "riskflags.read", "riskflags.ack",
+    ] as const;
+    for (const cap of forbidden) {
+      expect(roleHas("MANAGING_AGENT", cap)).toBe(false);
+    }
+    // Every granted cap is an operational read/write (or tenancies.upload) — no surprises.
+    for (const cap of ROLE_CAPABILITIES.MANAGING_AGENT) {
+      expect(cap.endsWith(".read") || cap.endsWith(".write") || cap === "tenancies.upload").toBe(true);
+    }
+    // …and it really can do the hands-on writes.
+    for (const cap of ["properties.write", "tenancies.write", "payments.write", "documents.write", "proofs.write", "deadlines.write"] as const) {
+      expect(roleHas("MANAGING_AGENT", cap)).toBe(true);
     }
   });
 });

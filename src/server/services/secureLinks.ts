@@ -26,6 +26,9 @@ export async function createSecureLink(
   },
 ): Promise<{ linkId: string; url: string }> {
   require_(ctx, args.requiredCapability ?? "proofs.write");
+  // scope-audit: capability-gated link minter; the entrypoint that calls it
+  // (sendProofRequest→getProofRequest, listing share→getListing) has already
+  // scoped the target scopeId for the caller before a link is minted.
   const { token, tokenHash } = generateToken();
   const link = await prisma.secureLink.create({
     data: {
@@ -74,6 +77,7 @@ export async function validateLinkToken(token: string): Promise<LinkValidation> 
 }
 
 export async function consumeLinkUse(linkId: string) {
+  // scope-audit: public link consumption by id (no ctx); validated upstream by token.
   await prisma.secureLink.update({
     where: { id: linkId },
     data: { useCount: { increment: 1 } },

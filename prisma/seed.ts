@@ -13,6 +13,7 @@ runSeed()
     console.log("Sign in as operator@example.com (OTP appears in the worker/console log in dev).");
     console.log("Tenant portal:   r.fernandes@example.com → /portal");
     console.log("Landlord portal: owner@example.com → /portal");
+    console.log("Managing agent:  agent@example.com → /dashboard (scoped to Al Noor only)");
   })
   .catch((e) => {
     console.error(e);

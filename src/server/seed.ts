@@ -544,6 +544,28 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     },
   });
 
+  // ── Execution-delegate login (F0d): a MANAGING_AGENT assigned to ONLY Al Noor.
+  // Al Noor owns Marina/Bayview/Palm Vista; Private Client A's JVC unit is the built-in
+  // sibling the delegate must never see. He can read+write his assigned clients' work
+  // (cheques, tenancies, proofs, documents) but holds no fiduciary-control caps.
+  const agentUser = await prisma.user.upsert({
+    where: { email: "agent@example.com" },
+    update: {},
+    create: { email: "agent@example.com", name: "Mariam Al Suwaidi", locale: "en" },
+  });
+  await prisma.membership.upsert({
+    where: {
+      workspaceId_userId_role: { workspaceId: workspace.id, userId: agentUser.id, role: "MANAGING_AGENT" },
+    },
+    update: { assignedClientIds: [alNoor.id], revokedAt: null },
+    create: {
+      workspaceId: workspace.id,
+      userId: agentUser.id,
+      role: "MANAGING_AGENT",
+      assignedClientIds: [alNoor.id],
+    },
+  });
+
   // ── Listings (1B): a draft listing on the vacant Palm Vista villa. Deliberately
   // missing the RERA permit, so it sits below the publish gate — a live demo of the
   // readiness score the landlord portal surfaces.

@@ -50,6 +50,7 @@ model Membership {
   role              Role
   clientPrincipalId String?          // required when role = CLIENT_VIEWER (scopes to one client)
   subjectContactId  String?          // required when role = TENANT | LANDLORD (scopes to one Contact)
+  assignedClientIds String[] @default([])  // required when role = MANAGING_AGENT (scopes read+write to this set of clients)
   createdAt         DateTime @default(now())
   revokedAt         DateTime?
   workspace         Workspace @relation(fields: [workspaceId], references: [id])
@@ -65,6 +66,7 @@ enum Role {
   FIDUCIARY
   CLIENT_VIEWER
   AGENT
+  MANAGING_AGENT    // execution delegate: read + broad write, confined to Membership.assignedClientIds
   LICENSED_PARTNER
   VENDOR
   AUDITOR

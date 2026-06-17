@@ -1,12 +1,13 @@
 import { Prisma, type DocumentKind, type RecordSource, type TenancyStatus } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, assertSameWorkspace, require_ } from "../authz";
+import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, require_ } from "../authz";
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
 import { toUtcDateOnly } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
 import { evaluateRiskForTenancy } from "./risk";
 import { assertReadable } from "./contactScope";
+import { assertClientInDelegateScope } from "./delegateScope";
 import { ingestDocument, logDocumentAccess } from "./documents";
 
 // Tenancy CRUD (T2.4). Create/update regenerates deadlines (T3.2); status
@@ -83,7 +84,8 @@ export interface TenancyInput {
 export async function createTenancy(ctx: AuthzContext, data: TenancyInput) {
   require_(ctx, "tenancies.write");
   const property = await prisma.property.findUnique({ where: { id: data.propertyId } });
-  assertSameWorkspace(ctx, property);
+  if (isDelegateRole(ctx.role)) assertClientInDelegateScope(ctx, property);
+  else assertSameWorkspace(ctx, property);
 
   const tenancy = await prisma.tenancy.create({
     data: {
