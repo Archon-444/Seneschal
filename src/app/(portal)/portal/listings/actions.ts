@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import * as listings from "@/server/services/listings";
+import * as offers from "@/server/services/offers";
 import type { ListingInput } from "@/server/services/listings";
 
 // Portal server actions (1B) — thin glue from the landlord forms to the listings
@@ -63,6 +64,24 @@ export async function archiveListingAction(formData: FormData) {
   const ctx = await requireCtx();
   await listings.archiveListing(ctx, s(formData, "id"));
   redirect("/portal/listings");
+}
+
+export async function proposeOfferAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const listingId = s(formData, "listingId");
+  await offers.proposeNewTenancyOffer(ctx, listingId, {
+    party: s(formData, "party") === "TENANT" ? "TENANT" : "LANDLORD",
+    annualRent: Number(s(formData, "annualRent")),
+    paymentSchedule: s(formData, "paymentSchedule") || "1 cheque",
+    note: opt(formData, "note"),
+  });
+  revalidatePath(`/portal/listings/${listingId}`);
+}
+
+export async function acceptOfferAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await offers.acceptNewTenancyOffer(ctx, s(formData, "offerId"));
+  revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
 }
 
 /** useActionState handler: mint a public share link and return its one-time URL

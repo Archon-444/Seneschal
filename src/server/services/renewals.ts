@@ -546,18 +546,21 @@ export async function acceptOffer(ctx: AuthzContext, offerId: string) {
   require_(ctx, "renewals.decide");
   const offer = await prisma.offer.findUnique({ where: { id: offerId } });
   assertSameWorkspace(ctx, offer);
-  const tenancy = await getTenancy(ctx, offer!.tenancyId); // enforces client scope
+  const renewalCaseId = offer!.renewalCaseId;
+  const tenancyId = offer!.tenancyId;
+  if (!renewalCaseId || !tenancyId) throw new AuthzError("Not a renewal offer", 422);
+  const tenancy = await getTenancy(ctx, tenancyId); // enforces client scope
 
   await prisma.offer.updateMany({
-    where: { renewalCaseId: offer!.renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offerId } },
+    where: { renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offerId } },
     data: { status: "SUPERSEDED" },
   });
   await prisma.offer.update({ where: { id: offerId }, data: { status: "ACCEPTED" } });
   await prisma.renewalCase.update({
-    where: { id: offer!.renewalCaseId },
+    where: { id: renewalCaseId },
     data: { status: "AGREED", decidedOfferId: offerId },
   });
-  await tryMoveTenancy(ctx, offer!.tenancyId, "RENEWED");
+  await tryMoveTenancy(ctx, tenancyId, "RENEWED");
   await recordEvidence({
     workspaceId: ctx.workspaceId,
     type: "OFFER_ACCEPTED",
@@ -566,7 +569,7 @@ export async function acceptOffer(ctx: AuthzContext, offerId: string) {
     onBehalfOfId: ctx.onBehalfOfId,
     scopeType: "OFFER",
     scopeId: offerId,
-    tenancyId: offer!.tenancyId,
+    tenancyId,
     propertyId: tenancy!.propertyId,
     payload: { version: offer!.version, annualRent: Number(offer!.annualRent) },
   });
@@ -632,6 +635,7 @@ export async function sendOfferToTenant(ctx: AuthzContext, offerId: string) {
   require_(ctx, "renewals.write");
   const offer = await prisma.offer.findUnique({ where: { id: offerId } });
   assertSameWorkspace(ctx, offer);
+  if (!offer!.tenancyId) throw new AuthzError("Not a renewal offer", 422);
   const tenancy = await getTenancy(ctx, offer!.tenancyId); // enforces client scope
 
   const link = await createSecureLink(ctx, {
@@ -682,7 +686,7 @@ export interface TenantOfferView {
 export async function getOfferForLink(link: SecureLink): Promise<TenantOfferView | null> {
   if (link.purpose !== "TENANT_OFFER") return null;
   const offer = await prisma.offer.findUnique({ where: { id: link.scopeId } });
-  if (!offer) return null;
+  if (!offer || !offer.tenancyId) return null;
   const tenancy = await prisma.tenancy.findUnique({
     where: { id: offer.tenancyId },
     include: { property: true },
@@ -722,7 +726,9 @@ export async function respondToOfferViaLink(link: SecureLink, input: TenantRespo
   if (link.purpose !== "TENANT_OFFER") throw new AuthzError("Wrong link purpose", 400);
   const offer = await prisma.offer.findUnique({ where: { id: link.scopeId } });
   if (!offer) throw new AuthzError("Offer not found", 404);
-  const renewalCase = await prisma.renewalCase.findUnique({ where: { id: offer.renewalCaseId } });
+  if (!offer.renewalCaseId || !offer.tenancyId) throw new AuthzError("Not a renewal offer", 422);
+  const renewalCaseId = offer.renewalCaseId;
+  const renewalCase = await prisma.renewalCase.findUnique({ where: { id: renewalCaseId } });
   const workspaceId = link.workspaceId;
   const tenancyId = offer.tenancyId;
   const propertyId = renewalCase?.propertyId;
@@ -732,17 +738,17 @@ export async function respondToOfferViaLink(link: SecureLink, input: TenantRespo
       throw new AuthzError("A counter needs a rent and a payment schedule", 422);
     }
     await prisma.offer.updateMany({
-      where: { renewalCaseId: offer.renewalCaseId, status: { in: ["SENT", "COUNTERED"] } },
+      where: { renewalCaseId: renewalCaseId, status: { in: ["SENT", "COUNTERED"] } },
       data: { status: "SUPERSEDED" },
     });
     const last = await prisma.offer.findFirst({
-      where: { renewalCaseId: offer.renewalCaseId },
+      where: { renewalCaseId: renewalCaseId },
       orderBy: { version: "desc" },
     });
     const created = await prisma.offer.create({
       data: {
         workspaceId,
-        renewalCaseId: offer.renewalCaseId,
+        renewalCaseId: renewalCaseId,
         tenancyId,
         version: (last?.version ?? 0) + 1,
         party: "TENANT",
@@ -754,7 +760,7 @@ export async function respondToOfferViaLink(link: SecureLink, input: TenantRespo
         viaSecureLinkId: link.id,
       },
     });
-    await prisma.renewalCase.update({ where: { id: offer.renewalCaseId }, data: { status: "NEGOTIATING" } });
+    await prisma.renewalCase.update({ where: { id: renewalCaseId }, data: { status: "NEGOTIATING" } });
     await recordEvidence({
       workspaceId,
       type: "OFFER_COUNTERED",
@@ -767,12 +773,12 @@ export async function respondToOfferViaLink(link: SecureLink, input: TenantRespo
     });
   } else if (input.action === "ACCEPT") {
     await prisma.offer.updateMany({
-      where: { renewalCaseId: offer.renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offer.id } },
+      where: { renewalCaseId: renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offer.id } },
       data: { status: "SUPERSEDED" },
     });
     await prisma.offer.update({ where: { id: offer.id }, data: { status: "ACCEPTED" } });
     await prisma.renewalCase.update({
-      where: { id: offer.renewalCaseId },
+      where: { id: renewalCaseId },
       data: { status: "AGREED", decidedOfferId: offer.id },
     });
     const tenancy = await prisma.tenancy.findUnique({ where: { id: tenancyId } });

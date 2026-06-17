@@ -2,10 +2,17 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { getListing } from "@/server/services/listings";
+import { listListingOffers } from "@/server/services/offers";
 import { listingReadiness } from "@/server/calculators/listingReadiness";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, Field, inputClass, Money, PageHeader } from "@/components/ui";
-import { archiveListingAction, publishListingAction, updateListingAction } from "../actions";
+import { Badge, Button, Card, EmptyState, Field, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import {
+  acceptOfferAction,
+  archiveListingAction,
+  proposeOfferAction,
+  publishListingAction,
+  updateListingAction,
+} from "../actions";
 import { ShareListing } from "../ShareListing";
 
 function dateValue(d: Date | null): string {
@@ -30,6 +37,8 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     sizeSqft: listing.property.sizeSqft,
   });
   const canPublish = readiness.canPublish && listing.status !== "PUBLISHED";
+  const offers = await listListingOffers(ctx, listing.id);
+  const decided = offers.some((o) => o.status === "ACCEPTED");
 
   return (
     <>
@@ -132,6 +141,58 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 ) : null}
               </div>
             </form>
+          </Card>
+
+          <Card className="mt-6">
+            <h2 className="font-display mb-3 text-lg text-navy-900">Offers</h2>
+            {offers.length === 0 ? (
+              <EmptyState message="No offers yet. Record a prospect's offer or propose your terms." />
+            ) : (
+              <Table headers={["v", "Party", "Annual rent", "Payment", "Status", ""]}>
+                {offers.map((o) => (
+                  <tr key={o.id}>
+                    <Td className="figure">{o.version}</Td>
+                    <Td>{o.party}</Td>
+                    <Td><Money amount={String(o.annualRent)} /></Td>
+                    <Td>{o.paymentSchedule}</Td>
+                    <Td><Badge value={o.status} /></Td>
+                    <Td>
+                      {!decided && (o.status === "SENT" || o.status === "COUNTERED") ? (
+                        <form action={acceptOfferAction}>
+                          <input type="hidden" name="offerId" value={o.id} />
+                          <input type="hidden" name="listingId" value={listing.id} />
+                          <Button type="submit" variant="secondary">Accept</Button>
+                        </form>
+                      ) : null}
+                    </Td>
+                  </tr>
+                ))}
+              </Table>
+            )}
+
+            {!decided && listing.status !== "ARCHIVED" && (
+              <form action={proposeOfferAction} className="mt-4 grid gap-3 sm:grid-cols-2">
+                <input type="hidden" name="listingId" value={listing.id} />
+                <Field label="From">
+                  <select name="party" className={inputClass}>
+                    <option value="LANDLORD">You (landlord terms)</option>
+                    <option value="TENANT">A prospect's offer</option>
+                  </select>
+                </Field>
+                <Field label="Annual rent (AED)">
+                  <input name="annualRent" type="number" min="0" required className={inputClass} />
+                </Field>
+                <Field label="Payment">
+                  <input name="paymentSchedule" className={inputClass} placeholder="4 cheques" />
+                </Field>
+                <Field label="Note">
+                  <input name="note" className={inputClass} />
+                </Field>
+                <div className="sm:col-span-2">
+                  <Button type="submit">Record offer</Button>
+                </div>
+              </form>
+            )}
           </Card>
         </div>
       </div>

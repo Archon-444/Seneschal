@@ -1123,8 +1123,10 @@ model RenewalCase {
 model Offer {
   id              String      @id @default(uuid())
   workspaceId     String
-  renewalCaseId   String
-  tenancyId       String
+  renewalCaseId   String?                           // null for a new-tenancy offer (2A #11)
+  tenancyId       String?                           // null until a tenancy exists
+  listingId       String?                           // set for a new-tenancy offer on a listing
+  prospectContactId String?                         // the prospective tenant, when known
   version         Int
   party           OfferParty
   annualRent      Decimal     @db.Decimal(12, 2)
