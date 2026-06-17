@@ -22,13 +22,13 @@ pnpm install
 cp .env.example .env            # set APP_SECRET (openssl rand -hex 32)
 createdb seneschal && createdb seneschal_test   # postgres 16
 pnpm exec prisma migrate deploy # apply migrations
-pnpm db:seed                    # idempotent Farina fixture workspace
+pnpm db:seed                    # idempotent fixture workspace
 pnpm fixtures:render            # render fixture PDFs for the harness
 pnpm dev                        # app on :3000
 pnpm worker                     # outbox runner + daily jobs (separate shell)
 ```
 
-Sign in as `farina@example.com` — with `EMAIL_PROVIDER=console` the OTP is
+Sign in as `operator@example.com` — with `EMAIL_PROVIDER=console` the OTP is
 printed by whichever process flushes the outbox (the dev server flushes
 immediately after you request the code; check its terminal).
 

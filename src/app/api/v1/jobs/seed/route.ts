@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeAdminEmail, runSeed } from "@/server/seed";
 
-// One-time bootstrap for serverless deployments: runs the idempotent Farina
+// One-time bootstrap for serverless deployments: runs the idempotent
 // seed inside the deployment, so no database credential ever leaves the
 // project. Same CRON_SECRET guard as /api/v1/jobs/run. Safe to call again —
 // every create is find-or-create.
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   // optional body: { "adminEmail": "you@yourdomain" } — added as FIDUCIARY in
-  // the Farina workspace so a real inbox can receive the sign-in OTP
+  // the seed workspace so a real inbox can receive the sign-in OTP
   let adminEmail: string | undefined;
   try {
     const body = (await req.json()) as { adminEmail?: string };
@@ -31,6 +31,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     proofLinkUrl: result.proofLinkUrl, // null when a live link already exists
-    signInAs: adminEmail ?? "farina@example.com",
+    signInAs: adminEmail ?? "operator@example.com",
   });
 }

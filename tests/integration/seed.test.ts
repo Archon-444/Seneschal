@@ -7,7 +7,7 @@ describe("runSeed", () => {
     await resetDb();
   });
 
-  it("attaches a valid adminEmail as FIDUCIARY in the Farina workspace", async () => {
+  it("attaches a valid adminEmail as FIDUCIARY in the seed workspace", async () => {
     await runSeed({ adminEmail: " Pilot@Example.COM " });
     const user = await prisma.user.findUnique({ where: { email: "pilot@example.com" } });
     expect(user).toBeTruthy();
