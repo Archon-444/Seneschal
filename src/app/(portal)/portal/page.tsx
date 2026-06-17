@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireCtx, homePathFor } from "@/server/auth/request";
 import { isPersonaRole, type AuthzContext } from "@/server/authz";
@@ -52,7 +53,9 @@ async function TenantHome({ ctx }: { ctx: AuthzContext }) {
             const next = items.find((i) => i.status === "SCHEDULED" || i.status === "REQUESTED");
             return (
               <section key={tenancy.id}>
-                <h2 className="mb-3 font-display text-xl text-navy-900">{propertyLabel(tenancy.property)}</h2>
+                <h2 className="mb-3 font-display text-xl text-navy-900">
+                  <Link href={`/portal/tenancies/${tenancy.id}`} className="hover:underline">{propertyLabel(tenancy.property)}</Link>
+                </h2>
                 <div className="mb-5 grid gap-4 sm:grid-cols-3">
                   <KpiCard label="Annual rent" value={<Money amount={String(tenancy.annualRent)} />} />
                   <KpiCard
