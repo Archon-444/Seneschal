@@ -219,6 +219,8 @@ export async function getPassportForLink(link: SecureLink): Promise<PublicPasspo
     where: { id: passport.contactId },
     select: { name: true },
   });
+  // scope-audit: secure-link path — passport resolved from the validated link.scopeId;
+  // returns document TYPES only (no file URLs) for the consented public view.
   const docs = await prisma.document.findMany({
     where: {
       workspaceId: passport.workspaceId,

@@ -749,6 +749,8 @@ async function applyTenantOfferResponse(
       where: { renewalCaseId, status: { in: ["SENT", "COUNTERED"] } },
       data: { status: "SUPERSEDED" },
     });
+    // scope-audit: offer pre-validated by callers — respondToOfferViaLink (secure-link
+    // token) and respondToOfferAsTenant (getTenancy contact-scope gate).
     const last = await prisma.offer.findFirst({ where: { renewalCaseId }, orderBy: { version: "desc" } });
     const created = await prisma.offer.create({
       data: {

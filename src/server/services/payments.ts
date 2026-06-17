@@ -180,6 +180,7 @@ export async function transitionPayment(
  */
 export async function detectLatePayments(workspaceId?: string): Promise<number> {
   const today = todayInDubai();
+  // scope-audit: system late-detection job (cron), workspace-batch, no persona ctx.
   const due = await prisma.paymentItem.findMany({
     where: {
       ...(workspaceId ? { workspaceId } : {}),

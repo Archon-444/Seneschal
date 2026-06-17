@@ -57,6 +57,7 @@ export async function runAlertLadders(workspaceId: string): Promise<number> {
 
   let sent = 0;
   for (const [templateCode, ladder] of Object.entries(LADDERS)) {
+    // scope-audit: alert-ladder cron, workspace-batch over OPEN deadlines, no persona ctx.
     const deadlines = await prisma.deadline.findMany({
       where: { workspaceId, status: "OPEN", kind: { in: ladder.kinds as never } },
       include: { tenancy: { include: { property: true } } },

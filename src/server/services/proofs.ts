@@ -240,6 +240,7 @@ export async function decideProofRequest(
 /** Overdue sweep (T7.1): auto-OVERDUE past due + PROOF_OVERDUE flag. Idempotent. */
 export async function sweepOverdueProofRequests(workspaceId?: string): Promise<number> {
   const today = todayInDubai();
+  // scope-audit: overdue-sweep cron, workspace-batch, no persona ctx.
   const overdue = await prisma.proofRequest.findMany({
     where: {
       ...(workspaceId ? { workspaceId } : {}),
