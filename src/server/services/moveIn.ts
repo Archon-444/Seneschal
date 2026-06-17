@@ -58,8 +58,9 @@ export async function listMyMoveIns(ctx: AuthzContext) {
   return rows.map((r) => ({ ...r, property: byId.get(r.propertyId) ?? null }));
 }
 
-/** Add an inspection photo to the move-in's vault. Stored PROPERTY-scoped so the
- *  owner and the tenant both read it through the normal document surfaces. */
+/** Add an inspection photo to the move-in's vault. Stored TENANCY-scoped so ONLY
+ *  this tenancy's parties (the current tenant + the owning landlord + operators)
+ *  read it — never a former/other tenant of the same unit. */
 export async function addMoveInPhoto(
   ctx: AuthzContext,
   id: string,
@@ -69,8 +70,8 @@ export async function addMoveInPhoto(
   const m = await loadMoveIn(ctx, id);
   const doc = await ingestDocument({
     workspaceId: ctx.workspaceId,
-    scopeType: "PROPERTY",
-    scopeId: m.propertyId,
+    scopeType: "TENANCY",
+    scopeId: m.tenancyId,
     kind: file.kind ?? "MAINTENANCE_PHOTO",
     fileName: file.fileName,
     mime: file.mime,
@@ -84,8 +85,8 @@ export async function addMoveInPhoto(
     actorType: ctx.isStaff ? "STAFF" : "USER",
     actorId: ctx.userId,
     onBehalfOfId: ctx.onBehalfOfId,
-    scopeType: "PROPERTY",
-    scopeId: m.propertyId,
+    scopeType: "TENANCY",
+    scopeId: m.tenancyId,
     propertyId: m.propertyId,
     tenancyId: m.tenancyId,
     payload: { documentId: doc.id, moveInId: id, fileName: file.fileName },
@@ -97,7 +98,7 @@ export async function listMoveInPhotos(ctx: AuthzContext, id: string) {
   require_(ctx, "movein.read");
   const m = await loadMoveIn(ctx, id);
   return prisma.document.findMany({
-    where: { workspaceId: ctx.workspaceId, scopeType: "PROPERTY", scopeId: m.propertyId, kind: "MAINTENANCE_PHOTO", archivedAt: null },
+    where: { workspaceId: ctx.workspaceId, scopeType: "TENANCY", scopeId: m.tenancyId, kind: "MAINTENANCE_PHOTO", archivedAt: null },
     orderBy: { createdAt: "desc" },
   });
 }

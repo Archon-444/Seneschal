@@ -59,12 +59,12 @@ describe("move-in", () => {
     await expect(moveIn.acknowledgeMoveIn(tenant.ctx, moveInId)).rejects.toThrow(/already acknowledged/i);
   });
 
-  it("photo vault: PROPERTY-scoped, readable by both sides, denied to a sibling tenant", async () => {
+  it("photo vault: TENANCY-scoped, readable by both sides, denied to a sibling tenant", async () => {
     const photo = await moveIn.addMoveInPhoto(W.ctx, moveInId, {
       fileName: "kitchen.jpg", mime: "image/jpeg", data: Buffer.from("img"),
     });
     const evidence = await prisma.evidenceEvent.findFirst({
-      where: { workspaceId: W.workspaceId, type: "DOCUMENT_UPLOADED", scopeType: "PROPERTY" },
+      where: { workspaceId: W.workspaceId, type: "DOCUMENT_UPLOADED", scopeType: "TENANCY" },
     });
     expect((evidence!.payload as { moveInId: string }).moveInId).toBe(moveInId);
 

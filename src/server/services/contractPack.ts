@@ -1,9 +1,10 @@
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, require_ } from "../authz";
 import { recordEvidence } from "../evidence";
-import { ingestDocument } from "./documents";
+import { ingestDocument, logDocumentAccess } from "./documents";
 import { getListing } from "./listings";
 import { buildContractPackPdf } from "../pdf/contractPackPdf";
+import { signedFileUrl } from "../storage";
 import { todayInDubai } from "../calculators/dates";
 
 // Contract pack (2A #12) — generate a PDF of the agreed terms from an ACCEPTED
@@ -42,10 +43,14 @@ export async function generateContractPack(ctx: AuthzContext, offerId: string) {
     generatedOn: todayInDubai().toISOString().slice(0, 10),
   });
 
+  // OFFER-scoped: no persona resolves OFFER through the generic document surface
+  // (scopeBelongsToContact returns false for it), so a tenant of the property can
+  // never read another party's contract terms. The owning landlord + operators read
+  // it only through the gated getContractPackUrl below.
   const doc = await ingestDocument({
     workspaceId: ctx.workspaceId,
-    scopeType: "PROPERTY",
-    scopeId: listing.propertyId,
+    scopeType: "OFFER",
+    scopeId: offerId,
     kind: "TENANCY_CONTRACT",
     fileName: `contract-pack-${offerId.slice(0, 8)}.pdf`,
     mime: "application/pdf",
@@ -92,6 +97,21 @@ async function loadPack(ctx: AuthzContext, packId: string) {
   if (!pack || pack.workspaceId !== ctx.workspaceId) throw new AuthzError("Not found", 404);
   if (pack.listingId) await getListing(ctx, pack.listingId);
   return pack;
+}
+
+/** The signed URL for a pack's PDF. The pack is OFFER-scoped (unreadable via the
+ *  generic document surface), so this gated path — landlord-owns-it / operator — is
+ *  the ONLY way to read it. A tenant lacks contracts.read and is refused here. */
+export async function getContractPackUrl(ctx: AuthzContext, packId: string) {
+  require_(ctx, "contracts.read");
+  const pack = await loadPack(ctx, packId);
+  await logDocumentAccess({
+    workspaceId: ctx.workspaceId,
+    documentId: pack.documentId,
+    actorUserId: ctx.userId,
+    action: "VIEWED",
+  });
+  return { url: signedFileUrl(pack.documentId), contractPackId: pack.id };
 }
 
 /**

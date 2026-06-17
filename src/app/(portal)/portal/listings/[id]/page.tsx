@@ -3,8 +3,7 @@ import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { getListing } from "@/server/services/listings";
 import { listListingOffers } from "@/server/services/offers";
-import { listContractPacks } from "@/server/services/contractPack";
-import { getDocumentUrl } from "@/server/services/documents";
+import { listContractPacks, getContractPackUrl } from "@/server/services/contractPack";
 import { listingReadiness } from "@/server/calculators/listingReadiness";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, Button, Card, EmptyState, Field, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
@@ -47,7 +46,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const decided = !!acceptedOffer;
   const packs = await listContractPacks(ctx, listing.id);
   const packLinks = await Promise.all(
-    packs.map(async (p) => ({ pack: p, url: (await getDocumentUrl(ctx, p.documentId)).url })),
+    packs.map(async (p) => ({ pack: p, url: (await getContractPackUrl(ctx, p.id)).url })),
   );
 
   return (

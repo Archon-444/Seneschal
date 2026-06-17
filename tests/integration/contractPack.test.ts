@@ -8,6 +8,8 @@ import * as offers from "@/server/services/offers";
 import * as contractPack from "@/server/services/contractPack";
 import * as documents from "@/server/services/documents";
 
+let tenant: TestActor;
+
 // 2A #12 — Contract pack: a PDF of the agreed terms from an ACCEPTED offer, stored
 // PROPERTY-scoped so owner + operator can read it, with CONTRACT_PACK_GENERATED.
 
@@ -25,6 +27,8 @@ beforeEach(async () => {
     clientPrincipalId: client.id, ownerContactId: owner.id, community: "Marina", unitNo: "1", bedrooms: 2, sizeSqft: 1100,
   });
   landlord = await addMember(W.workspaceId, "LANDLORD", undefined, owner.id);
+  const tc = await contacts.createContact(W.ctx, { kind: "TENANT", name: "A Tenant" });
+  tenant = await addMember(W.workspaceId, "TENANT", undefined, tc.id);
   listingId = (await listings.createListing(landlord.ctx, property.id, { askingRent: 100000 })).id;
   const offer = await offers.proposeNewTenancyOffer(landlord.ctx, listingId, {
     party: "LANDLORD", annualRent: 105000, paymentSchedule: "2 cheques",
@@ -46,10 +50,14 @@ describe("contract pack", () => {
     expect(doc!.mime).toBe("application/pdf");
     expect(doc!.sizeBytes).toBeGreaterThan(0);
 
-    // The owner can read the pack PDF through the normal document surface (PROPERTY-scoped).
-    await expect(documents.getDocument(landlord.ctx, pack.documentId)).resolves.toBeTruthy();
-    const { url } = await documents.getDocumentUrl(landlord.ctx, pack.documentId);
+    // The pack is OFFER-scoped: NOT reachable through the generic persona document
+    // surface (so a property tenant can never read it), only via the gated path.
+    await expect(documents.getDocument(landlord.ctx, pack.documentId)).rejects.toThrow();
+    const { url } = await contractPack.getContractPackUrl(landlord.ctx, pack.id);
     expect(url).toContain(pack.documentId);
+    // Operators read OFFER-scoped docs by workspace match; tenants lack contracts.read.
+    await expect(documents.getDocument(W.ctx, pack.documentId)).resolves.toBeTruthy();
+    await expect(contractPack.getContractPackUrl(tenant.ctx, pack.id)).rejects.toThrow(/contracts\.read/);
 
     const ev = await prisma.evidenceEvent.findFirst({
       where: { workspaceId: W.workspaceId, type: "CONTRACT_PACK_GENERATED", scopeId: offerId },

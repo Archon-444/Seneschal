@@ -51,8 +51,11 @@ export async function resolveContactScopeIds(
   let passportIds: string[] = [];
 
   if (role === "TENANT") {
+    // Active tenancies only: a departed tenant must NOT retain scope over a unit
+    // they have left (which would otherwise let them read a later tenant's
+    // PROPERTY/TENANCY-scoped documents). Archived tenancies drop out of scope.
     const tenancies = await db.tenancy.findMany({
-      where: { workspaceId, tenantContactId: contactId },
+      where: { workspaceId, tenantContactId: contactId, archivedAt: null },
       select: { id: true, propertyId: true },
     });
     tenancyIds = tenancies.map((t) => t.id);
