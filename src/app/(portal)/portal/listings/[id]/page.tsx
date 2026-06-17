@@ -14,6 +14,8 @@ import {
   generateContractPackAction,
   proposeOfferAction,
   publishListingAction,
+  sendContractPackAction,
+  signContractPackAction,
   updateListingAction,
 } from "../actions";
 import { ShareListing } from "../ShareListing";
@@ -209,14 +211,34 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               {packLinks.length === 0 ? (
                 <p className="text-sm text-muted">An offer is accepted. Generate the summary pack of agreed terms for signature.</p>
               ) : (
-                <ul className="mb-3 space-y-1 text-sm">
+                <div className="mb-3 space-y-3">
                   {packLinks.map(({ pack, url }) => (
-                    <li key={pack.id} className="flex items-center justify-between">
-                      <span>Pack · {formatDubaiDate(pack.createdAt)} · <Badge value={pack.status} /></span>
-                      <a href={url} target="_blank" rel="noreferrer" className="text-gold-700 hover:underline">View PDF</a>
-                    </li>
+                    <div key={pack.id} className="rounded-md border border-line p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span>Pack · {formatDubaiDate(pack.createdAt)} · <Badge value={pack.status} /></span>
+                        <a href={url} target="_blank" rel="noreferrer" className="text-gold-700 hover:underline">View PDF</a>
+                      </div>
+                      {pack.eSignRef ? <div className="mt-1 text-xs text-muted figure">e-sign ref: {pack.eSignRef}</div> : null}
+                      {pack.status !== "SIGNED" && (
+                        <div className="mt-2 flex flex-wrap items-end gap-2">
+                          <input name="eSignRef" form={`esign-${pack.id}`} className={inputClass + " max-w-[14rem]"} placeholder="e-sign provider ref (optional)" />
+                          {pack.status === "GENERATED" && (
+                            <form id={`esign-${pack.id}`} action={sendContractPackAction}>
+                              <input type="hidden" name="packId" value={pack.id} />
+                              <input type="hidden" name="listingId" value={listing.id} />
+                              <Button type="submit" variant="secondary">Mark sent for signature</Button>
+                            </form>
+                          )}
+                          <form action={signContractPackAction}>
+                            <input type="hidden" name="packId" value={pack.id} />
+                            <input type="hidden" name="listingId" value={listing.id} />
+                            <Button type="submit" variant="secondary">Mark signed</Button>
+                          </form>
+                        </div>
+                      )}
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
               <form action={generateContractPackAction}>
                 <input type="hidden" name="offerId" value={acceptedOffer!.id} />

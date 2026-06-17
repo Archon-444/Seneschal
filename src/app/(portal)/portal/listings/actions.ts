@@ -91,6 +91,18 @@ export async function generateContractPackAction(formData: FormData) {
   revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
 }
 
+export async function sendContractPackAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await contractPack.markContractPackSent(ctx, s(formData, "packId"), opt(formData, "eSignRef"));
+  revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
+}
+
+export async function signContractPackAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await contractPack.markContractPackSigned(ctx, s(formData, "packId"), opt(formData, "eSignRef"));
+  revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
+}
+
 /** useActionState handler: mint a public share link and return its one-time URL
  *  for display (the raw token is shown once, never logged or persisted in cleartext). */
 export async function createListingShareLinkAction(

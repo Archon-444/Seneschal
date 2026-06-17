@@ -85,3 +85,59 @@ export async function listContractPacks(ctx: AuthzContext, listingId: string) {
     orderBy: { createdAt: "desc" },
   });
 }
+
+/** Load a pack with the same scope gate as the rest (landlord owns it / operator). */
+async function loadPack(ctx: AuthzContext, packId: string) {
+  const pack = await prisma.contractPack.findUnique({ where: { id: packId } });
+  if (!pack || pack.workspaceId !== ctx.workspaceId) throw new AuthzError("Not found", 404);
+  if (pack.listingId) await getListing(ctx, pack.listingId);
+  return pack;
+}
+
+/**
+ * Record that the pack was sent to an external e-sign provider (2A #13). The
+ * provider reference is captured for the audit trail; Seneschal does not embed a
+ * signing engine — it tracks the reference and the signed acknowledgement.
+ */
+export async function markContractPackSent(ctx: AuthzContext, packId: string, eSignRef?: string) {
+  require_(ctx, "contracts.write");
+  const pack = await loadPack(ctx, packId);
+  if (pack.status === "SIGNED") throw new AuthzError("Pack is already signed", 422);
+  const updated = await prisma.contractPack.update({
+    where: { id: packId },
+    data: { status: "SENT_FOR_SIGNATURE", sentAt: new Date(), eSignRef: eSignRef?.trim() || pack.eSignRef },
+  });
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: "CONTRACT_PACK_SENT",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "OFFER",
+    scopeId: pack.offerId,
+    propertyId: pack.propertyId,
+    payload: { contractPackId: pack.id, eSignRef: updated.eSignRef },
+  });
+  return updated;
+}
+
+export async function markContractPackSigned(ctx: AuthzContext, packId: string, eSignRef?: string) {
+  require_(ctx, "contracts.write");
+  const pack = await loadPack(ctx, packId);
+  const updated = await prisma.contractPack.update({
+    where: { id: packId },
+    data: { status: "SIGNED", signedAt: new Date(), eSignRef: eSignRef?.trim() || pack.eSignRef },
+  });
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: "CONTRACT_PACK_SIGNED",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "OFFER",
+    scopeId: pack.offerId,
+    propertyId: pack.propertyId,
+    payload: { contractPackId: pack.id, eSignRef: updated.eSignRef },
+  });
+  return updated;
+}

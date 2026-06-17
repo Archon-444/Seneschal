@@ -59,4 +59,28 @@ describe("contract pack", () => {
     const listed = await contractPack.listContractPacks(landlord.ctx, listingId);
     expect(listed.map((p) => p.id)).toContain(pack.id);
   });
+
+  it("tracks the e-sign reference and signature lifecycle (2A #13)", async () => {
+    await offers.acceptNewTenancyOffer(landlord.ctx, offerId);
+    const pack = await contractPack.generateContractPack(landlord.ctx, offerId);
+
+    const sent = await contractPack.markContractPackSent(landlord.ctx, pack.id, "DOCUSIGN-ABC123");
+    expect(sent.status).toBe("SENT_FOR_SIGNATURE");
+    expect(sent.eSignRef).toBe("DOCUSIGN-ABC123");
+    expect(sent.sentAt).toBeTruthy();
+    expect(
+      await prisma.evidenceEvent.count({ where: { workspaceId: W.workspaceId, type: "CONTRACT_PACK_SENT" } }),
+    ).toBe(1);
+
+    const signed = await contractPack.markContractPackSigned(landlord.ctx, pack.id);
+    expect(signed.status).toBe("SIGNED");
+    expect(signed.eSignRef).toBe("DOCUSIGN-ABC123"); // preserved when not re-supplied
+    expect(signed.signedAt).toBeTruthy();
+    expect(
+      await prisma.evidenceEvent.count({ where: { workspaceId: W.workspaceId, type: "CONTRACT_PACK_SIGNED" } }),
+    ).toBe(1);
+
+    // A signed pack cannot be re-sent.
+    await expect(contractPack.markContractPackSent(landlord.ctx, pack.id)).rejects.toThrow(/already signed/i);
+  });
 });
