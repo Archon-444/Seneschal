@@ -245,6 +245,7 @@ export async function raiseTenancyOverlap(tenancyId: string, db: Db = prisma) {
 
 /** Nightly evaluation across a workspace (outbox topic risk.evaluate). */
 export async function evaluateWorkspaceRisk(workspaceId: string) {
+  // scope-audit: nightly risk evaluation cron, workspace-batch, no persona ctx.
   const tenancies = await prisma.tenancy.findMany({
     where: { workspaceId, archivedAt: null },
     select: { id: true },

@@ -1,0 +1,27 @@
+# Code owners — review is REQUIRED on the security boundary.
+#
+# These files are the authorization core of the persona model. A change here can
+# turn a fail-closed boundary into a fail-open one (one tenant reading another's
+# data, typechecking green), so they must not merge without an explicit review.
+# See CLAUDE.md "Engineering non-negotiables" and the recurring scope-audit gate
+# (scripts/scope-audit.mjs, run in CI).
+
+# The two fail-closed choke points + the single sanctioned doors past them.
+/src/server/authz.ts                       @Archon-444
+/src/server/services/contactScope.ts       @Archon-444
+/src/server/services/clientScope.ts        @Archon-444
+
+# The capability matrix is the single source of truth for role × capability.
+/src/server/capabilities.ts                @Archon-444
+
+# Schema changes (new models, scopes, roles) widen the attack surface.
+/prisma/schema.prisma                      @Archon-444
+
+# Secure links mint bearer tokens; notify/ fans out to external recipients.
+/src/server/services/secureLinks.ts        @Archon-444
+/src/server/notify/                        @Archon-444
+
+# The scope-audit gate itself + CI must not be silently weakened.
+/scripts/scope-audit.mjs                   @Archon-444
+/.github/workflows/ci.yml                  @Archon-444
+/.github/CODEOWNERS                        @Archon-444

@@ -6,7 +6,12 @@ import { hasActiveMessagingConsent } from "@/server/services/consent";
 import { roleHas } from "@/server/capabilities";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, BackLink, Button, Card, EmptyState, Money, PageHeader, Table, Td } from "@/components/ui";
-import { grantMessagingConsentAction, revokeMessagingConsentAction } from "../../actions";
+import {
+  grantMessagingConsentAction,
+  revokeMessagingConsentAction,
+  verifyLandlordAction,
+  revokeLandlordVerificationAction,
+} from "../../actions";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,6 +26,8 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const { contact, tenancies, proofRequests } = detail!;
   const canMessage = roleHas(ctx.role, "messaging.manage");
   const messagingOptedIn = contact.phone ? await hasActiveMessagingConsent({ contactId: contact.id }) : false;
+  const canVerify = roleHas(ctx.role, "landlords.verify") && contact.kind === "OWNER";
+  const isVerified = !!contact.verifiedAt;
 
   const roleFor = (t: (typeof tenancies)[number]) =>
     t.landlordContactId === id ? "Landlord" : t.tenantContactId === id ? "Tenant" : "Party";
@@ -28,7 +35,33 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   return (
     <>
       <BackLink href="/contacts" label="All contacts" />
-      <PageHeader eyebrow={contact.kind} title={contact.name} subtitle={contact.company ?? undefined} />
+      <PageHeader
+        eyebrow={contact.kind}
+        title={contact.name}
+        subtitle={contact.company ?? undefined}
+        actions={isVerified ? <Badge value="VERIFIED LANDLORD" /> : undefined}
+      />
+
+      {canVerify && (
+        <Card className="mb-6 max-w-3xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-navy-900">Landlord verification</div>
+              <div className="text-xs text-muted">
+                {isVerified
+                  ? `Verified${contact.verifiedAt ? ` on ${formatDubaiDate(contact.verifiedAt)}` : ""} — owns/controls the units they list.`
+                  : "Not yet verified. Confirm identity and ownership before their listings carry the verified mark."}
+              </div>
+            </div>
+            <form action={isVerified ? revokeLandlordVerificationAction : verifyLandlordAction}>
+              <input type="hidden" name="contactId" value={contact.id} />
+              <Button type="submit" variant={isVerified ? "secondary" : "primary"}>
+                {isVerified ? "Revoke verification" : "Verify landlord"}
+              </Button>
+            </form>
+          </div>
+        </Card>
+      )}
 
       <Card className="mb-6 max-w-3xl">
         <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm lg:grid-cols-3">

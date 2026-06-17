@@ -8,9 +8,11 @@ import type { NotificationCategory } from "@prisma/client";
 const TEMPLATE_CATEGORY: Record<string, NotificationCategory> = {
   notice_gate_v1: "DEADLINES",
   cheque_v1: "DEADLINES",
+  listing_permit_v1: "DEADLINES",
   payment_late_v1: "PAYMENTS",
   payment_bounced_v1: "PAYMENTS",
   risk_flag_v1: "RISK",
+  enquiry_v1: "ENQUIRIES",
   daily_digest_v1: "DIGEST",
   weekly_digest_v1: "DIGEST",
 };

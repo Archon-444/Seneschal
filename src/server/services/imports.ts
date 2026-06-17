@@ -88,6 +88,8 @@ export async function addImportRows(
 /** Conflict pass: duplicate ejariNo, overlapping tenancy dates per property. Blocks rows. */
 export async function detectConflicts(ctx: AuthzContext, batchId: string) {
   require_(ctx, "imports.manage");
+  // scope-audit: operator-only (imports.manage); all matching is bounded to ctx.workspaceId
+  // for de-duplication — no persona reaches this path.
   const rows = await prisma.importRow.findMany({
     where: { batchId, status: { in: ["PENDING", "CONFLICT"] } },
   });

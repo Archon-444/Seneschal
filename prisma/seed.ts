@@ -11,6 +11,8 @@ runSeed()
     }
     console.log("Seed complete: Farina Legal Advisory workspace ready.");
     console.log("Sign in as farina@example.com (OTP appears in the worker/console log in dev).");
+    console.log("Tenant portal:   r.fernandes@example.com → /portal");
+    console.log("Landlord portal: owner@example.com → /portal");
   })
   .catch((e) => {
     console.error(e);

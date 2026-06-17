@@ -4,7 +4,10 @@ import { headers } from "next/headers";
 import { validateLinkToken, consumeLinkUse } from "@/server/services/secureLinks";
 import { submitProofViaLink } from "@/server/services/proofs";
 import { respondToOfferViaLink } from "@/server/services/renewals";
+import { createEnquiryFromLink } from "@/server/services/enquiries";
 import { recordLinkMessagingOptIn } from "@/server/services/consent";
+import { dispatchPending } from "@/server/outbox";
+import { handlers } from "@/server/outbox/runner";
 
 export type SubmitState =
   | { status: "idle" }
@@ -84,5 +87,26 @@ export async function submitProofAction(_prev: SubmitState, formData: FormData):
     },
   );
   await consumeLinkUse(validation.link.id);
+  return { status: "done" };
+}
+
+export async function submitEnquiryAction(_prev: SubmitState, formData: FormData): Promise<SubmitState> {
+  const token = String(formData.get("token") ?? "");
+  const validation = await validateLinkToken(token);
+  if (!validation.ok) return { status: "error", message: "This link is no longer available." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { status: "error", message: "Please enter your name." };
+  try {
+    await createEnquiryFromLink(validation.link, {
+      name,
+      email: String(formData.get("email") ?? "").trim() || undefined,
+      phone: String(formData.get("phone") ?? "").trim() || undefined,
+      message: String(formData.get("message") ?? "").trim() || undefined,
+    });
+    await dispatchPending(handlers);
+  } catch (e) {
+    return { status: "error", message: e instanceof Error ? e.message : "Could not send your enquiry." };
+  }
   return { status: "done" };
 }

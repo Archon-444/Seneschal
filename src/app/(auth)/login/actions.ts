@@ -3,7 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requestOtp, verifyOtp } from "@/server/auth";
-import { SESSION_COOKIE } from "@/server/auth/request";
+import { SESSION_COOKIE, homePathFor, requireCtx } from "@/server/auth/request";
 import { dispatchPending } from "@/server/outbox";
 import { handlers } from "@/server/outbox/runner";
 
@@ -39,7 +39,16 @@ export async function verifyOtpAction(prev: LoginState, formData: FormData): Pro
     maxAge: 30 * 24 * 60 * 60,
     path: "/",
   });
-  redirect("/dashboard");
+  // Land each role on its own home: personas → /portal, operators → /dashboard.
+  // The cookie we just set is readable by requireCtx within this same request.
+  let target = "/dashboard";
+  try {
+    const ctx = await requireCtx();
+    target = homePathFor(ctx.role);
+  } catch {
+    // No membership yet — fall back to the operator home (its layout re-guards).
+  }
+  redirect(target);
   return prev;
 }
 

@@ -8,7 +8,10 @@ import { clearPaymentLate, evaluateRiskForTenancy, raisePaymentLate } from "./ri
 import { recordNotification } from "../notify/record";
 import { workspaceOverseers } from "../notify/recipients";
 import { loadPreferenceMap, type PreferenceMap } from "../notify/preferences";
+import { contactScopedWhere } from "./contactScope";
 import { getTenancy } from "./tenancies";
+import { getDocument, logDocumentAccess } from "./documents";
+import { signedFileUrl } from "../storage";
 
 // Payments register (E4) — record-keeping only, Seneschal never holds funds.
 
@@ -177,6 +180,7 @@ export async function transitionPayment(
  */
 export async function detectLatePayments(workspaceId?: string): Promise<number> {
   const today = todayInDubai();
+  // scope-audit: system late-detection job (cron), workspace-batch, no persona ctx.
   const due = await prisma.paymentItem.findMany({
     where: {
       ...(workspaceId ? { workspaceId } : {}),
@@ -224,19 +228,66 @@ export async function detectLatePayments(workspaceId?: string): Promise<number> 
   return due.length;
 }
 
+/**
+ * The read-only cheque/deposit receipt vault (2B #18). Receipt documents are
+ * PAYMENT_ITEM-scoped, so a tenant reaches them only through their own payment items'
+ * contact scope. Returns the receipts for a tenancy's items, keyed by payment item.
+ */
+export async function listTenancyReceipts(ctx: AuthzContext, tenancyId: string) {
+  require_(ctx, "payments.read");
+  await getTenancy(ctx, tenancyId); // contact-scope gate
+  const items = await prisma.paymentItem.findMany({ where: { workspaceId: ctx.workspaceId, tenancyId }, select: { id: true } });
+  const docs = await prisma.document.findMany({
+    where: { workspaceId: ctx.workspaceId, scopeType: "PAYMENT_ITEM", scopeId: { in: items.map((i) => i.id) }, archivedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+  return docs; // each doc.scopeId is its payment item id
+}
+
+/**
+ * Mint a signed URL for a payment receipt AND record DEPOSIT_RECEIPT_VIEWED. Goes
+ * through getDocument first, so the persona contact-scope check (assertReadable) gates
+ * it — a tenant can only view receipts on their own payment items. Restricted to
+ * PAYMENT_ITEM-scoped documents so it cannot be used as a generic file door.
+ */
+export async function viewPaymentReceipt(ctx: AuthzContext, documentId: string) {
+  require_(ctx, "payments.read");
+  const doc = await getDocument(ctx, documentId); // assertReadable persona/scope gate
+  if (doc.scopeType !== "PAYMENT_ITEM" || !doc.scopeId) {
+    throw new AuthzError("Not a payment receipt", 422);
+  }
+  await logDocumentAccess({ workspaceId: ctx.workspaceId, documentId, actorUserId: ctx.userId, action: "VIEWED" });
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: "DEPOSIT_RECEIPT_VIEWED",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "PAYMENT_ITEM",
+    scopeId: doc.scopeId,
+    payload: { documentId },
+  });
+  return { url: signedFileUrl(documentId), fileName: doc.fileName };
+}
+
 export async function listPayments(
   ctx: AuthzContext,
   opts?: { tenancyId?: string; status?: PaymentStatus },
 ) {
   require_(ctx, "payments.read");
+  const base = ctx.subjectContactId
+    ? await contactScopedWhere(ctx, "PAYMENT_ITEM")
+    : {
+        ...scope(ctx),
+        ...(ctx.clientPrincipalId
+          ? { tenancy: { property: { clientPrincipalId: ctx.clientPrincipalId } } }
+          : {}),
+      };
   return prisma.paymentItem.findMany({
     where: {
-      ...scope(ctx),
+      ...base,
       ...(opts?.tenancyId ? { tenancyId: opts.tenancyId } : {}),
       ...(opts?.status ? { status: opts.status } : {}),
-      ...(ctx.clientPrincipalId
-        ? { tenancy: { property: { clientPrincipalId: ctx.clientPrincipalId } } }
-        : {}),
     },
     orderBy: [{ dueDate: "asc" }, { seq: "asc" }],
     include: { tenancy: { include: { property: true } } },

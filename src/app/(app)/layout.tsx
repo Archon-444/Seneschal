@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { currentUser, requireCtx } from "@/server/auth/request";
+import { currentUser, requireCtx, homePathFor } from "@/server/auth/request";
+import { isPersonaRole } from "@/server/authz";
 import { unreadCount } from "@/server/services/notifications";
 import { logoutAction } from "../(auth)/login/actions";
 import { AppShell } from "@/components/shell/AppShell";
@@ -10,17 +11,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await currentUser();
   if (!user) redirect("/login");
 
-  let workspaceName = "";
-  let role = "";
-  let unread = 0;
+  let ctx;
   try {
-    const ctx = await requireCtx();
-    const { getWorkspaceName } = await import("@/server/services/workspace");
-    [workspaceName, unread] = await Promise.all([getWorkspaceName(ctx), unreadCount(ctx)]);
-    role = ctx.role;
+    ctx = await requireCtx();
   } catch {
     redirect("/login");
   }
+  // A persona has no operator surface here — send it to /portal (its scoped home).
+  // Keeps the redirect deterministic via the single homePathFor resolver.
+  if (isPersonaRole(ctx.role)) redirect(homePathFor(ctx.role));
+
+  const { getWorkspaceName } = await import("@/server/services/workspace");
+  const [workspaceName, unread] = await Promise.all([getWorkspaceName(ctx), unreadCount(ctx)]);
+  const role = ctx.role;
 
   const jar = await cookies();
   const initialCollapsed = jar.get("seneschal_sidebar")?.value === "collapsed";

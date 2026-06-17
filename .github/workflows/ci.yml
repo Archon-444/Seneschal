@@ -40,6 +40,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec prisma generate
       - run: pnpm lint
+      - run: node scripts/scope-audit.mjs --selftest
+      - run: pnpm scope-audit
       - run: pnpm typecheck
       - run: pnpm exec prisma migrate deploy
       - run: pnpm fixtures:render

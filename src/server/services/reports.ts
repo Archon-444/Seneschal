@@ -20,6 +20,8 @@ export interface ClientReportData {
 }
 
 async function collectProperties(workspaceId: string, clientPrincipalId: string) {
+  // scope-audit: client-scoped report helper (filtered by clientPrincipalId); the
+  // caller buildClientReport gates on reports.generate + the viewer's own client.
   return prisma.property.findMany({
     where: { workspaceId, clientPrincipalId, archivedAt: null },
     include: {

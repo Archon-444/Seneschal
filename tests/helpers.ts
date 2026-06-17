@@ -24,7 +24,12 @@ export interface TestActor {
 
 export async function makeWorkspace(
   name: string,
-  opts?: { type?: "OWNER" | "FIDUCIARY" | "OPERATOR"; role?: Role; clientPrincipalId?: string },
+  opts?: {
+    type?: "OWNER" | "FIDUCIARY" | "OPERATOR";
+    role?: Role;
+    clientPrincipalId?: string;
+    subjectContactId?: string;
+  },
 ): Promise<TestActor> {
   const workspace = await prisma.workspace.create({
     data: { name, type: opts?.type ?? "FIDUCIARY" },
@@ -38,6 +43,7 @@ export async function makeWorkspace(
       userId: user.id,
       role: opts?.role ?? "FIDUCIARY",
       clientPrincipalId: opts?.clientPrincipalId ?? null,
+      subjectContactId: opts?.subjectContactId ?? null,
     },
   });
   return {
@@ -52,12 +58,19 @@ export async function addMember(
   workspaceId: string,
   role: Role,
   clientPrincipalId?: string,
+  subjectContactId?: string,
 ): Promise<TestActor> {
   const user = await prisma.user.create({
     data: { email: `${randomUUID()}@test.example`, name: "member" },
   });
   const membership = await prisma.membership.create({
-    data: { workspaceId, userId: user.id, role, clientPrincipalId: clientPrincipalId ?? null },
+    data: {
+      workspaceId,
+      userId: user.id,
+      role,
+      clientPrincipalId: clientPrincipalId ?? null,
+      subjectContactId: subjectContactId ?? null,
+    },
   });
   return { ctx: contextFromMembership(user, membership), userId: user.id, workspaceId };
 }

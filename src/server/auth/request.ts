@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
+import type { Role } from "@prisma/client";
 import { prisma } from "../db";
 import { sessionUser } from "./index";
-import { authz, AuthzError, type AuthzContext } from "../authz";
+import { authz, AuthzError, isPersonaRole, pickMembership, type AuthzContext } from "../authz";
 
 export const SESSION_COOKIE = "seneschal_session";
 export const WORKSPACE_COOKIE = "seneschal_workspace";
@@ -30,12 +31,24 @@ export async function requireCtx(): Promise<AuthzContext> {
       // fall through to first membership
     }
   }
-  const membership = await prisma.membership.findFirst({
+  // No preferred workspace: choose the highest-precedence membership across all
+  // workspaces (operator roles over personas), not merely the oldest row, so a
+  // user who is both an operator and a tenant lands in a deterministic scope.
+  const memberships = await prisma.membership.findMany({
     where: { userId: user.id, revokedAt: null },
-    orderBy: { createdAt: "asc" },
   });
+  const membership = pickMembership(memberships);
   if (!membership) throw new AuthzError("No workspace membership", 403);
   return authz(user.id, membership.workspaceId);
+}
+
+/**
+ * The single redirect-target resolver (no ping-pong): personas live under /portal,
+ * every operator/staff role under /dashboard. Used by the route-group layouts, the
+ * login action, and the root page so targets are deterministic.
+ */
+export function homePathFor(role: Role): string {
+  return isPersonaRole(role) ? "/portal" : "/dashboard";
 }
 
 export async function requireStaff() {

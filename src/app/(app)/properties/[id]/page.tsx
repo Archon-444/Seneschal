@@ -6,7 +6,12 @@ import { getRenewalRisk } from "@/server/services/renewals";
 import { listDocuments } from "@/server/services/documents";
 import { listEvidence, EVIDENCE_LABELS } from "@/server/services/evidenceQuery";
 import { daysBetween, formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
-import { Badge, BackLink, Card, EmptyState, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, BackLink, Button, Card, EmptyState, Field, inputClass, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
+import {
+  createMoveInAction,
+  acknowledgeMoveInOperatorAction,
+  addMoveInPhotoAction,
+} from "../../actions";
 import { PaymentRow } from "./PaymentRow";
 import { UploadForm } from "./UploadForm";
 
@@ -54,6 +59,10 @@ export default async function PropertyDetailPage({
     tenancyFull ? getRenewalRisk(ctx, tenancyFull.id).catch(() => null) : Promise.resolve(null),
   ]);
 
+  const { listMyMoveIns } = await import("@/server/services/moveIn");
+  const moveIns = tenancyFull ? await listMyMoveIns(ctx) : [];
+  const moveIn = tenancyFull ? moveIns.find((m) => m.tenancyId === tenancyFull.id) ?? null : null;
+
   const title = `${property!.community}${property!.building ? ` · ${property!.building}` : ""}${property!.unitNo ? ` · ${property!.unitNo}` : ""}`;
   const daysToEnd = tenancyFull ? daysBetween(todayInDubai(), tenancyFull.endDate) : null;
   const approachingRenewal = daysToEnd != null && daysToEnd >= 0 && daysToEnd <= 120;
@@ -76,6 +85,46 @@ export default async function PropertyDetailPage({
         >
           Approaching renewal · {daysToEnd} days to expiry — view risk report →
         </Link>
+      )}
+
+      {tenancyFull && (
+        <Card className="mb-6 max-w-3xl">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-display text-lg text-navy-900">Move-in handover</h2>
+            {moveIn ? <Badge value={moveIn.status} /> : null}
+          </div>
+          {!moveIn ? (
+            <form action={createMoveInAction} className="space-y-2">
+              <input type="hidden" name="tenancyId" value={tenancyFull.id} />
+              <input type="hidden" name="propertyId" value={id} />
+              <Field label="Condition notes">
+                <input name="notes" className={inputClass} placeholder="e.g. two scratches on the kitchen counter" />
+              </Field>
+              <Button type="submit" variant="secondary">Record move-in</Button>
+            </form>
+          ) : (
+            <div className="space-y-3 text-sm">
+              <div className="text-xs text-muted">
+                Landlord: {moveIn.landlordAckAt ? `acknowledged ${formatDubaiDate(moveIn.landlordAckAt)}` : "pending"} ·{" "}
+                Tenant: {moveIn.tenantAckAt ? `acknowledged ${formatDubaiDate(moveIn.tenantAckAt)}` : "pending"}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!moveIn.landlordAckAt && (
+                  <AckButton id={moveIn.id} propertyId={id} party="LANDLORD" label="Acknowledge as landlord" />
+                )}
+                {!moveIn.tenantAckAt && (
+                  <AckButton id={moveIn.id} propertyId={id} party="TENANT" label="Acknowledge as tenant" />
+                )}
+              </div>
+              <form action={addMoveInPhotoAction} className="flex items-end gap-2">
+                <input type="hidden" name="id" value={moveIn.id} />
+                <input type="hidden" name="propertyId" value={id} />
+                <input name="file" type="file" required className={inputClass + " max-w-xs"} />
+                <Button type="submit" variant="secondary">Add photo</Button>
+              </form>
+            </div>
+          )}
+        </Card>
       )}
 
       {(property!.usage || property!.makaniNo || property!.dewaPremiseNo || property!.plotNo || property!.sizeSqm) && (
@@ -261,5 +310,16 @@ function AssetFact({ label, value }: { label: string; value: string }) {
       <span className="text-xs font-medium uppercase tracking-wide text-muted">{label}</span>
       <div className="figure text-navy-900">{value}</div>
     </div>
+  );
+}
+
+function AckButton({ id, propertyId, party, label }: { id: string; propertyId: string; party: "LANDLORD" | "TENANT"; label: string }) {
+  return (
+    <form action={acknowledgeMoveInOperatorAction}>
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="propertyId" value={propertyId} />
+      <input type="hidden" name="party" value={party} />
+      <Button type="submit" variant="secondary">{label}</Button>
+    </form>
   );
 }

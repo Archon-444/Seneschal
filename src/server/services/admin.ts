@@ -1,6 +1,6 @@
 import type { Role, User } from "@prisma/client";
 import { prisma } from "../db";
-import { authz, AuthzError, type AuthzContext } from "../authz";
+import { authz, AuthzError, isPersonaRole, type AuthzContext } from "../authz";
 import { recordAudit } from "../audit";
 
 // Admin service path (T1.5 — release blocking). The ONLY door for staff
@@ -117,15 +117,24 @@ export async function staffActAs(
 
 export async function staffCreateMembership(
   staff: User,
-  args: { workspaceId: string; userId: string; role: Role; clientPrincipalId?: string },
+  args: { workspaceId: string; userId: string; role: Role; clientPrincipalId?: string; subjectContactId?: string },
 ) {
   assertStaff(staff);
+  // Mirror the contextFromMembership guards at creation so a scoped role can never be
+  // onboarded without its scope (which would later fail authz() with "missing scope").
+  if (isPersonaRole(args.role) && !args.subjectContactId) {
+    throw new AuthzError(`${args.role} membership requires subjectContactId`, 422);
+  }
+  if (args.role === "CLIENT_VIEWER" && !args.clientPrincipalId) {
+    throw new AuthzError("CLIENT_VIEWER membership requires clientPrincipalId", 422);
+  }
   const membership = await prisma.membership.create({
     data: {
       workspaceId: args.workspaceId,
       userId: args.userId,
       role: args.role,
       clientPrincipalId: args.clientPrincipalId ?? null,
+      subjectContactId: isPersonaRole(args.role) ? args.subjectContactId : null,
     },
   });
   await recordAudit({

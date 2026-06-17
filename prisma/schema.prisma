@@ -49,6 +49,7 @@ model Membership {
   userId            String
   role              Role
   clientPrincipalId String?          // required when role = CLIENT_VIEWER (scopes to one client)
+  subjectContactId  String?          // required when role = TENANT | LANDLORD (scopes to one Contact)
   createdAt         DateTime @default(now())
   revokedAt         DateTime?
   workspace         Workspace @relation(fields: [workspaceId], references: [id])
@@ -67,6 +68,8 @@ enum Role {
   LICENSED_PARTNER
   VENDOR
   AUDITOR
+  LANDLORD          // self-service supply-side persona; scoped to one Contact via Membership.subjectContactId
+  TENANT            // self-service demand-side persona; scoped to one Contact via Membership.subjectContactId
 }
 // Staff is NOT a membership role: staff access goes through the audited admin service path only (User.isStaff).
 
@@ -98,6 +101,11 @@ model Contact {
   licenseNo           String?
   licensingAuthority  String?
   notes       String?
+  // Landlord verification (1B #2): the workspace confirms an OWNER's identity/
+  // ownership. State is denormalized here; the LANDLORD_VERIFIED evidence event is
+  // the append-only audit trail (revocation is a new event).
+  verifiedAt  DateTime?
+  verifiedById String?
   createdAt   DateTime    @default(now())
   archivedAt  DateTime?
   @@index([workspaceId, kind])
@@ -121,6 +129,7 @@ model Property {
   id                String   @id @default(uuid())
   workspaceId       String
   clientPrincipalId String?
+  ownerContactId    String?          // Contact — the landlord/owner; LANDLORD persona scopes to owned properties (incl. vacant)
   community         String
   building          String?
   unitNo            String?
@@ -141,6 +150,7 @@ model Property {
   createdAt         DateTime @default(now())
   archivedAt        DateTime?
   tenancies         Tenancy[]
+  listings          Listing[]
   @@index([workspaceId, clientPrincipalId])
 }
 // TODO [later]: optional Unit entity under Property for multi-unit assets.
@@ -187,6 +197,170 @@ enum RecordSource {
   MANUAL
 }
 
+// ───────────────────────────── Listings [1B] — landlord supply side
+
+// A landlord's marketing record for a (typically vacant) owned unit. Scoped to
+// the owning Property, so the LANDLORD persona reaches it through the same
+// owned-property id-set as everything else (services/contactScope.ts). The
+// readiness score is a deterministic calculator (calculators/listingReadiness.ts)
+// whose { rule, version, inputs } breakdown is cached in `readiness`.
+model Listing {
+  id             String        @id @default(uuid())
+  workspaceId    String
+  propertyId     String
+  status         ListingStatus @default(DRAFT)
+  headline       String?
+  askingRent     Decimal?      @db.Decimal(12, 2)
+  availableFrom  DateTime?     // date-only semantics; store UTC midnight via toUtcDateOnly
+  furnished      Boolean?
+  description    String?
+  permitRef      String?       // RERA/Trakheesi (Madmoun) permit — expiry/alerts wiring lands in 1B issue #3
+  permitExpiry   DateTime?     // date-only
+  readinessScore Int?          // cached 0..100; calculators/listingReadiness.ts is authoritative
+  readiness      Json?         // { rule, version, score, checks: [{ key, label, ok, weight }] }
+  publishedAt    DateTime?
+  createdById    String
+  createdAt      DateTime      @default(now())
+  archivedAt     DateTime?
+  property       Property      @relation(fields: [propertyId], references: [id])
+  @@index([workspaceId, status])
+  @@index([workspaceId, propertyId])
+}
+
+enum ListingStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// ───────────────────────────── Tenant passport [1C] — demand side
+
+// A tenant's reusable rental profile, scoped to ONE Contact (the TENANT persona's
+// subjectContactId). Supporting documents attach as scope-polymorphic Documents
+// (scopeType TENANT_PASSPORT, scopeId = passport id). Sharing with a landlord/agent
+// is a consent-gated secure link (PASSPORT_SHARE).
+model TenantPassport {
+  id            String         @id @default(uuid())
+  workspaceId   String
+  contactId     String         // the TENANT persona's Contact — one passport per contact
+  status        PassportStatus @default(DRAFT)
+  employer      String?
+  jobTitle      String?
+  monthlyIncome Decimal?       @db.Decimal(12, 2)
+  nationality   String?
+  householdSize Int?
+  moveInBy      DateTime?      // date-only; store UTC midnight via toUtcDateOnly
+  summary       String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  @@unique([workspaceId, contactId])
+}
+
+enum PassportStatus {
+  DRAFT
+  READY
+}
+
+// A prospective-tenant enquiry against a published listing (1C #8), captured from
+// the public listing link — no account. Notifies the workspace overseers.
+model Enquiry {
+  id           String        @id @default(uuid())
+  workspaceId  String
+  listingId    String?
+  propertyId   String?
+  name         String
+  email        String?
+  phone        String?
+  message      String?
+  status       EnquiryStatus @default(NEW)
+  source       String?       // e.g. "LISTING_LINK"
+  secureLinkId String?
+  createdAt    DateTime      @default(now())
+  @@index([workspaceId, status])
+}
+
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+// A scheduled property viewing for a prospective tenant (2A #10), usually arising
+// from an Enquiry on a listing. scheduledAt is a real timestamp (a time slot), not
+// a date-only contract date.
+model Viewing {
+  id           String        @id @default(uuid())
+  workspaceId  String
+  propertyId   String
+  listingId    String?
+  enquiryId    String?
+  contactId    String?       // prospective tenant, if a Contact exists
+  prospectName String?       // free text when there is no Contact yet
+  scheduledAt  DateTime
+  status       ViewingStatus @default(REQUESTED)
+  notes        String?
+  createdById  String?
+  createdAt    DateTime      @default(now())
+  @@index([workspaceId, status])
+  @@index([workspaceId, scheduledAt])
+}
+
+enum ViewingStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// Contract pack (2A #12) — a generated PDF of the agreed terms from an accepted
+// new-tenancy Offer, stored as a Document (PROPERTY-scoped so owner + operator can
+// read it). The e-sign reference (#13) is captured here, not in a separate table.
+model ContractPack {
+  id          String             @id @default(uuid())
+  workspaceId String
+  offerId     String
+  listingId   String?
+  propertyId  String
+  documentId  String             // the generated PDF Document
+  status      ContractPackStatus @default(GENERATED)
+  eSignRef    String?            // external e-sign provider reference (#13)
+  sentAt      DateTime?
+  signedAt    DateTime?
+  createdById String?
+  createdAt   DateTime           @default(now())
+  @@index([workspaceId, offerId])
+}
+
+enum ContractPackStatus {
+  GENERATED
+  SENT_FOR_SIGNATURE
+  SIGNED
+}
+
+// Move-in handover (2A #14) — condition record for a tenancy, with a photo vault
+// (PROPERTY-scoped Documents) and a DUAL acknowledgement: both landlord and tenant
+// confirm the recorded condition. Completed only when both have acknowledged.
+model MoveIn {
+  id            String       @id @default(uuid())
+  workspaceId   String
+  tenancyId     String
+  propertyId    String
+  status        MoveInStatus @default(PENDING)
+  landlordAckAt DateTime?
+  tenantAckAt   DateTime?
+  notes         String?
+  createdById   String?
+  createdAt     DateTime     @default(now())
+  @@index([workspaceId, tenancyId])
+}
+
+enum MoveInStatus {
+  PENDING
+  PARTIALLY_ACKNOWLEDGED
+  COMPLETED
+}
+
 // ───────────────────────────── Deadlines & calendar [1A]
 
 model Deadline {
@@ -216,6 +390,7 @@ enum DeadlineKind {
   APPROVAL_DUE
   TENANT_RESPONSE_DUE
   EJARI_RENEWAL
+  PERMIT_EXPIRY
   CUSTOM
 }
 enum DeadlineStatus {
@@ -298,6 +473,8 @@ enum ScopeType {
   TASK
   RENEWAL_CASE
   OFFER
+  LISTING
+  TENANT_PASSPORT
 }
 enum DocumentKind {
   TENANCY_CONTRACT
@@ -470,7 +647,9 @@ enum LinkPurpose {
   DOCUMENT_SHARE
   APPROVAL
   TENANT_OFFER
-} // TENANT_OFFER activates Stage 2
+  LISTING_VIEW
+  PASSPORT_SHARE
+} // TENANT_OFFER activates Stage 2; LISTING_VIEW + PASSPORT_SHARE are 1B/1C public pages
 
 model ConsentRecord {                // P5
   id            String        @id @default(uuid())
@@ -494,6 +673,7 @@ enum ConsentPurpose {
   MESSAGING
   DOCUMENT_STORAGE
   LINK_INTERACTION
+  PASSPORT_SHARING
 }
 enum ConsentSource {
   SECURE_LINK
@@ -614,6 +794,7 @@ enum NotificationCategory {
   PROOFS
   RISK
   DIGEST
+  ENQUIRIES
 }
 
 enum Cadence {
@@ -732,6 +913,23 @@ enum EvidenceType {
   CONSENT_REVOKED
   RISK_FLAG_RAISED
   RISK_FLAG_CLEARED
+  LISTING_CREATED
+  LISTING_UPDATED
+  LISTING_PUBLISHED
+  LISTING_ARCHIVED
+  LISTING_VIEWED
+  LANDLORD_VERIFIED
+  PASSPORT_SHARED
+  PASSPORT_VIEWED
+  ENQUIRY_RECEIVED
+  VIEWING_SCHEDULED
+  VIEWING_COMPLETED
+  CONTRACT_PACK_GENERATED
+  CONTRACT_PACK_SENT
+  CONTRACT_PACK_SIGNED
+  MOVEIN_ACKNOWLEDGED
+  MOVEIN_COMPLETED
+  DEPOSIT_RECEIPT_VIEWED
 }
 
 model AuditEvent {                   // security/admin log; insert-only; hash chain in v1.1 (D6)
@@ -979,8 +1177,10 @@ model RenewalCase {
 model Offer {
   id              String      @id @default(uuid())
   workspaceId     String
-  renewalCaseId   String
-  tenancyId       String
+  renewalCaseId   String?                           // null for a new-tenancy offer (2A #11)
+  tenancyId       String?                           // null until a tenancy exists
+  listingId       String?                           // set for a new-tenancy offer on a listing
+  prospectContactId String?                         // the prospective tenant, when known
   version         Int
   party           OfferParty
   annualRent      Decimal     @db.Decimal(12, 2)

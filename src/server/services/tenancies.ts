@@ -1,4 +1,4 @@
-import { Prisma, type RecordSource, type TenancyStatus } from "@prisma/client";
+import { Prisma, type DocumentKind, type RecordSource, type TenancyStatus } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, require_ } from "../authz";
 import { recordAudit } from "../audit";
@@ -6,6 +6,8 @@ import { recordEvidence } from "../evidence";
 import { toUtcDateOnly } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
 import { evaluateRiskForTenancy } from "./risk";
+import { assertReadable } from "./contactScope";
+import { ingestDocument, logDocumentAccess } from "./documents";
 
 // Tenancy CRUD (T2.4). Create/update regenerates deadlines (T3.2); status
 // transitions are logged as evidence; archive cancels open deadlines.
@@ -20,11 +22,47 @@ export async function getTenancy(ctx: AuthzContext, id: string) {
       deadlines: { where: { status: "OPEN" }, orderBy: { dueAt: "asc" } },
     },
   });
-  assertSameWorkspace(ctx, tenancy);
-  if (ctx.clientPrincipalId && tenancy!.property.clientPrincipalId !== ctx.clientPrincipalId) {
-    throw new AuthzError("Not found", 404);
-  }
-  return tenancy;
+  await assertReadable(ctx, { kind: "tenancy", row: tenancy });
+  return tenancy!;
+}
+
+/**
+ * Authenticated tenant self-upload (2B #16). The active-portal tenant attaches a
+ * document to their OWN tenancy — reuses the shared ingest path, gated on
+ * tenancies.upload (no broad documents.write) and on getTenancy's contact scope, so
+ * a tenant can only ever upload to a tenancy they hold. TENANCY-scoped, so it then
+ * reads back only through the tenancy's parties. Records DOCUMENT_UPLOADED.
+ */
+export async function uploadTenancyDocument(
+  ctx: AuthzContext,
+  tenancyId: string,
+  file: { fileName: string; mime: string; data: Buffer; kind?: DocumentKind },
+) {
+  require_(ctx, "tenancies.upload");
+  await getTenancy(ctx, tenancyId); // contact-scope gate (404 if not the tenant's)
+  const doc = await ingestDocument({
+    workspaceId: ctx.workspaceId,
+    scopeType: "TENANCY",
+    scopeId: tenancyId,
+    kind: file.kind ?? "OTHER",
+    fileName: file.fileName,
+    mime: file.mime,
+    data: file.data,
+    uploadedById: ctx.userId,
+  });
+  await logDocumentAccess({ workspaceId: ctx.workspaceId, documentId: doc.id, actorUserId: ctx.userId, action: "UPLOADED" });
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: "DOCUMENT_UPLOADED",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "TENANCY",
+    scopeId: tenancyId,
+    tenancyId,
+    payload: { documentId: doc.id, fileName: file.fileName, selfUpload: true },
+  });
+  return doc;
 }
 
 export interface TenancyInput {

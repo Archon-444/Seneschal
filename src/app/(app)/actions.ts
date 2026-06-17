@@ -7,6 +7,10 @@ import { requireCtx } from "@/server/auth/request";
 import * as clients from "@/server/services/clients";
 import * as contacts from "@/server/services/contacts";
 import * as properties from "@/server/services/properties";
+import * as landlords from "@/server/services/landlords";
+import * as enquiries from "@/server/services/enquiries";
+import * as viewings from "@/server/services/viewings";
+import * as moveIn from "@/server/services/moveIn";
 import * as tenancies from "@/server/services/tenancies";
 import * as deadlines from "@/server/services/deadlines";
 import * as renewals from "@/server/services/renewals";
@@ -79,6 +83,78 @@ export async function archivePropertyAction(formData: FormData) {
   const ctx = await requireCtx();
   await properties.archiveProperty(ctx, s(formData, "id"));
   redirect("/properties");
+}
+
+export async function verifyLandlordAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const contactId = s(formData, "contactId");
+  await landlords.verifyLandlord(ctx, contactId, opt(formData, "note"));
+  revalidatePath(`/contacts/${contactId}`);
+}
+
+export async function revokeLandlordVerificationAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const contactId = s(formData, "contactId");
+  await landlords.revokeLandlordVerification(ctx, contactId, opt(formData, "note"));
+  revalidatePath(`/contacts/${contactId}`);
+}
+
+export async function setEnquiryStatusAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await enquiries.setEnquiryStatus(
+    ctx,
+    s(formData, "id"),
+    s(formData, "status") as "NEW" | "CONTACTED" | "CLOSED",
+  );
+  revalidatePath("/enquiries");
+}
+
+export async function createViewingAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await viewings.createViewing(ctx, {
+    propertyId: s(formData, "propertyId"),
+    listingId: opt(formData, "listingId"),
+    enquiryId: opt(formData, "enquiryId"),
+    prospectName: opt(formData, "prospectName"),
+    scheduledAt: new Date(s(formData, "scheduledAt")),
+    notes: opt(formData, "notes"),
+  });
+  revalidatePath("/viewings");
+}
+
+export async function setViewingStatusAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await viewings.setViewingStatus(
+    ctx,
+    s(formData, "id"),
+    s(formData, "status") as "REQUESTED" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW",
+  );
+  revalidatePath("/viewings");
+}
+
+export async function createMoveInAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await moveIn.createMoveIn(ctx, s(formData, "tenancyId"), opt(formData, "notes"));
+  revalidatePath(`/properties/${s(formData, "propertyId")}`);
+}
+
+export async function acknowledgeMoveInOperatorAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await moveIn.acknowledgeMoveIn(ctx, s(formData, "id"), s(formData, "party") as "LANDLORD" | "TENANT");
+  revalidatePath(`/properties/${s(formData, "propertyId")}`);
+}
+
+export async function addMoveInPhotoAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const file = formData.get("file") as File | null;
+  if (file && file.size > 0) {
+    await moveIn.addMoveInPhoto(ctx, s(formData, "id"), {
+      fileName: file.name,
+      mime: file.type || "application/octet-stream",
+      data: Buffer.from(await file.arrayBuffer()),
+    });
+  }
+  revalidatePath(`/properties/${s(formData, "propertyId")}`);
 }
 
 export async function addCalendarEntryAction(formData: FormData) {

@@ -59,7 +59,22 @@ export const NAV: NavItem[] = [
   { href: "/vault", label: "Document vault", icon: "vault" },
   { href: "/imports", label: "Import & extract", icon: "imports" },
   { href: "/proofs", label: "Proof requests", icon: "proofs" },
+  { href: "/enquiries", label: "Enquiries", icon: "contacts" },
+  { href: "/viewings", label: "Viewings", icon: "calendar" },
   { href: "/evidence", label: "Evidence", icon: "evidence" },
   { href: "/risk", label: "Risk flags", icon: "risk" },
   { href: "/reports", label: "Reports", icon: "reports" },
+];
+
+// Persona rails (F0b). One honest entry each: the self-service surface is a single
+// scoped home for now. Stage 1B/2B add their own pages and grow these.
+export const TENANT_NAV: NavItem[] = [
+  { href: "/portal", label: "Home", icon: "dashboard" },
+  { href: "/portal/passport", label: "Rental passport", icon: "contacts" },
+  { href: "/portal/movein", label: "Move-in", icon: "vault" },
+];
+export const LANDLORD_NAV: NavItem[] = [
+  { href: "/portal", label: "Home", icon: "dashboard" },
+  { href: "/portal/listings", label: "Listings", icon: "properties" },
+  { href: "/portal/movein", label: "Move-in", icon: "vault" },
 ];
