@@ -21,27 +21,37 @@ const ROOTS = ["src/server/services"];
 const ALLOW_FILES = new Set([
   "src/server/services/contactScope.ts",
   "src/server/services/clientScope.ts",
+  "src/server/services/delegateScope.ts",
 ]);
 
-// Prisma accessors for models a persona (TENANT/LANDLORD/CLIENT_VIEWER) can reach.
+// Prisma accessors for models a persona (TENANT/LANDLORD/CLIENT_VIEWER) or a delegate
+// (MANAGING_AGENT) can reach.
 const PERSONA_MODELS = new Set([
   "tenancy", "property", "paymentItem", "deadline", "document", "proofRequest",
   "listing", "offer", "tenantPassport", "moveIn", "contractPack", "enquiry",
   "viewing", "secureLink",
 ]);
 
-// Tokens whose presence in the enclosing function means "this read is gated".
+// Tokens whose presence in the enclosing function means "this read/write is gated".
 const SCOPE_TOKENS = [
   "scope(ctx", "contactScopedWhere", "assertReadable", "assertSameWorkspace",
   "clientScope(ctx", "resolveContactScopeIds", "resolveClientScopeIds",
   "scopeMatchClauses", "scopeBelongsTo",
+  // delegate (F0d) doors:
+  "clientSetScopedWhere", "resolveDelegateScopeIds", "resolveDelegateContactIds",
+  "assertClientInDelegateScope", "assertDelegateClientId", "clientOfScope",
   // by-id getters / loaders that themselves enforce the contact scope:
   "getTenancy(", "getListing(", "getProperty(", "getDocument(", "getProofRequest(",
-  "loadMoveIn(", "loadPack(", "getOrCreateMyPassport(", "getPassport(",
+  "getContact(", "loadMoveIn(", "loadPack(", "getOrCreateMyPassport(", "getPassport(",
   "scope-audit:",
 ];
 
-const READ_RE = /prisma\.(\w+)\.(findMany|findFirst)\b/;
+// Analytic reads (count/aggregate/groupBy) are reads too — an ungated dashboard
+// count on a client-scoped model leaks aggregate signal across every client.
+const READ_RE = /prisma\.(\w+)\.(findMany|findFirst|count|aggregate|groupBy)\b/;
+// F0d: writes are now in scope too — a delegate has broad write, so an ungated
+// create/update/delete on a client-scoped model fails OPEN across every client.
+const WRITE_RE = /prisma\.(\w+)\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/;
 // Top-level declarations only (column 0) — inner indented arrow consts are NOT
 // function boundaries, so a helper-arrow doesn't split a scoped function in two.
 const FUNC_START_RE = /^(export\s+)?(async\s+)?function\s+\w+|^(export\s+)?const\s+\w+\s*=\s*(async\s*)?(\(|function)/;
@@ -58,12 +68,12 @@ function enclosingFunction(lines, idx) {
   return lines.slice(start, end).join("\n");
 }
 
-/** Return the ungated persona-model reads in one file's source. */
+/** Return the ungated persona-model reads AND writes in one file's source. */
 export function scanSource(file, content) {
   const found = [];
   const lines = content.split("\n");
   lines.forEach((line, i) => {
-    const m = READ_RE.exec(line);
+    const m = READ_RE.exec(line) ?? WRITE_RE.exec(line);
     if (!m || !PERSONA_MODELS.has(m[1])) return;
     const body = enclosingFunction(lines, i);
     if (SCOPE_TOKENS.some((t) => body.includes(t))) return;
@@ -86,10 +96,22 @@ function selftest() {
   const bad = `export async function leak(ctx) {\n  return prisma.document.findMany({ where: { workspaceId: ctx.workspaceId } });\n}`;
   const good = `export async function ok(ctx) {\n  return prisma.document.findMany({ where: { ...scope(ctx) } });\n}`;
   const annotated = `export async function cron(workspaceId) {\n  // scope-audit: nightly batch, no persona ctx\n  return prisma.document.findMany({ where: { workspaceId } });\n}`;
+  const badWrite = `export async function leakW(ctx, id) {\n  return prisma.property.update({ where: { id }, data: {} });\n}`;
+  const goodWrite = `export async function okW(ctx, row) {\n  assertClientInDelegateScope(ctx, row);\n  return prisma.property.update({ where: { id: row.id }, data: {} });\n}`;
+  // Analytic reads: an ungated count is flagged; a resolver-scoped one passes. NOTE the
+  // limitation — token-matching cannot tell a hand-rolled delegate branch sitting beside a
+  // `scope(ctx)`/resolver token from a fully-scoped one; the structural fix is to scope every
+  // count off the single resolveClientScopeIds id-set (see dashboard.ts), not the gate.
+  const badCount = `export async function leakC(ctx) {\n  return prisma.property.count({ where: { workspaceId: ctx.workspaceId } });\n}`;
+  const goodCount = `export async function okC(ctx) {\n  const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.delegateClientIds);\n  return prisma.property.count({ where: { id: { in: ids.propertyIds } } });\n}`;
   const fails = [];
   if (scanSource("bad.ts", bad).length !== 1) fails.push("expected the ungated read to be flagged");
   if (scanSource("good.ts", good).length !== 0) fails.push("a scope(ctx) read must pass");
   if (scanSource("annotated.ts", annotated).length !== 0) fails.push("a scope-audit-annotated read must pass");
+  if (scanSource("badw.ts", badWrite).length !== 1) fails.push("expected the ungated write to be flagged");
+  if (scanSource("goodw.ts", goodWrite).length !== 0) fails.push("a delegate-scoped write must pass");
+  if (scanSource("badc.ts", badCount).length !== 1) fails.push("expected the ungated count to be flagged");
+  if (scanSource("goodc.ts", goodCount).length !== 0) fails.push("a resolver-scoped count must pass");
   if (fails.length) {
     console.error("✗ scope-audit selftest FAILED — the gate is not working:");
     for (const f of fails) console.error("  " + f);

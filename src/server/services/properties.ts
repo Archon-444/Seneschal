@@ -1,7 +1,8 @@
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, assertSameWorkspace, clientScope, require_, scope } from "../authz";
+import { type AuthzContext, AuthzError, assertSameWorkspace, clientScope, isDelegateRole, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
 import { assertReadable, contactScopedWhere } from "./contactScope";
+import { assertDelegateClientId, clientSetScopedWhere } from "./delegateScope";
 
 // Property CRUD + archive (T2.3). Fiduciary workspaces require a client on
 // every property; archiving a property never archives its evidence.
@@ -14,7 +15,9 @@ export async function listProperties(
   const q = opts?.q?.trim();
   const base = ctx.subjectContactId
     ? await contactScopedWhere(ctx, "PROPERTY")
-    : { ...scope(ctx), ...clientScope(ctx) };
+    : isDelegateRole(ctx.role)
+      ? await clientSetScopedWhere(ctx, "PROPERTY")
+      : { ...scope(ctx), ...clientScope(ctx) };
   return prisma.property.findMany({
     where: {
       ...base,
@@ -75,10 +78,15 @@ export async function createProperty(ctx: AuthzContext, data: PropertyInput) {
     throw new AuthzError("Fiduciary workspaces require a client on every property", 422);
   }
   if (data.clientPrincipalId) {
-    const client = await prisma.clientPrincipal.findUnique({
-      where: { id: data.clientPrincipalId },
-    });
-    assertSameWorkspace(ctx, client);
+    if (isDelegateRole(ctx.role)) {
+      // Delegate: the input client must be in the assigned set (no row exists yet).
+      assertDelegateClientId(ctx, data.clientPrincipalId);
+    } else {
+      const client = await prisma.clientPrincipal.findUnique({
+        where: { id: data.clientPrincipalId },
+      });
+      assertSameWorkspace(ctx, client);
+    }
   }
   const property = await prisma.property.create({
     data: { workspaceId: ctx.workspaceId, ...data },

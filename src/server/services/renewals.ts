@@ -1,10 +1,11 @@
 import { Prisma, type ActorType, type OfferParty, type RenewalStatus, type SecureLink, type TenancyStatus } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
+import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
 import { notify } from "../notify";
 import { resolveClientScopeIds } from "./clientScope";
+import { resolveDelegateScopeIds } from "./delegateScope";
 import { createSecureLink, consumeLinkUse } from "./secureLinks";
 import { getTenancy, setTenancyStatus } from "./tenancies";
 import { decree43, type RentPositionResult } from "../calculators/rent";
@@ -365,13 +366,20 @@ export async function listRenewalPipeline(
   const horizon = addDaysUtc(today, within);
 
   // Restrict to a client's tenancies: a CLIENT_VIEWER is always locked to its own
-  // client; a fiduciary may pass an explicit clientPrincipalId (mirrors listDeadlines).
-  const effectiveClientId = ctx.clientPrincipalId ?? opts?.clientPrincipalId ?? null;
+  // client; a fiduciary may pass an explicit clientPrincipalId (mirrors listDeadlines);
+  // a delegate (MANAGING_AGENT) is locked to its assigned clients' tenancies.
   let scopedTenancyIds: string[] | null = null;
-  if (effectiveClientId) {
-    const ids = await resolveClientScopeIds(ctx.workspaceId, effectiveClientId);
-    scopedTenancyIds = ids.tenancyIds;
+  if (isDelegateRole(ctx.role)) {
+    scopedTenancyIds = (await resolveDelegateScopeIds(ctx)).tenancyIds;
+  } else {
+    const effectiveClientId = ctx.clientPrincipalId ?? opts?.clientPrincipalId ?? null;
+    if (effectiveClientId) {
+      const ids = await resolveClientScopeIds(ctx.workspaceId, effectiveClientId);
+      scopedTenancyIds = ids.tenancyIds;
+    }
   }
+  // A delegate cannot call the fail-closed scope() — build the workspace filter directly.
+  const wsFilter = isDelegateRole(ctx.role) ? { workspaceId: ctx.workspaceId } : scope(ctx);
 
   // Tenancies with an open renewal case stay in the pipeline even past the horizon.
   const openCases = await prisma.renewalCase.findMany({
@@ -382,7 +390,7 @@ export async function listRenewalPipeline(
 
   const tenancies = await prisma.tenancy.findMany({
     where: {
-      ...scope(ctx),
+      ...wsFilter,
       archivedAt: null,
       ...(scopedTenancyIds ? { id: { in: scopedTenancyIds } } : {}),
       OR: [

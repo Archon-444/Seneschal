@@ -14,6 +14,12 @@ export interface AuthzContext {
   clientPrincipalId: string | null;
   /** Set for TENANT | LANDLORD: limits every read to this Contact's records. */
   subjectContactId: string | null;
+  /**
+   * Set for MANAGING_AGENT: the ClientPrincipal ids this execution delegate may
+   * read AND write. Empty for every other role; non-empty is the fail-closed
+   * invariant for a delegate (an empty set would be a workspace-wide leak).
+   */
+  delegateClientIds: string[];
   isStaff: boolean;
   /** Staff acting on behalf of a user via the admin service path. */
   onBehalfOfId?: string;
@@ -22,6 +28,16 @@ export interface AuthzContext {
 /** TENANT and LANDLORD are single-Contact self-service personas. */
 export function isPersonaRole(role: Role): role is "TENANT" | "LANDLORD" {
   return role === "TENANT" || role === "LANDLORD";
+}
+
+/**
+ * MANAGING_AGENT is the execution delegate: read + broad write, but confined to
+ * the set of ClientPrincipals on its membership (AuthzContext.delegateClientIds).
+ * It is NOT a persona (no subjectContactId), so the fail-closed primitives gate it
+ * by role, not by contact scope.
+ */
+export function isDelegateRole(role: Role): role is "MANAGING_AGENT" {
+  return role === "MANAGING_AGENT";
 }
 
 export class AuthzError extends Error {
@@ -60,13 +76,14 @@ const ROLE_RANK: Record<Role, number> = {
   WORKSPACE_ADMIN: 0,
   FIDUCIARY: 1,
   MANAGER: 2,
-  CLIENT_VIEWER: 3,
-  AGENT: 4,
-  LICENSED_PARTNER: 5,
-  VENDOR: 6,
-  AUDITOR: 7,
-  LANDLORD: 8,
-  TENANT: 9,
+  MANAGING_AGENT: 3,
+  CLIENT_VIEWER: 4,
+  AGENT: 5,
+  LICENSED_PARTNER: 6,
+  VENDOR: 7,
+  AUDITOR: 8,
+  LANDLORD: 9,
+  TENANT: 10,
 };
 
 export function rolePrecedence(role: Role): number {
@@ -93,12 +110,18 @@ export function contextFromMembership(user: User, membership: Membership): Authz
   if (isPersonaRole(membership.role) && !membership.subjectContactId) {
     throw new AuthzError(`${membership.role} membership missing contact scope`);
   }
+  if (isDelegateRole(membership.role) && membership.assignedClientIds.length === 0) {
+    // An unscoped delegate would read+write the whole workspace — fail closed,
+    // exactly as a persona without a subjectContactId does above.
+    throw new AuthzError("MANAGING_AGENT membership missing client scope");
+  }
   return {
     userId: user.id,
     workspaceId: membership.workspaceId,
     role: membership.role,
     clientPrincipalId: membership.role === "CLIENT_VIEWER" ? membership.clientPrincipalId : null,
     subjectContactId: isPersonaRole(membership.role) ? membership.subjectContactId : null,
+    delegateClientIds: isDelegateRole(membership.role) ? membership.assignedClientIds : [],
     isStaff: user.isStaff,
   };
 }
@@ -117,10 +140,17 @@ export function require_(ctx: AuthzContext, capability: Capability): void {
  * needs contact-level scoping, not just workspace; any list/findMany path that
  * has not been routed through `contactScopedWhere` therefore 403s a persona
  * instead of returning the whole workspace. This is the list-family choke point.
+ *
+ * Same fail-closed treatment for a MANAGING_AGENT (F0d): a delegate is confined to
+ * its assigned clients, so any list path not routed through `clientSetScopedWhere`
+ * must throw rather than return every client's rows.
  */
 export function scope(ctx: AuthzContext): { workspaceId: string } {
   if (ctx.subjectContactId) {
     throw new AuthzError("Persona context must be scoped via contactScopedWhere, not scope()");
+  }
+  if (isDelegateRole(ctx.role)) {
+    throw new AuthzError("Delegate context must be scoped via clientSetScopedWhere, not scope()");
   }
   return { workspaceId: ctx.workspaceId };
 }
@@ -140,6 +170,11 @@ export function clientScope(ctx: AuthzContext): { clientPrincipalId?: string } {
  * sufficient read check for a TENANT | LANDLORD (a sibling tenant's row is in the
  * same workspace), so the by-id getters must use `assertReadable` instead. A
  * getter that still calls this with a persona context therefore fails closed.
+ *
+ * A MANAGING_AGENT (F0d) is gated the same way: workspace match is not a sufficient
+ * check (a sibling client's row is in the same workspace), so delegate read/write
+ * paths must use `assertReadable` / `assertClientInDelegateScope`. A path that still
+ * calls this with a delegate context fails closed.
  */
 export function assertSameWorkspace(
   ctx: AuthzContext,
@@ -147,6 +182,9 @@ export function assertSameWorkspace(
 ): asserts row is { workspaceId: string } {
   if (ctx.subjectContactId) {
     throw new AuthzError("Persona context must be checked via assertReadable, not assertSameWorkspace");
+  }
+  if (isDelegateRole(ctx.role)) {
+    throw new AuthzError("Delegate context must be checked via assertClientInDelegateScope, not assertSameWorkspace");
   }
   if (!row || row.workspaceId !== ctx.workspaceId) {
     // 404, not 403: never confirm existence of another workspace's records.

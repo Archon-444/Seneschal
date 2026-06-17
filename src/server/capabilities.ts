@@ -126,6 +126,29 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "proofs.read",
     "documents.read",
   ],
+  // Execution delegate (F0d): read + broad WRITE, but every path is confined to
+  // Membership.assignedClientIds (AuthzContext.delegateClientIds) — see
+  // services/delegateScope.ts. It does NOT hold the fiduciary-control caps
+  // (proofs.decide), the roster (clients.*), members/workspace admin,
+  // renewals.decide, landlords.verify, or cross-client reports.* — those are simply
+  // not granted here. listings.*/offers.*/contracts.* arrive with their surfaces.
+  MANAGING_AGENT: [
+    "contacts.read",
+    "properties.read",
+    "properties.write",
+    "tenancies.read",
+    "tenancies.write",
+    "tenancies.upload",
+    "payments.read",
+    "payments.write",
+    "deadlines.read",
+    "deadlines.write",
+    "renewals.read",
+    "documents.read",
+    "documents.write",
+    "proofs.read",
+    "proofs.write",
+  ],
   LICENSED_PARTNER: [
     "properties.read",
     "tenancies.read",

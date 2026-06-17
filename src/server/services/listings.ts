@@ -262,6 +262,8 @@ export async function getListingForLink(link: SecureLink): Promise<PublicListing
 
 /** Recompute the readiness score from current fields and cache it on the row. */
 async function storeReadiness(listing: Listing, property: Pick<Property, "bedrooms" | "sizeSqft">) {
+  // scope-audit: internal readiness-cache recompute; the caller already holds the
+  // scoped listing (fetched via getListing/assertReadable) and passes it in.
   const readiness = readinessFor(listing, property);
   return prisma.listing.update({
     where: { id: listing.id },

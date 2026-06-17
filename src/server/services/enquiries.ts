@@ -27,6 +27,8 @@ export async function createEnquiryFromLink(link: SecureLink, input: EnquiryInpu
   const listing = await prisma.listing.findUnique({ where: { id: link.scopeId } });
   if (!listing || listing.status !== "PUBLISHED") throw new Error("This listing is no longer available");
 
+  // scope-audit: public LISTING_VIEW link path (no ctx); the link's workspace + the
+  // resolved PUBLISHED listing scope the enquiry. Not reachable by a delegate context.
   const enquiry = await prisma.enquiry.create({
     data: {
       workspaceId: listing.workspaceId,

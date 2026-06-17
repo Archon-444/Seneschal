@@ -17,6 +17,7 @@ const ROLE_LABEL: Record<string, string> = {
   FIDUCIARY: "Fiduciary",
   CLIENT_VIEWER: "Client viewer",
   AGENT: "Agent",
+  MANAGING_AGENT: "Managing agent",
   LICENSED_PARTNER: "Partner",
   VENDOR: "Vendor",
   AUDITOR: "Auditor",

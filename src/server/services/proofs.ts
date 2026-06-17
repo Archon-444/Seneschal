@@ -1,6 +1,6 @@
 import type { DocumentKind, ScopeType, SecureLink } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
+import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, require_, scope } from "../authz";
 import { recordEvidence } from "../evidence";
 import { notify } from "../notify";
 import { ingestDocument, logDocumentAccess } from "./documents";
@@ -8,6 +8,7 @@ import { createSecureLink } from "./secureLinks";
 import { raiseProofOverdue, clearProofOverdue } from "./risk";
 import { resolveClientScopeIds } from "./clientScope";
 import { assertReadable, contactScopedWhere } from "./contactScope";
+import { assertDelegateClientId, clientOfScope, clientSetScopedWhere } from "./delegateScope";
 import { todayInDubai } from "../calculators/dates";
 
 // Proof requests (E7) — the core verb: ask an external party for evidence,
@@ -28,10 +29,22 @@ export async function createProofRequest(
 ) {
   require_(ctx, "proofs.write");
   const contact = await prisma.contact.findUnique({ where: { id: args.assignedContactId } });
-  assertSameWorkspace(ctx, contact);
+  if (isDelegateRole(ctx.role)) {
+    // Assignee just needs to be in the workspace (assigning sends an email, leaks no
+    // client data); the security boundary is the scope target below.
+    if (!contact || contact.workspaceId !== ctx.workspaceId) throw new AuthzError("Not found", 404);
+  } else {
+    assertSameWorkspace(ctx, contact);
+  }
   // a scoped request without a target id is invisible to client-scoped viewers
   if (args.scopeType !== "WORKSPACE" && !args.scopeId) {
     throw new AuthzError(`scopeId required for ${args.scopeType}-scoped proof requests`, 422);
+  }
+  if (isDelegateRole(ctx.role)) {
+    // The proof's subject (scopeType/scopeId) must resolve to an assigned client; a
+    // WORKSPACE-scoped proof has no client and so is denied (cross-client).
+    const clientId = await clientOfScope(ctx.workspaceId, args.scopeType, args.scopeId ?? null);
+    assertDelegateClientId(ctx, clientId);
   }
 
   const request = await prisma.proofRequest.create({
@@ -109,12 +122,14 @@ export async function listProofRequests(ctx: AuthzContext) {
   // only those resolving to their Contact.
   const base = ctx.subjectContactId
     ? await contactScopedWhere(ctx, "PROOF_REQUEST")
-    : {
-        ...scope(ctx),
-        ...(ctx.clientPrincipalId
-          ? { id: { in: (await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId)).proofRequestIds } }
-          : {}),
-      };
+    : isDelegateRole(ctx.role)
+      ? await clientSetScopedWhere(ctx, "PROOF_REQUEST")
+      : {
+          ...scope(ctx),
+          ...(ctx.clientPrincipalId
+            ? { id: { in: (await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId)).proofRequestIds } }
+            : {}),
+        };
   return prisma.proofRequest.findMany({
     where: base,
     orderBy: { createdAt: "desc" },
@@ -195,6 +210,8 @@ export async function submitProofViaLink(
     });
   }
 
+  // scope-audit: public secure-link upload path (no ctx); the validated link's
+  // workspace + PROOF_REQUEST scope authorize this status flip.
   await prisma.proofRequest.update({
     where: { id: request.id },
     data: { status: "SUBMITTED" },
