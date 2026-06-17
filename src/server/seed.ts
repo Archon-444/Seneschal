@@ -7,8 +7,11 @@ import { evaluateRiskForTenancy } from "./services/risk";
 import { newStorageKey, storage } from "./storage";
 import { listingReadiness } from "./calculators/listingReadiness";
 
-// Idempotent seed (T0.2): creates the Farina workspace fixture set per the
+// Idempotent seed (T0.2): creates the demo workspace fixture set per the
 // build handoff. Safe to run repeatedly — every create is find-or-create.
+// Nothing about the operator is hard-coded: the operator IS the configured login
+// (SEED_ADMIN_EMAIL), carries no fabricated display name (the UI falls back to the
+// email), and the workspace name is derived from the login domain.
 
 function date(iso: string): Date {
   return toUtcDateOnly(new Date(iso));
@@ -31,6 +34,13 @@ export function normalizeAdminEmail(raw: string): string {
   return email;
 }
 
+/** Workspace name derived from the operator's login domain (no hard-coded brand):
+ *  e.g. operator@acme.com → "Acme". Falls back to "Workspace" if there is no domain. */
+export function orgNameFromEmail(email: string): string {
+  const root = (email.split("@")[1] ?? "").split(".")[0] ?? "";
+  return root ? root[0].toUpperCase() + root.slice(1) : "Workspace";
+}
+
 export interface SeedResult {
   proofLinkUrl: string | null;
 }
@@ -49,15 +59,21 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     },
   });
 
+  // The operator is the configured login (SEED_ADMIN_EMAIL); in dev where none is set,
+  // a neutral placeholder login. No fabricated display name — the UI shows the email
+  // and nothing where there is no profile name. Workspace name comes from the login domain.
+  const operatorEmail = opts?.adminEmail ? normalizeAdminEmail(opts.adminEmail) : "operator@example.com";
+  const orgName = orgNameFromEmail(operatorEmail);
+
   const workspace = await findOrCreate(
-    () => prisma.workspace.findFirst({ where: { name: "Farina Legal Advisory" } }),
-    () => prisma.workspace.create({ data: { name: "Farina Legal Advisory", type: "FIDUCIARY" } }),
+    () => prisma.workspace.findFirst({ where: { name: orgName, type: "FIDUCIARY" } }),
+    () => prisma.workspace.create({ data: { name: orgName, type: "FIDUCIARY" } }),
   );
 
-  const farina = await prisma.user.upsert({
-    where: { email: "farina@example.com" },
+  const operator = await prisma.user.upsert({
+    where: { email: operatorEmail },
     update: {},
-    create: { email: "farina@example.com", name: "Farina Al Rashid", locale: "en" },
+    create: { email: operatorEmail, name: "", locale: "en" },
   });
   const staff = await prisma.user.upsert({
     where: { email: "staff@seneschal.example" },
@@ -70,35 +86,13 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     where: {
       workspaceId_userId_role: {
         workspaceId: workspace.id,
-        userId: farina.id,
+        userId: operator.id,
         role: "FIDUCIARY",
       },
     },
     update: {},
-    create: { workspaceId: workspace.id, userId: farina.id, role: "FIDUCIARY" },
+    create: { workspaceId: workspace.id, userId: operator.id, role: "FIDUCIARY" },
   });
-
-  // optional real-login user: farina@example.com cannot receive OTP email, so
-  // production bootstrap can attach an actual operator address as FIDUCIARY
-  if (opts?.adminEmail !== undefined) {
-    const email = normalizeAdminEmail(opts.adminEmail);
-    const admin = await prisma.user.upsert({
-      where: { email },
-      update: {},
-      create: { email, name: "Pilot Operator" },
-    });
-    await prisma.membership.upsert({
-      where: {
-        workspaceId_userId_role: {
-          workspaceId: workspace.id,
-          userId: admin.id,
-          role: "FIDUCIARY",
-        },
-      },
-      update: {},
-      create: { workspaceId: workspace.id, userId: admin.id, role: "FIDUCIARY" },
-    });
-  }
 
   await findOrCreate(
     () => prisma.subscription.findFirst({ where: { workspaceId: workspace.id, planId: plan.id } }),
@@ -366,14 +360,14 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
         sizeBytes: content.length,
         storageKey,
         sha256: sha256Hex(content),
-        uploadedById: farina.id,
+        uploadedById: operator.id,
       },
     });
     await prisma.documentAccessLog.create({
       data: {
         workspaceId: workspace.id,
         documentId: sampleDoc.id,
-        actorUserId: farina.id,
+        actorUserId: operator.id,
         action: "UPLOADED",
       },
     });
@@ -404,7 +398,7 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
           assignedContactId: samir.id,
           dueAt: date("2026-06-23"),
           status: "SENT",
-          createdById: farina.id,
+          createdById: operator.id,
         },
       }),
   );
@@ -427,7 +421,7 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
         contactId: samir.id,
         tokenHash,
         expiresAt: new Date(Date.now() + 30 * 86_400_000),
-        createdById: farina.id,
+        createdById: operator.id,
       },
     });
     proofLinkUrl = `${process.env.APP_BASE_URL ?? "http://localhost:3000"}/link/${token}`;
@@ -444,7 +438,7 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
           workspaceId: workspace.id,
           type: "PROOF_REQUESTED",
           actorType: "USER",
-          actorId: farina.id,
+          actorId: operator.id,
           scopeType: "PROOF_REQUEST",
           scopeId: proof.id,
           payload: { title: proof.title },
@@ -453,7 +447,7 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
           workspaceId: workspace.id,
           type: "DOCUMENT_UPLOADED",
           actorType: "USER",
-          actorId: farina.id,
+          actorId: operator.id,
           scopeType: "TENANCY",
           scopeId: marinaTenancy.id,
           tenancyId: marinaTenancy.id,
@@ -464,7 +458,7 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
           workspaceId: workspace.id,
           type: "CHEQUE_CLEARED",
           actorType: "USER",
-          actorId: farina.id,
+          actorId: operator.id,
           scopeType: "TENANCY",
           scopeId: marinaTenancy.id,
           tenancyId: marinaTenancy.id,
@@ -578,7 +572,7 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
         description: "Upgraded 3-bed Palm villa with private beach access, maid's room and two covered parking bays.",
         readinessScore: readiness.score,
         readiness: readiness as unknown as Prisma.InputJsonValue,
-        createdById: farina.id,
+        createdById: operator.id,
       },
     });
   }

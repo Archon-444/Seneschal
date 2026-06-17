@@ -1,5 +1,5 @@
 // Optional build-time bootstrap for serverless deployments: when
-// SEED_ON_DEPLOY=true, run the idempotent Farina seed during `vercel-build`
+// SEED_ON_DEPLOY=true, run the idempotent seed during `vercel-build`
 // (DATABASE_URL is already required at that point). SEED_ADMIN_EMAIL attaches
 // a real operator inbox as FIDUCIARY so the sign-in OTP has somewhere to go.
 // Build logs are project-private, so printing the proof link here is safe.

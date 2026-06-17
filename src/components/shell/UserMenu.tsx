@@ -62,7 +62,7 @@ export function UserMenu({
             <div className="truncate text-sm font-medium text-navy-900">{name || email}</div>
             <div className="truncate text-xs text-muted">{email}</div>
             <div className="mt-1 truncate text-xs text-muted">
-              {workspaceName} · {ROLE_LABEL[role] ?? role}
+              {workspaceName ? `${workspaceName} · ` : ""}{ROLE_LABEL[role] ?? role}
             </div>
           </div>
           <Link href="/settings#profile" role="menuitem" onClick={close} className={itemClass}>

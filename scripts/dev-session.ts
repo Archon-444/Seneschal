@@ -4,7 +4,7 @@ import { generateToken } from "../src/server/crypto";
 
 const prisma = new PrismaClient();
 async function main() {
-  const email = process.argv[2] ?? "farina@example.com";
+  const email = process.argv[2] ?? "operator@example.com";
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) throw new Error(`No user ${email} — run pnpm db:seed first`);
   const { token, tokenHash } = generateToken();
