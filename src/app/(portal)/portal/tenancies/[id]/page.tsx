@@ -3,10 +3,11 @@ import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { isPersonaRole } from "@/server/authz";
 import { getTenancy } from "@/server/services/tenancies";
+import { listOffersForTenant } from "@/server/services/renewals";
 import { listDocuments, getDocumentUrl } from "@/server/services/documents";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, Button, Card, EmptyState, Field, inputClass, KpiCard, Money, PageHeader, Reminder, Table, Td } from "@/components/ui";
-import { uploadTenancyDocumentAction } from "./actions";
+import { respondToOfferAction, uploadTenancyDocumentAction } from "./actions";
 
 function propLabel(p: { community: string; building: string | null; unitNo: string | null }): string {
   return [p.building, p.unitNo ? `Unit ${p.unitNo}` : null, p.community].filter(Boolean).join(" · ");
@@ -26,6 +27,8 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
     docs.map(async (d) => ({ doc: d, url: (await getDocumentUrl(ctx, d.id)).url })),
   );
   const nextPayment = tenancy.paymentItems.find((p) => p.status === "SCHEDULED" || p.status === "REQUESTED");
+  const offers = ctx.role === "TENANT" ? await listOffersForTenant(ctx, id) : [];
+  const openOffer = offers.find((o) => o.status === "SENT" || o.status === "COUNTERED");
 
   return (
     <>
@@ -51,6 +54,45 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
           tone="warn"
         />
       </div>
+
+      {ctx.role === "TENANT" && offers.length > 0 && (
+        <Card className="mb-6">
+          <h2 className="font-display mb-3 text-lg text-navy-900">Renewal proposal</h2>
+          <Table headers={["v", "From", "Annual rent", "Payment", "Status"]}>
+            {offers.map((o) => (
+              <tr key={o.id}>
+                <Td className="figure">{o.version}</Td>
+                <Td>{o.party}</Td>
+                <Td><Money amount={String(o.annualRent)} /></Td>
+                <Td>{o.paymentSchedule}</Td>
+                <Td><Badge value={o.status} /></Td>
+              </tr>
+            ))}
+          </Table>
+          {openOffer && openOffer.party === "LANDLORD" && (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <form action={respondToOfferAction} className="rounded-md border border-line p-3">
+                <input type="hidden" name="tenancyId" value={id} />
+                <input type="hidden" name="offerId" value={openOffer.id} />
+                <input type="hidden" name="action" value="ACCEPT" />
+                <p className="mb-2 text-sm text-navy-700">Accept the proposed terms.</p>
+                <Button type="submit">Accept</Button>
+              </form>
+              <form action={respondToOfferAction} className="rounded-md border border-line p-3">
+                <input type="hidden" name="tenancyId" value={id} />
+                <input type="hidden" name="offerId" value={openOffer.id} />
+                <input type="hidden" name="action" value="COUNTER" />
+                <p className="mb-2 text-sm text-navy-700">Counter with your own terms.</p>
+                <div className="grid gap-2">
+                  <Field label="Annual rent (AED)"><input name="annualRent" type="number" min="0" required className={inputClass} /></Field>
+                  <Field label="Payment"><input name="paymentSchedule" required className={inputClass} placeholder="4 cheques" /></Field>
+                  <Button type="submit" variant="secondary">Send counter</Button>
+                </div>
+              </form>
+            </div>
+          )}
+        </Card>
+      )}
 
       <h2 className="mb-3 font-display text-xl text-navy-900">Payment schedule</h2>
       <Table headers={["#", "Due", "Amount", "Instrument", "Status"]}>
