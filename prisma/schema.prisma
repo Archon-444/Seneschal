@@ -177,6 +177,7 @@ model Tenancy {
   createdAt        DateTime      @default(now())
   archivedAt       DateTime?
   property         Property      @relation(fields: [propertyId], references: [id])
+  contractDoc      Document?     @relation("TenancyContract", fields: [contractDocId], references: [id])
   paymentItems     PaymentItem[]
   deadlines        Deadline[]
   @@index([workspaceId, propertyId])
@@ -458,6 +459,7 @@ model Document {
   secureLinkId String?
   createdAt    DateTime @default(now())
   archivedAt   DateTime?
+  contractTenancies Tenancy[] @relation("TenancyContract") // H3: concrete FK back-ref
   @@index([workspaceId, scopeType, scopeId])
   @@index([sha256])
 }
@@ -973,7 +975,14 @@ model RiskFlag {                     // P10: deterministic rules raise; agent ma
   clearedAt   DateTime?
   clearedById String?
   @@index([workspaceId, status])
-  @@unique([workspaceId, scopeType, scopeId, code, status]) // one open flag per code per scope
+  @@index([workspaceId, scopeType, scopeId, code]) // active-flag lookup (raise/clear/acknowledge)
+  // H2: at most ONE active (OPEN|ACKNOWLEDGED) flag per code per scope is enforced
+  // by a partial unique index added via raw SQL in the migration — Prisma can't
+  // express a filtered unique index. CLEARED rows are history and may repeat, so
+  // status is NOT part of a full unique key (that forced a deleteMany workaround).
+  // Prisma does not model filtered indexes, so it neither manages nor drifts on
+  // this raw index — it survives `migrate dev` (verified: a no-op migration is
+  // generated, not a DROP). See prisma/migrations/*_riskflag_partial_unique.
 }
 
 enum RiskCode {

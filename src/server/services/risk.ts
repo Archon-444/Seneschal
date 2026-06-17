@@ -85,17 +85,9 @@ async function clearFlag(
     },
   });
   if (!open) return;
-  // The unique key includes status, so two CLEARED rows for the same scope+code
-  // would collide. History lives in evidence events; keep only the latest cleared row.
-  await db.riskFlag.deleteMany({
-    where: {
-      workspaceId: args.workspaceId,
-      scopeType: args.scopeType,
-      scopeId: args.scopeId,
-      code: args.code,
-      status: "CLEARED",
-    },
-  });
+  // H2: the unique constraint is now partial (active flags only), so CLEARED rows
+  // may accumulate as history — no need to delete prior cleared rows before this
+  // transition. The append-only ledger keeps the full trail.
   await db.riskFlag.update({
     where: { id: open.id },
     data: { status: "CLEARED", clearedAt: new Date(), clearedById: args.clearedById ?? null },

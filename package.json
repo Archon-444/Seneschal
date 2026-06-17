@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "scope-audit": "node scripts/scope-audit.mjs",
+    "preflight:pr5": "node scripts/preflight-pr5.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
