@@ -60,6 +60,7 @@ export const NAV: NavItem[] = [
   { href: "/imports", label: "Import & extract", icon: "imports" },
   { href: "/proofs", label: "Proof requests", icon: "proofs" },
   { href: "/enquiries", label: "Enquiries", icon: "contacts" },
+  { href: "/viewings", label: "Viewings", icon: "calendar" },
   { href: "/evidence", label: "Evidence", icon: "evidence" },
   { href: "/risk", label: "Risk flags", icon: "risk" },
   { href: "/reports", label: "Reports", icon: "reports" },

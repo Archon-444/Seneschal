@@ -285,6 +285,34 @@ enum EnquiryStatus {
   CLOSED
 }
 
+// A scheduled property viewing for a prospective tenant (2A #10), usually arising
+// from an Enquiry on a listing. scheduledAt is a real timestamp (a time slot), not
+// a date-only contract date.
+model Viewing {
+  id           String        @id @default(uuid())
+  workspaceId  String
+  propertyId   String
+  listingId    String?
+  enquiryId    String?
+  contactId    String?       // prospective tenant, if a Contact exists
+  prospectName String?       // free text when there is no Contact yet
+  scheduledAt  DateTime
+  status       ViewingStatus @default(REQUESTED)
+  notes        String?
+  createdById  String?
+  createdAt    DateTime      @default(now())
+  @@index([workspaceId, status])
+  @@index([workspaceId, scheduledAt])
+}
+
+enum ViewingStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
 // ───────────────────────────── Deadlines & calendar [1A]
 
 model Deadline {
@@ -846,6 +874,8 @@ enum EvidenceType {
   PASSPORT_SHARED
   PASSPORT_VIEWED
   ENQUIRY_RECEIVED
+  VIEWING_SCHEDULED
+  VIEWING_COMPLETED
 }
 
 model AuditEvent {                   // security/admin log; insert-only; hash chain in v1.1 (D6)
