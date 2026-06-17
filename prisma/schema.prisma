@@ -826,13 +826,23 @@ enum MessageStatus {
 }
 
 model Outbox {                       // §7: no business logic in webhook handlers; all side effects via outbox
-  id          String   @id @default(uuid())
-  topic       String
-  payload     Json
-  status      String   @default("pending") // pending | dispatched | failed
-  attempts    Int      @default(0)
-  availableAt DateTime @default(now())
-  createdAt   DateTime @default(now())
+  id             String    @id @default(uuid())
+  topic          String
+  payload        Json
+  // pending | processing | dispatched | failed.
+  // `processing` is the lease window — a worker has claimed the row via
+  // SELECT … FOR UPDATE SKIP LOCKED + lockedUntil. Stale `processing` rows
+  // (lockedUntil < now()) are released back to `pending` on the next claim.
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  availableAt    DateTime  @default(now())
+  lockedUntil    DateTime?
+  // Provider-level idempotency: same key is passed to the provider on send so
+  // a crash between provider-accept and DB-flip-to-dispatched can't double-send.
+  // Nullable for non-side-effecting topics (e.g. risk.evaluate).
+  idempotencyKey String?
+  createdAt      DateTime  @default(now())
+  @@unique([topic, idempotencyKey])
   @@index([status, availableAt])
 }
 

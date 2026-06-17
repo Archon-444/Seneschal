@@ -28,20 +28,25 @@ function consoleAdapter(): ProviderAdapter {
 
 function metaAdapter(): ProviderAdapter {
   return {
-    async send({ to, body }) {
+    async send({ to, body, idempotencyKey }) {
       const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+      // H1: Meta's Cloud API dedupes on `biz_opaque_callback_data` per phone
+      // number within a 24h window. Same key as our outbox idempotencyKey so a
+      // crashed-after-accept retry isn't a second send.
+      const payload: Record<string, unknown> = {
+        messaging_product: "whatsapp",
+        to,
+        type: "text",
+        text: { body },
+      };
+      if (idempotencyKey) payload.biz_opaque_callback_data = idempotencyKey;
       const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to,
-          type: "text",
-          text: { body },
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`WhatsApp ${res.status}: ${await res.text()}`);
       const data = (await res.json()) as { messages?: { id?: string }[] };
