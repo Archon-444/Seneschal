@@ -10,6 +10,7 @@ import * as properties from "@/server/services/properties";
 import * as landlords from "@/server/services/landlords";
 import * as enquiries from "@/server/services/enquiries";
 import * as viewings from "@/server/services/viewings";
+import * as moveIn from "@/server/services/moveIn";
 import * as tenancies from "@/server/services/tenancies";
 import * as deadlines from "@/server/services/deadlines";
 import * as renewals from "@/server/services/renewals";
@@ -129,6 +130,31 @@ export async function setViewingStatusAction(formData: FormData) {
     s(formData, "status") as "REQUESTED" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW",
   );
   revalidatePath("/viewings");
+}
+
+export async function createMoveInAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await moveIn.createMoveIn(ctx, s(formData, "tenancyId"), opt(formData, "notes"));
+  revalidatePath(`/properties/${s(formData, "propertyId")}`);
+}
+
+export async function acknowledgeMoveInOperatorAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await moveIn.acknowledgeMoveIn(ctx, s(formData, "id"), s(formData, "party") as "LANDLORD" | "TENANT");
+  revalidatePath(`/properties/${s(formData, "propertyId")}`);
+}
+
+export async function addMoveInPhotoAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const file = formData.get("file") as File | null;
+  if (file && file.size > 0) {
+    await moveIn.addMoveInPhoto(ctx, s(formData, "id"), {
+      fileName: file.name,
+      mime: file.type || "application/octet-stream",
+      data: Buffer.from(await file.arrayBuffer()),
+    });
+  }
+  revalidatePath(`/properties/${s(formData, "propertyId")}`);
 }
 
 export async function addCalendarEntryAction(formData: FormData) {

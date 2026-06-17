@@ -71,8 +71,10 @@ export const NAV: NavItem[] = [
 export const TENANT_NAV: NavItem[] = [
   { href: "/portal", label: "Home", icon: "dashboard" },
   { href: "/portal/passport", label: "Rental passport", icon: "contacts" },
+  { href: "/portal/movein", label: "Move-in", icon: "vault" },
 ];
 export const LANDLORD_NAV: NavItem[] = [
   { href: "/portal", label: "Home", icon: "dashboard" },
   { href: "/portal/listings", label: "Listings", icon: "properties" },
+  { href: "/portal/movein", label: "Move-in", icon: "vault" },
 ];

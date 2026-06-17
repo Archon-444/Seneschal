@@ -338,6 +338,29 @@ enum ContractPackStatus {
   SIGNED
 }
 
+// Move-in handover (2A #14) — condition record for a tenancy, with a photo vault
+// (PROPERTY-scoped Documents) and a DUAL acknowledgement: both landlord and tenant
+// confirm the recorded condition. Completed only when both have acknowledged.
+model MoveIn {
+  id            String       @id @default(uuid())
+  workspaceId   String
+  tenancyId     String
+  propertyId    String
+  status        MoveInStatus @default(PENDING)
+  landlordAckAt DateTime?
+  tenantAckAt   DateTime?
+  notes         String?
+  createdById   String?
+  createdAt     DateTime     @default(now())
+  @@index([workspaceId, tenancyId])
+}
+
+enum MoveInStatus {
+  PENDING
+  PARTIALLY_ACKNOWLEDGED
+  COMPLETED
+}
+
 // ───────────────────────────── Deadlines & calendar [1A]
 
 model Deadline {
@@ -904,6 +927,8 @@ enum EvidenceType {
   CONTRACT_PACK_GENERATED
   CONTRACT_PACK_SENT
   CONTRACT_PACK_SIGNED
+  MOVEIN_ACKNOWLEDGED
+  MOVEIN_COMPLETED
 }
 
 model AuditEvent {                   // security/admin log; insert-only; hash chain in v1.1 (D6)

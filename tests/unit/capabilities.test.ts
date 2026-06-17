@@ -81,6 +81,16 @@ describe("role capability matrix", () => {
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: true, TENANT: false,
     },
+    "movein.write": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: false, TENANT: false,
+    },
+    "movein.acknowledge": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: true, TENANT: true,
+    },
     "landlords.verify": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
       AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
@@ -188,22 +198,23 @@ describe("role capability matrix", () => {
   // TENANT is read-only across the portfolio EXCEPT for managing/sharing its own
   // rental passport (1C): passport.read/write/share. Scoping to one Contact is
   // enforced separately in authz/contactScope.
-  it("TENANT is read-only apart from its own passport", () => {
+  it("TENANT is read-only apart from its own passport and move-in acknowledgement", () => {
     for (const cap of ROLE_CAPABILITIES.TENANT) {
-      expect(cap.endsWith(".read") || cap.startsWith("passport.")).toBe(true);
+      expect(cap.endsWith(".read") || cap.startsWith("passport.") || cap.startsWith("movein.")).toBe(true);
     }
   });
 
   // LANDLORD is read-only across the portfolio EXCEPT for managing its own listings
   // (1B supply side) and negotiating offers on them (2A): listings.* and offers.*.
   // Scoping to one Contact's owned properties is enforced separately in contactScope.
-  it("LANDLORD is read-only apart from its own listings, offers and contracts", () => {
+  it("LANDLORD is read-only apart from its own listings, offers, contracts and move-ins", () => {
     for (const cap of ROLE_CAPABILITIES.LANDLORD) {
       expect(
         cap.endsWith(".read") ||
           cap.startsWith("listings.") ||
           cap.startsWith("offers.") ||
-          cap.startsWith("contracts."),
+          cap.startsWith("contracts.") ||
+          cap.startsWith("movein."),
       ).toBe(true);
     }
   });
