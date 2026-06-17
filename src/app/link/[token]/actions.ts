@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { validateLinkToken, consumeLinkUse } from "@/server/services/secureLinks";
+import { isQuarantined } from "@/server/config/features";
 import { submitProofViaLink } from "@/server/services/proofs";
 import { respondToOfferViaLink } from "@/server/services/renewals";
 import { createEnquiryFromLink } from "@/server/services/enquiries";
@@ -70,6 +71,15 @@ export async function submitProofAction(_prev: SubmitState, formData: FormData):
     }
   }
 
+  // H4: consume the use atomically BEFORE the side effect. Under concurrent
+  // requests to a capped link exactly one consume wins; the loser short-circuits
+  // here and never runs submitProofViaLink, so a maxUses=1 link can't
+  // double-submit. Trade-off: a subsequent storage failure burns the use (the
+  // tenant gets a re-issued link) — strictly safer than today's consume-after,
+  // which let two concurrent uploads both land before either consumed.
+  const { consumed } = await consumeLinkUse(validation.link.id);
+  if (!consumed) return { status: "error", message: "This link is no longer available." };
+
   const h = await headers();
   await submitProofViaLink(
     validation.link,
@@ -86,11 +96,13 @@ export async function submitProofAction(_prev: SubmitState, formData: FormData):
       device: h.get("user-agent") ?? undefined,
     },
   );
-  await consumeLinkUse(validation.link.id);
   return { status: "done" };
 }
 
 export async function submitEnquiryAction(_prev: SubmitState, formData: FormData): Promise<SubmitState> {
+  // Enquiry is the public response to a LISTING_VIEW link — quarantined with
+  // listings, and POST-able even though the listing page no longer renders.
+  if (isQuarantined("listings")) return { status: "error", message: "This link is no longer available." };
   const token = String(formData.get("token") ?? "");
   const validation = await validateLinkToken(token);
   if (!validation.ok) return { status: "error", message: "This link is no longer available." };

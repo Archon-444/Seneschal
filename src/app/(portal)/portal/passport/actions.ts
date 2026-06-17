@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { DocumentKind } from "@prisma/client";
 import { requireCtx } from "@/server/auth/request";
+import { assertNotQuarantined, isQuarantined } from "@/server/config/features";
 import * as passport from "@/server/services/tenantPassport";
 
 // Tenant passport server actions (1C). Thin glue to the service; no Prisma here.
@@ -15,6 +16,7 @@ function opt(formData: FormData, key: string): string | undefined {
 }
 
 export async function updatePassportAction(formData: FormData) {
+  assertNotQuarantined("passport"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   await passport.updateMyPassport(ctx, {
     employer: opt(formData, "employer") ?? null,
@@ -35,6 +37,7 @@ export async function sharePassportAction(
   _prev: { url?: string; error?: string },
   formData: FormData,
 ): Promise<{ url?: string; error?: string }> {
+  if (isQuarantined("passport")) return { error: "This feature is not available." };
   const ctx = await requireCtx();
   try {
     const { url } = await passport.sharePassport(ctx, {
@@ -49,6 +52,7 @@ export async function sharePassportAction(
 }
 
 export async function uploadPassportDocumentAction(formData: FormData) {
+  assertNotQuarantined("passport"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return;

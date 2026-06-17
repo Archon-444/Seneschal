@@ -837,8 +837,11 @@ export async function respondToOfferViaLink(link: SecureLink, input: TenantRespo
   if (link.purpose !== "TENANT_OFFER") throw new AuthzError("Wrong link purpose", 400);
   const offer = await prisma.offer.findUnique({ where: { id: link.scopeId } });
   if (!offer) throw new AuthzError("Offer not found", 404);
+  // H4: consume-first; a lost race short-circuits before the response is applied,
+  // so a capped offer link can't record two tenant responses.
+  const { consumed } = await consumeLinkUse(link.id);
+  if (!consumed) throw new AuthzError("This link is no longer available", 410);
   await applyTenantOfferResponse(offer, input, { actorType: "TENANT_LINK", viaSecureLinkId: link.id });
-  await consumeLinkUse(link.id);
   return { ok: true as const };
 }
 
