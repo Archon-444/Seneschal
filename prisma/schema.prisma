@@ -1252,6 +1252,7 @@ model AuthOtp {
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
   @@index([email, expiresAt])
+  @@index([email, createdAt]) // H8: resend cooldown lookup (latest OTP per email)
 }
 
 model Session {
