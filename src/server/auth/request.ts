@@ -55,7 +55,10 @@ export async function requireCtx(): Promise<AuthzContext> {
  * login action, and the root page so targets are deterministic.
  */
 export function homePathFor(role: Role): string {
-  return isPersonaRole(role) ? "/portal" : "/dashboard";
+  if (isPersonaRole(role)) return "/portal";
+  // A decorrelated org-admin holds no data caps, so the data dashboard isn't its home.
+  if (role === "ORG_ADMIN") return "/members";
+  return "/dashboard";
 }
 
 /**
