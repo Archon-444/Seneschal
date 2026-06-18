@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma, resetDb } from "../helpers";
-import type { PlatformAdminContext } from "@/server/authz";
+import { authz, type PlatformAdminContext } from "@/server/authz";
 import { hashToken } from "@/server/crypto";
 import {
   archiveWorkspace,
@@ -86,6 +86,19 @@ describe("seat-zero provisioning", () => {
     const sub = await prisma.subscription.findFirst({ where: { workspaceId: result.workspaceId } });
     expect(sub?.status).toBe("active");
   });
+
+  it("an unknown plan code rolls back — no orphaned workspace, user, or invite (transactional)", async () => {
+    const before = await prisma.workspace.count();
+    await expect(
+      provisionWorkspace(ctx, {
+        name: "Orphan", type: "FIDUCIARY", customerEmail: "o@orphan.example", customerName: "O", planCode: "nope",
+      }),
+    ).rejects.toThrow(/unknown plan/i);
+    // Nothing committed: validating the plan before the transaction prevents the orphan a retry would duplicate.
+    expect(await prisma.workspace.count()).toBe(before);
+    expect(await prisma.workspaceInvite.count({ where: { email: "o@orphan.example" } })).toBe(0);
+    expect(await prisma.user.findUnique({ where: { email: "o@orphan.example" } })).toBeNull();
+  });
 });
 
 describe("workspace lifecycle", () => {
@@ -105,6 +118,26 @@ describe("workspace lifecycle", () => {
 
     const verbs = (await prisma.auditEvent.findMany({ where: { workspaceId } })).map((a) => a.verb);
     expect(verbs).toEqual(expect.arrayContaining(["workspace.suspend", "workspace.unsuspend", "workspace.archive"]));
+  });
+
+  it("a suspended or archived workspace denies its members a context (enforcement, not cosmetic)", async () => {
+    const { workspaceId } = await provisionWorkspace(ctx, {
+      name: "Enforce", type: "FIDUCIARY", customerEmail: "p@enforce.example", customerName: "P",
+    });
+    const principal = await prisma.user.findUniqueOrThrow({ where: { email: "p@enforce.example" } });
+
+    // Active → the principal's context resolves.
+    await expect(authz(principal.id, workspaceId)).resolves.toMatchObject({ role: "WORKSPACE_ADMIN" });
+
+    // Suspended → denied; restored on unsuspend.
+    await suspendWorkspace(ctx, workspaceId);
+    await expect(authz(principal.id, workspaceId)).rejects.toThrow(/suspended/i);
+    await unsuspendWorkspace(ctx, workspaceId);
+    await expect(authz(principal.id, workspaceId)).resolves.toBeTruthy();
+
+    // Archived → denied (terminal).
+    await archiveWorkspace(ctx, workspaceId);
+    await expect(authz(principal.id, workspaceId)).rejects.toThrow(/archived/i);
   });
 
   it("rejects lifecycle ops on an unknown workspace", async () => {

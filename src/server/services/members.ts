@@ -1,6 +1,6 @@
 import type { Bundle } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, require_ } from "../authz";
+import { type AuthzContext, AuthzError, pickMembership, require_ } from "../authz";
 import { GRANT_HONORED_BUNDLES } from "../capabilities";
 import { recordAudit } from "../audit";
 import { generateToken, hashToken } from "../crypto";
@@ -124,11 +124,30 @@ export async function acceptInvite(
     if (!invite.intendedBundles.includes("ORG_ADMIN")) {
       throw new AuthzError("Unsupported invite", 422);
     }
-    await prisma.membership.upsert({
-      where: { workspaceId_userId_role: { workspaceId: invite.workspaceId, userId: user.id, role: "ORG_ADMIN" } },
-      update: { revokedAt: null },
-      create: { workspaceId: invite.workspaceId, userId: user.id, role: "ORG_ADMIN" },
+    // If the invitee is already a member, OVERLAY the ORG_ADMIN people-power bundle onto their
+    // resolved membership — minting a second ORG_ADMIN membership would let pickMembership mask
+    // their real role (a FIDUCIARY never gains people-power; a MANAGER/MANAGING_AGENT loses its
+    // data/delegate scope on the next request). A genuinely new person gets a fresh membership.
+    const existing = await prisma.membership.findMany({
+      where: { workspaceId: invite.workspaceId, userId: user.id, revokedAt: null },
     });
+    if (existing.length === 0) {
+      await prisma.membership.create({
+        data: { workspaceId: invite.workspaceId, userId: user.id, role: "ORG_ADMIN" },
+      });
+    } else {
+      const target = pickMembership(existing)!;
+      const alreadyAdmin =
+        target.role === "ORG_ADMIN" ||
+        (await prisma.membershipGrant.findFirst({
+          where: { membershipId: target.id, bundle: "ORG_ADMIN", revokedAt: null },
+        })) !== null;
+      if (!alreadyAdmin) {
+        await prisma.membershipGrant.create({
+          data: { membershipId: target.id, bundle: "ORG_ADMIN", grantedById: invite.invitedById ?? user.id },
+        });
+      }
+    }
   }
 
   await prisma.workspaceInvite.update({

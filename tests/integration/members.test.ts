@@ -52,6 +52,35 @@ describe("people-power, decorrelated", () => {
     expect(hasCapability(ctx, "members.manage")).toBe(true); // gained people-power
     expect(hasCapability(ctx, "tenancies.read")).toBe(true); // kept its own data caps
   });
+
+  it("accepting an org-admin invite for an EXISTING member overlays the grant, not a masking membership", async () => {
+    const existing = await addMember(W.workspaceId, "MANAGER");
+    const email = (await prisma.user.findUniqueOrThrow({ where: { id: existing.userId } })).email;
+
+    const inv = await inviteOrgAdmin(admin.ctx, email);
+    await acceptInvite(inv.token);
+
+    // No second (masking) membership was minted…
+    const roles = (
+      await prisma.membership.findMany({ where: { workspaceId: W.workspaceId, userId: existing.userId, revokedAt: null } })
+    ).map((m) => m.role);
+    expect(roles).toEqual(["MANAGER"]);
+
+    // …the people-power arrives as an overlay grant, so the manager KEEPS its data and gains people-power.
+    const ctx = await authz(existing.userId, W.workspaceId);
+    expect(ctx.role).toBe("MANAGER");
+    expect(ctx.grantedBundles).toEqual(["ORG_ADMIN"]);
+    expect(hasCapability(ctx, "tenancies.read")).toBe(true);
+    expect(hasCapability(ctx, "members.manage")).toBe(true);
+  });
+
+  it("accepting an org-admin invite for a NEW email creates a fresh ORG_ADMIN membership", async () => {
+    const inv = await inviteOrgAdmin(admin.ctx, "brand-new@x.example");
+    const { userId } = await acceptInvite(inv.token);
+    const ctx = await authz(userId, W.workspaceId);
+    expect(ctx.role).toBe("ORG_ADMIN");
+    expect(ctx.grantedBundles).toEqual([]);
+  });
 });
 
 describe("separation of duties", () => {

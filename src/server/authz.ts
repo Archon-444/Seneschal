@@ -88,10 +88,17 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
 
   // F-Admin (D1/D3): grants and delegate client-scope are now AUDITED join rows, not columns on
   // the membership, so they must be loaded async here and threaded into the (sync) context builder.
-  const [grantedBundles, delegateClientIds] = await Promise.all([
+  const [grantedBundles, delegateClientIds, workspace] = await Promise.all([
     liveGrantBundles(membership.id),
     liveDelegateClientIds(membership.id, membership.workspaceId),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { suspendedAt: true, archivedAt: true } }),
   ]);
+  // F-Admin §3.2: a platform suspend/archive pauses the customer workspace — its members cannot
+  // build a context until it is restored. AuthzError (not a generic throw) so resolveCtxFor treats
+  // it like any other inaccessible workspace: fall through to another active one if the user has
+  // it, else deny. Enforced here, the single context door, so Suspend/Archive aren't cosmetic.
+  if (workspace?.archivedAt) throw new AuthzError("Workspace archived", 403);
+  if (workspace?.suspendedAt) throw new AuthzError("Workspace suspended", 403);
   return contextFromMembership(user, membership, grantedBundles, delegateClientIds);
 }
 

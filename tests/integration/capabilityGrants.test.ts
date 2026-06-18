@@ -140,10 +140,20 @@ describe("capability resolution (roleMap ∪ grants)", () => {
   // someone adds a data bundle to GRANT_HONORED_BUNDLES (the future re-opener), regardless of how
   // they justify "fixing" the inert test by honoring the bundle. Guards the premise, not the filter.
   it("every honored grant bundle is DATA-FREE (the premise guard) (⛔)", () => {
+    // (a) Honored caps are people/config — cross-checks two INDEPENDENT literals (PEOPLE_ADMIN and
+    //     each bundle's expansion), so it is not trivially true: it goes red if a honored bundle's
+    //     expansion gains a cap PEOPLE_ADMIN doesn't list.
     for (const bundle of GRANT_HONORED_BUNDLES) {
       for (const cap of BUNDLE_CAPABILITIES[bundle]) {
         expect(PEOPLE_ADMIN).toContain(cap);
       }
+    }
+    // (b) AND anchor "data-free" on the actual data sets a data role/bundle confers (CLIENT_VIEWER
+    //     reads, DELEGATE read+write) — independent of PEOPLE_ADMIN, so the guard can't be hollowed
+    //     by quietly adding a confidential-data cap to PEOPLE_ADMIN itself.
+    const dataCaps = new Set<string>([...ROLE_CAPABILITIES.CLIENT_VIEWER, ...BUNDLE_CAPABILITIES.DELEGATE]);
+    for (const cap of PEOPLE_ADMIN) {
+      expect(dataCaps.has(cap)).toBe(false);
     }
   });
 });
