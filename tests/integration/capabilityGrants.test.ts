@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
 import { authz, hasCapability, require_, rolePrecedence } from "@/server/authz";
-import { BUNDLE_CAPABILITIES, CAPABILITIES, ROLE_CAPABILITIES } from "@/server/capabilities";
+import {
+  BUNDLE_CAPABILITIES,
+  CAPABILITIES,
+  GRANT_HONORED_BUNDLES,
+  PEOPLE_ADMIN,
+  ROLE_CAPABILITIES,
+} from "@/server/capabilities";
 import type { Bundle, Role } from "@prisma/client";
 
 // F-Admin Phase 1 (D1) — the decorrelated capability foundation. ⛔ release-gating.
@@ -70,29 +76,29 @@ describe("capability resolution (roleMap ∪ grants)", () => {
     }
   });
 
-  it("a granted bundle adds EXACTLY its caps to the role's — the union, nothing more", async () => {
-    const { userId, membershipId } = await seat("ORG_ADMIN");
-    await grant(membershipId, "DELEGATE"); // org-admin who is ALSO a senior delegate
+  it("a granted ORG_ADMIN overlay adds EXACTLY its caps to the base role's — the union, nothing more", async () => {
+    const { userId, membershipId } = await seat("AGENT");
+    await grant(membershipId, "ORG_ADMIN"); // an agent who ALSO runs onboarding
     const ctx = await authz(userId, W.workspaceId);
 
-    expect(ctx.grantedBundles).toEqual(["DELEGATE"]);
-    const expected = new Set<string>([...ROLE_CAPABILITIES.ORG_ADMIN, ...BUNDLE_CAPABILITIES.DELEGATE]);
+    expect(ctx.grantedBundles).toEqual(["ORG_ADMIN"]);
+    const expected = new Set<string>([...ROLE_CAPABILITIES.AGENT, ...BUNDLE_CAPABILITIES.ORG_ADMIN]);
     for (const cap of CAPABILITIES) {
       expect(hasCapability(ctx, cap)).toBe(expected.has(cap));
     }
-    // Concretely: keeps people-power, gains delegate data, gains neither's exclusions.
-    expect(hasCapability(ctx, "members.manage")).toBe(true); // role
-    expect(hasCapability(ctx, "tenancies.write")).toBe(true); // bundle
-    expect(hasCapability(ctx, "proofs.decide")).toBe(false); // in neither set
-    expect(hasCapability(ctx, "clients.read")).toBe(false); // in neither set
+    // Concretely: keeps the agent's reads, gains people-power, gains neither's exclusions.
+    expect(hasCapability(ctx, "tenancies.read")).toBe(true); // role (AGENT reads)
+    expect(hasCapability(ctx, "members.manage")).toBe(true); // bundle (people-power)
+    expect(hasCapability(ctx, "tenancies.write")).toBe(false); // in neither set
+    expect(hasCapability(ctx, "payments.read")).toBe(false); // in neither set
   });
 
   it("a REVOKED grant contributes nothing — the live-only read filters it out", async () => {
-    const { userId, membershipId } = await seat("ORG_ADMIN");
-    const g = await grant(membershipId, "DELEGATE");
+    const { userId, membershipId } = await seat("AGENT");
+    const g = await grant(membershipId, "ORG_ADMIN");
 
     let ctx = await authz(userId, W.workspaceId);
-    expect(() => require_(ctx, "tenancies.read")).not.toThrow(); // granted → allowed
+    expect(() => require_(ctx, "members.manage")).not.toThrow(); // granted → allowed
 
     await prisma.membershipGrant.update({
       where: { id: g.id },
@@ -101,14 +107,43 @@ describe("capability resolution (roleMap ∪ grants)", () => {
 
     ctx = await authz(userId, W.workspaceId);
     expect(ctx.grantedBundles).toEqual([]); // revoked grant is not loaded
-    expect(() => require_(ctx, "tenancies.read")).toThrow(/lacks/); // back to deny
+    expect(() => require_(ctx, "members.manage")).toThrow(/lacks/); // back to deny
   });
 
   it("the partial unique allows re-granting a revoked bundle (no collision)", async () => {
-    const { membershipId } = await seat("ORG_ADMIN");
-    const g = await grant(membershipId, "DELEGATE");
+    const { membershipId } = await seat("AGENT");
+    const g = await grant(membershipId, "ORG_ADMIN");
     await prisma.membershipGrant.update({ where: { id: g.id }, data: { revokedAt: new Date() } });
     // Re-granting the same (membership, bundle) must NOT violate uniqueness once the old row is revoked.
-    await expect(grant(membershipId, "DELEGATE")).resolves.toBeTruthy();
+    await expect(grant(membershipId, "ORG_ADMIN")).resolves.toBeTruthy();
+  });
+
+  // ── Closure 1: the read-layer backstop. The grant union honors only people-power; a DATA-bundle
+  // grant from ANY path is inert, so the capability∪scope seam can't leak even if issuance is bypassed.
+  it("a forged DATA-bundle grant is INERT — honored set excludes it, no data cap leaks (⛔)", async () => {
+    // Bypass the members.ts issuance guard entirely by writing the grant rows directly.
+    const { userId, membershipId } = await seat("ORG_ADMIN");
+    for (const bundle of ["DELEGATE", "PRINCIPAL", "CLIENT_VIEWER"] as const) {
+      await grant(membershipId, bundle);
+    }
+    const ctx = await authz(userId, W.workspaceId);
+
+    expect(ctx.grantedBundles).toEqual([]); // the resolver never loads a non-honored bundle…
+    for (const cap of ["tenancies.read", "tenancies.write", "documents.read", "payments.read", "clients.read", "evidence.read"] as const) {
+      expect(hasCapability(ctx, cap)).toBe(false); // …so not one data cap is conferred
+    }
+    // The rows really are in the DB — this is inertness at resolution, not a failed insert.
+    expect(await prisma.membershipGrant.count({ where: { membershipId } })).toBe(3);
+  });
+
+  // The premise BEHIND the inert filter: the honored set must be data-free. This fails the moment
+  // someone adds a data bundle to GRANT_HONORED_BUNDLES (the future re-opener), regardless of how
+  // they justify "fixing" the inert test by honoring the bundle. Guards the premise, not the filter.
+  it("every honored grant bundle is DATA-FREE (the premise guard) (⛔)", () => {
+    for (const bundle of GRANT_HONORED_BUNDLES) {
+      for (const cap of BUNDLE_CAPABILITIES[bundle]) {
+        expect(PEOPLE_ADMIN).toContain(cap);
+      }
+    }
   });
 });

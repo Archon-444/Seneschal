@@ -116,9 +116,13 @@ enum Role {
   TENANT            // self-service demand-side persona; scoped to one Contact via Membership.subjectContactId
 }
 
-// F-Admin (D1): grantable capability bundles, unioned OVER the role map
-// (effective = roleMap(role) ∪ expand(grants)). Empty on deploy, so every existing
-// membership's effective capabilities are byte-identical — no parity migration.
+// F-Admin (D1): capability bundles, unioned OVER the role map (effective = roleMap ∪ grants).
+// IMPORTANT — only ORG_ADMIN is actually honored as a grant (capabilities.GRANT_HONORED_BUNDLES).
+// PRINCIPAL/DELEGATE/CLIENT_VIEWER are RESERVED but NOT grantable: a grant carries no scope, and
+// scope(ctx) narrows by ROLE only, so honoring a DATA bundle would confer caps with a workspace-
+// wide read (a leak). Those data shapes come from the BASE ROLE — PRINCIPAL via seat-zero
+// (WORKSPACE_ADMIN), DELEGATE via a MANAGING_AGENT membership + the assignment grid. Do not honor
+// a data bundle without first teaching scope(ctx) to narrow grant-derived data caps.
 enum Bundle {
   PRINCIPAL
   ORG_ADMIN

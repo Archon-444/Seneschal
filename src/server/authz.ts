@@ -1,6 +1,6 @@
 import type { Bundle, Membership, Role, User } from "@prisma/client";
 import { prisma } from "./db";
-import { bundleHas, roleHas, type Capability } from "./capabilities";
+import { bundleHas, GRANT_HONORED_BUNDLES, roleHas, type Capability } from "./capabilities";
 
 // Single authorization helper (T1.2 — release blocking).
 // Every service function takes an AuthzContext; no Prisma call exists outside
@@ -95,10 +95,17 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
   return contextFromMembership(user, membership, grantedBundles, delegateClientIds);
 }
 
-/** The live (non-revoked) capability bundles granted to a membership (F-Admin D1). */
+/**
+ * The live (non-revoked) capability bundles granted to a membership (F-Admin D1) — filtered to
+ * GRANT_HONORED_BUNDLES. This is the read-layer backstop for the capability∪scope seam: a grant
+ * unions caps over the base role but carries no scope, and scope(ctx) narrows by ROLE only, so a
+ * data-bundle grant would confer caps with a workspace-wide read. Honoring only the people-power
+ * overlay makes any data-bundle grant row (forged, legacy, or a future code path) INERT here,
+ * independent of the issuance guard in members.ts. See capabilities.ts GRANT_HONORED_BUNDLES.
+ */
 async function liveGrantBundles(membershipId: string): Promise<Bundle[]> {
   const grants = await prisma.membershipGrant.findMany({
-    where: { membershipId, revokedAt: null },
+    where: { membershipId, revokedAt: null, bundle: { in: GRANT_HONORED_BUNDLES } },
     select: { bundle: true },
   });
   return grants.map((g) => g.bundle);

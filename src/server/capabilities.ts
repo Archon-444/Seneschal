@@ -75,7 +75,8 @@ const ALL = [...CAPABILITIES] as Capability[];
 // People/config power — the decorrelated set. A DATA role (e.g. FIDUCIARY) must NOT gain
 // these just because it holds "all data": granting staff and reconfiguring the workspace is
 // a different axis (F-Admin §2). Only WORKSPACE_ADMIN (PRINCIPAL) and ORG_ADMIN hold them.
-const PEOPLE_ADMIN: Capability[] = [
+// Exported so the grant-resolution premise test can assert the honored bundle set is data-free.
+export const PEOPLE_ADMIN: Capability[] = [
   "workspace.manage",
   "workspace.configure",
   "members.read",
@@ -241,10 +242,8 @@ export function roleHas(role: Role, capability: Capability): boolean {
   return ROLE_CAPABILITIES[role].includes(capability);
 }
 
-// F-Admin (D1): grantable bundles, unioned OVER the role map. A membership holds a SET of
-// bundles ({} for every existing membership on deploy → effective caps unchanged). PRINCIPAL
-// is the full in-org grant; ORG_ADMIN/DELEGATE/CLIENT_VIEWER mirror their role cap sets so an
-// additive grant ("org-admin who is ALSO a delegate") needs no migration.
+// F-Admin (D1): the capability expansion of each bundle. NOTE this is the *definition* of
+// what a bundle means, NOT the set of bundles that may be granted — see GRANT_HONORED_BUNDLES.
 export const BUNDLE_CAPABILITIES: Record<Bundle, Capability[]> = {
   PRINCIPAL: ALL,
   ORG_ADMIN: ORG_ADMIN_CAPS,
@@ -255,6 +254,19 @@ export const BUNDLE_CAPABILITIES: Record<Bundle, Capability[]> = {
 export function bundleHas(bundle: Bundle, capability: Capability): boolean {
   return BUNDLE_CAPABILITIES[bundle].includes(capability);
 }
+
+// The ONLY bundles honored as additive grants. A grant unions caps OVER the base role, but it
+// CANNOT carry its own scope — scope(ctx) narrows by ROLE (delegate/persona/client-viewer), and
+// knows nothing about a grant-derived data cap. So honoring a DATA bundle here would confer the
+// capability while the read stayed workspace-wide: a leak. ORG_ADMIN is the only additive-safe
+// overlay (people/config power, reads no row).
+//
+// PRINCIPAL/DELEGATE/CLIENT_VIEWER stay in `enum Bundle` as RESERVED (§2.1) but are NOT honored:
+// those data shapes come from the BASE ROLE — PRINCIPAL via platform seat-zero (WORKSPACE_ADMIN),
+// DELEGATE via a MANAGING_AGENT membership + the assignment grid. Do NOT add a data bundle here
+// without first teaching scope(ctx) to narrow grant-derived data caps; the honored-set-is-data-free
+// test (tests/integration/capabilityGrants.test.ts) fails the moment this set gains a data bundle.
+export const GRANT_HONORED_BUNDLES: Bundle[] = ["ORG_ADMIN"];
 
 // Platform-plane capabilities (F-Admin §2.1) — reserved now so later splits are config, not
 // migration. NOT part of the in-org Capability union: the operator plane runs under

@@ -1,6 +1,7 @@
 import type { Bundle } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, require_ } from "../authz";
+import { GRANT_HONORED_BUNDLES } from "../capabilities";
 import { recordAudit } from "../audit";
 import { generateToken, hashToken } from "../crypto";
 
@@ -10,12 +11,13 @@ import { generateToken, hashToken } from "../crypto";
 //
 // SAFETY INVARIANT (capability ∪ scope): a granted DATA bundle (PRINCIPAL/DELEGATE/CLIENT_VIEWER)
 // would confer data CAPS while scope(ctx) — which only narrows for the delegate/persona/client-
-// viewer ROLES — leaves the read workspace-wide: a leak. So the only grantable overlay here is
-// ORG_ADMIN (people/config power, reads no row). Data shapes come from the base role: PRINCIPAL
-// via platform seat-zero, DELEGATE via a MANAGING_AGENT membership + the assignment grid.
+// viewer ROLES — leaves the read workspace-wide: a leak. So the only grantable overlay is the
+// people-power ORG_ADMIN. This is layer ONE (issuance); layer TWO is the resolver, which only
+// honors GRANT_HONORED_BUNDLES (authz.liveGrantBundles), so a data-bundle grant from ANY path is
+// inert. Both reference the same source of truth, GRANT_HONORED_BUNDLES.
 
 const INVITE_TTL_DAYS = 14;
-const GRANTABLE_BUNDLES: Bundle[] = ["ORG_ADMIN"];
+const GRANTABLE_BUNDLES: Bundle[] = GRANT_HONORED_BUNDLES;
 
 function actor(ctx: AuthzContext, onBehalfOfId?: string) {
   return {
