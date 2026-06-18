@@ -4,6 +4,7 @@ import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, req
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
 import { notify } from "../notify";
+import { evaluateRenewalRisk } from "./risk";
 import { resolveClientScopeIds } from "./clientScope";
 import { resolveDelegateScopeIds } from "./delegateScope";
 import { createSecureLink, consumeLinkUse } from "./secureLinks";
@@ -517,6 +518,20 @@ async function tryMoveTenancy(ctx: AuthzContext, tenancyId: string, target: Tena
   }
 }
 
+
+async function renewalPermittedMaxSnapshot(renewalCase: { indexCaptureId: string | null; tenancyId: string }) {
+  const linkedCapture = renewalCase.indexCaptureId
+    ? await prisma.rentIndexCapture.findUnique({ where: { id: renewalCase.indexCaptureId } })
+    : null;
+  const latestCapture =
+    linkedCapture ??
+    (await prisma.rentIndexCapture.findFirst({
+      where: { tenancyId: renewalCase.tenancyId, permittedNewRentMax: { not: null } },
+      orderBy: { capturedAt: "desc" },
+    }));
+  return latestCapture?.permittedNewRentMax ?? null;
+}
+
 export interface OfferInput {
   renewalCaseId: string;
   party: OfferParty;
@@ -554,16 +569,7 @@ export async function proposeOffer(ctx: AuthzContext, input: OfferInput) {
   // alone. Source preference: a capture explicitly linked to the case
   // (RenewalCase.indexCaptureId), else the latest capture against the tenancy.
   // Backfilled rows (NULL permittedNewRentMax) contribute no snapshot.
-  const linkedCapture = renewalCase!.indexCaptureId
-    ? await prisma.rentIndexCapture.findUnique({ where: { id: renewalCase!.indexCaptureId } })
-    : null;
-  const latestCapture =
-    linkedCapture ??
-    (await prisma.rentIndexCapture.findFirst({
-      where: { tenancyId: renewalCase!.tenancyId, permittedNewRentMax: { not: null } },
-      orderBy: { capturedAt: "desc" },
-    }));
-  const permittedMaxSnapshot = latestCapture?.permittedNewRentMax ?? null;
+  const permittedMaxSnapshot = await renewalPermittedMaxSnapshot(renewalCase!);
 
   const offer = await prisma.offer.create({
     data: {
@@ -584,7 +590,7 @@ export async function proposeOffer(ctx: AuthzContext, input: OfferInput) {
       permittedMaxSnapshot,
     },
   });
-  await prisma.renewalCase.update({ where: { id: renewalCase!.id }, data: { status: "NEGOTIATING" } });
+  await prisma.renewalCase.update({ where: { id: renewalCase!.id }, data: { status: "NEGOTIATING", currentOfferId: offer.id } });
   await tryMoveTenancy(ctx, renewalCase!.tenancyId, "NEGOTIATING");
   await recordEvidence({
     workspaceId: ctx.workspaceId,
@@ -607,6 +613,7 @@ export async function proposeOffer(ctx: AuthzContext, input: OfferInput) {
     objectType: "Offer",
     objectId: offer.id,
   });
+  await evaluateRenewalRisk(renewalCase!.id);
   return offer;
 }
 
@@ -627,7 +634,7 @@ export async function acceptOffer(ctx: AuthzContext, offerId: string) {
   await prisma.offer.update({ where: { id: offerId }, data: { status: "ACCEPTED" } });
   await prisma.renewalCase.update({
     where: { id: renewalCaseId },
-    data: { status: "AGREED", decidedOfferId: offerId },
+    data: { status: "AGREED", decidedOfferId: offerId, currentOfferId: offerId },
   });
   await tryMoveTenancy(ctx, tenancyId, "RENEWED");
   await recordEvidence({
@@ -651,50 +658,8 @@ export async function acceptOffer(ctx: AuthzContext, offerId: string) {
     objectType: "Offer",
     objectId: offerId,
   });
+  await evaluateRenewalRisk(renewalCaseId);
   return offer;
-}
-
-/** Mark the change notice served on a renewal case. */
-export async function serveNotice(
-  ctx: AuthzContext,
-  renewalCaseId: string,
-  opts?: { noticeDocId?: string; servedAt?: Date },
-) {
-  require_(ctx, "renewals.decide");
-  const renewalCase = await prisma.renewalCase.findUnique({ where: { id: renewalCaseId } });
-  assertSameWorkspace(ctx, renewalCase);
-  await getTenancy(ctx, renewalCase!.tenancyId); // enforces client scope
-
-  const updated = await prisma.renewalCase.update({
-    where: { id: renewalCaseId },
-    data: {
-      status: "NOTICE_SERVED",
-      noticeServedAt: opts?.servedAt ?? new Date(),
-      noticeDocId: opts?.noticeDocId ?? null,
-    },
-  });
-  await tryMoveTenancy(ctx, renewalCase!.tenancyId, "NOTICE_SERVED");
-  await recordEvidence({
-    workspaceId: ctx.workspaceId,
-    type: "NOTICE_SERVED",
-    actorType: ctx.isStaff ? "STAFF" : "USER",
-    actorId: ctx.userId,
-    onBehalfOfId: ctx.onBehalfOfId,
-    scopeType: "RENEWAL_CASE",
-    scopeId: renewalCaseId,
-    tenancyId: renewalCase!.tenancyId,
-    propertyId: renewalCase!.propertyId,
-  });
-  await recordAudit({
-    workspaceId: ctx.workspaceId,
-    actorType: ctx.isStaff ? "STAFF" : "USER",
-    actorId: ctx.userId,
-    onBehalfOfId: ctx.onBehalfOfId,
-    verb: "renewal.serve_notice",
-    objectType: "RenewalCase",
-    objectId: renewalCaseId,
-  });
-  return updated;
 }
 
 // ── Tenant secure-response link (no login; token-authenticated)
@@ -821,6 +786,7 @@ async function applyTenantOfferResponse(
     // scope-audit: offer pre-validated by callers — respondToOfferViaLink (secure-link
     // token) and respondToOfferAsTenant (getTenancy contact-scope gate).
     const last = await prisma.offer.findFirst({ where: { renewalCaseId }, orderBy: { version: "desc" } });
+    const permittedMaxSnapshot = renewalCase ? await renewalPermittedMaxSnapshot(renewalCase) : null;
     const created = await prisma.offer.create({
       data: {
         workspaceId,
@@ -834,9 +800,10 @@ async function applyTenantOfferResponse(
         note: input.note ?? null,
         status: "COUNTERED",
         viaSecureLinkId: source.viaSecureLinkId ?? null,
+        permittedMaxSnapshot,
       },
     });
-    await prisma.renewalCase.update({ where: { id: renewalCaseId }, data: { status: "NEGOTIATING" } });
+    await prisma.renewalCase.update({ where: { id: renewalCaseId }, data: { status: "NEGOTIATING", currentOfferId: created.id } });
     await recordEvidence({
       workspaceId,
       type: "OFFER_COUNTERED",
@@ -853,7 +820,7 @@ async function applyTenantOfferResponse(
       data: { status: "SUPERSEDED" },
     });
     await prisma.offer.update({ where: { id: offer.id }, data: { status: "ACCEPTED" } });
-    await prisma.renewalCase.update({ where: { id: renewalCaseId }, data: { status: "AGREED", decidedOfferId: offer.id } });
+    await prisma.renewalCase.update({ where: { id: renewalCaseId }, data: { status: "AGREED", decidedOfferId: offer.id, currentOfferId: offer.id } });
     const tenancy = await prisma.tenancy.findUnique({ where: { id: tenancyId } });
     if (tenancy && RENEW_FROM.has(tenancy.status)) {
       await prisma.tenancy.update({ where: { id: tenancyId }, data: { status: "RENEWED" } });
@@ -891,6 +858,7 @@ async function applyTenantOfferResponse(
       payload: { question: input.note ?? "", viaLink },
     });
   }
+  await evaluateRenewalRisk(renewalCaseId);
 }
 
 /** Public — record a tenant's response to an offer via secure link. No AuthzContext. */
