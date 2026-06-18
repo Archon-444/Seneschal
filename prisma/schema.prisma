@@ -132,7 +132,7 @@ model WorkspaceInvite {
   id              String    @id @default(uuid())
   workspaceId     String
   email           String
-  intendedBundles Bundle[]
+  intendedBundles Bundle[]  @default([])
   tokenHash       String    @unique
   invitedById     String?               // null when platform-issued seat-zero
   platformIssued  Boolean   @default(false)
