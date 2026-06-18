@@ -10,8 +10,8 @@ describe("role capability matrix", () => {
   it("covers every role", () => {
     expect(ROLES.sort()).toEqual(
       [
-        "WORKSPACE_ADMIN", "MANAGER", "FIDUCIARY", "CLIENT_VIEWER", "AGENT", "MANAGING_AGENT",
-        "LICENSED_PARTNER", "VENDOR", "AUDITOR", "LANDLORD", "TENANT",
+        "WORKSPACE_ADMIN", "MANAGER", "FIDUCIARY", "ORG_ADMIN", "CLIENT_VIEWER", "AGENT",
+        "MANAGING_AGENT", "LICENSED_PARTNER", "VENDOR", "AUDITOR", "LANDLORD", "TENANT",
       ].sort(),
     );
   });
@@ -27,12 +27,26 @@ describe("role capability matrix", () => {
   // explicit allow/deny matrix for the load-bearing capabilities
   const matrix: Record<string, Partial<Record<Role, boolean>>> = {
     "workspace.manage": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: false, MANAGER: false, CLIENT_VIEWER: false,
+      WORKSPACE_ADMIN: true, FIDUCIARY: false, ORG_ADMIN: false, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
+    // F-Admin: people/config caps — held by PRINCIPAL (WORKSPACE_ADMIN) and ORG_ADMIN only.
+    // FIDUCIARY (all DATA) must NOT hold them: that is the decorrelation.
+    "members.manage": {
+      WORKSPACE_ADMIN: true, ORG_ADMIN: true, FIDUCIARY: false, MANAGER: false, MANAGING_AGENT: false,
+      CLIENT_VIEWER: false, AGENT: false, AUDITOR: false, LANDLORD: false, TENANT: false,
+    },
+    "clients.assign": {
+      WORKSPACE_ADMIN: true, ORG_ADMIN: true, FIDUCIARY: false, MANAGER: false, MANAGING_AGENT: false,
+      CLIENT_VIEWER: false, AGENT: false, AUDITOR: false,
+    },
+    "workspace.configure": {
+      WORKSPACE_ADMIN: true, ORG_ADMIN: true, FIDUCIARY: false, MANAGER: false, MANAGING_AGENT: false,
+      CLIENT_VIEWER: false, AGENT: false, AUDITOR: false,
+    },
     "clients.write": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, ORG_ADMIN: false, MANAGER: true, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
@@ -47,7 +61,7 @@ describe("role capability matrix", () => {
       LANDLORD: false, TENANT: true,
     },
     "tenancies.read": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: true,
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, ORG_ADMIN: false, MANAGER: true, CLIENT_VIEWER: true,
       AGENT: true, MANAGING_AGENT: true, LICENSED_PARTNER: true, VENDOR: false, AUDITOR: true,
       LANDLORD: true, TENANT: true,
     },
@@ -187,6 +201,32 @@ describe("role capability matrix", () => {
       });
     }
   }
+
+  // F-Admin (D1): ORG_ADMIN is the decorrelated shape — people/config power, ZERO data.
+  it("ORG_ADMIN holds people/config caps and not a single data capability", () => {
+    const peopleConfig = ["workspace.configure", "members.read", "members.invite", "members.manage", "clients.assign"];
+    for (const cap of ROLE_CAPABILITIES.ORG_ADMIN) {
+      expect(peopleConfig).toContain(cap);
+    }
+    // The heavier WORKSPACE_ADMIN cap is NOT ORG_ADMIN's.
+    expect(roleHas("ORG_ADMIN", "workspace.manage")).toBe(false);
+    // No data verb — read or write — exists for an org-admin.
+    const data = [
+      "clients.read", "clients.write", "contacts.read", "properties.read", "tenancies.read",
+      "tenancies.write", "payments.read", "documents.read", "documents.write", "proofs.read",
+      "evidence.read", "renewals.read", "reports.read", "riskflags.read",
+    ] as const;
+    for (const cap of data) expect(roleHas("ORG_ADMIN", cap)).toBe(false);
+  });
+
+  // The other half of the decorrelation: a DATA principal must NOT gain people-power.
+  it("FIDUCIARY holds every data cap but no people/config power", () => {
+    expect(roleHas("FIDUCIARY", "tenancies.write")).toBe(true);
+    expect(roleHas("FIDUCIARY", "reports.generate")).toBe(true);
+    for (const cap of ["workspace.manage", "workspace.configure", "members.read", "members.invite", "members.manage", "clients.assign"] as const) {
+      expect(roleHas("FIDUCIARY", cap)).toBe(false);
+    }
+  });
 
   it("AUDITOR has no write capability anywhere", () => {
     for (const cap of ROLE_CAPABILITIES.AUDITOR) {

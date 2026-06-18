@@ -1,6 +1,6 @@
-import type { Membership, Role, User } from "@prisma/client";
+import type { Bundle, Membership, Role, User } from "@prisma/client";
 import { prisma } from "./db";
-import { roleHas, type Capability } from "./capabilities";
+import { bundleHas, roleHas, type Capability } from "./capabilities";
 
 // Single authorization helper (T1.2 — release blocking).
 // Every service function takes an AuthzContext; no Prisma call exists outside
@@ -20,6 +20,12 @@ export interface AuthzContext {
    * invariant for a delegate (an empty set would be a workspace-wide leak).
    */
   delegateClientIds: string[];
+  /**
+   * F-Admin (D1): the live capability bundles granted to THIS membership, on top of its
+   * role. Effective caps = roleMap(role) ∪ expand(grantedBundles). Empty for every existing
+   * membership (no backfill), so effective caps are unchanged until a bundle is granted.
+   */
+  grantedBundles: Bundle[];
   /**
    * Audit-actor hint only (labels evidence/audit rows STAFF vs USER). Sourced from
    * User.isPlatformAdmin. NOT a capability or scope input — it never widens a read.
@@ -80,7 +86,16 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
   const membership = pickMembership(memberships);
   if (!membership) throw new AuthzError("No access to this workspace");
 
-  return contextFromMembership(user, membership);
+  return contextFromMembership(user, membership, await liveGrantBundles(membership.id));
+}
+
+/** The live (non-revoked) capability bundles granted to a membership (F-Admin D1). */
+async function liveGrantBundles(membershipId: string): Promise<Bundle[]> {
+  const grants = await prisma.membershipGrant.findMany({
+    where: { membershipId, revokedAt: null },
+    select: { bundle: true },
+  });
+  return grants.map((g) => g.bundle);
 }
 
 /**
@@ -93,15 +108,16 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
 const ROLE_RANK: Record<Role, number> = {
   WORKSPACE_ADMIN: 0,
   FIDUCIARY: 1,
-  MANAGER: 2,
-  MANAGING_AGENT: 3,
-  CLIENT_VIEWER: 4,
-  AGENT: 5,
-  LICENSED_PARTNER: 6,
-  VENDOR: 7,
-  AUDITOR: 8,
-  LANDLORD: 9,
-  TENANT: 10,
+  ORG_ADMIN: 2,
+  MANAGER: 3,
+  MANAGING_AGENT: 4,
+  CLIENT_VIEWER: 5,
+  AGENT: 6,
+  LICENSED_PARTNER: 7,
+  VENDOR: 8,
+  AUDITOR: 9,
+  LANDLORD: 10,
+  TENANT: 11,
 };
 
 export function rolePrecedence(role: Role): number {
@@ -121,7 +137,11 @@ export function pickMembership<M extends { role: Role; createdAt: Date }>(member
   )[0];
 }
 
-export function contextFromMembership(user: User, membership: Membership): AuthzContext {
+export function contextFromMembership(
+  user: User,
+  membership: Membership,
+  grantedBundles: Bundle[] = [],
+): AuthzContext {
   if (membership.role === "CLIENT_VIEWER" && !membership.clientPrincipalId) {
     throw new AuthzError("CLIENT_VIEWER membership missing client scope");
   }
@@ -140,15 +160,32 @@ export function contextFromMembership(user: User, membership: Membership): Authz
     clientPrincipalId: membership.role === "CLIENT_VIEWER" ? membership.clientPrincipalId : null,
     subjectContactId: isPersonaRole(membership.role) ? membership.subjectContactId : null,
     delegateClientIds: isDelegateRole(membership.role) ? membership.assignedClientIds : [],
+    grantedBundles,
     isStaff: user.isPlatformAdmin,
   };
 }
 
-/** Assert the context holds a capability. */
-export function require_(ctx: AuthzContext, capability: Capability): void {
-  if (!roleHas(ctx.role, capability)) {
-    throw new AuthzError(`Role ${ctx.role} lacks ${capability}`);
+/**
+ * Does the context hold a capability? Effective = roleMap(role) ∪ expand(grantedBundles)
+ * (F-Admin §2.3). NEVER consults ROLE_RANK, isStaff, or workspace seniority — the single
+ * property the §8 rank-never-grants test protects. Delete a wire here and that test goes red.
+ */
+export function hasCapability(ctx: AuthzContext, capability: Capability): boolean {
+  if (roleHas(ctx.role, capability)) return true;
+  return ctx.grantedBundles.some((bundle) => bundleHas(bundle, capability));
+}
+
+/** Assert the context holds a capability (the granted-bundle union; §2.3). */
+export function assertCapability(ctx: AuthzContext, capability: Capability): void {
+  if (!hasCapability(ctx, capability)) {
+    const via = ctx.grantedBundles.length ? ` (+bundles ${ctx.grantedBundles.join(",")})` : "";
+    throw new AuthzError(`Role ${ctx.role}${via} lacks ${capability}`);
   }
+}
+
+/** Established name used across the service layer; delegates to assertCapability. */
+export function require_(ctx: AuthzContext, capability: Capability): void {
+  assertCapability(ctx, capability);
 }
 
 /**

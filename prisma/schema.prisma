@@ -55,15 +55,35 @@ model Membership {
   revokedAt         DateTime?
   workspace         Workspace @relation(fields: [workspaceId], references: [id])
   user              User      @relation(fields: [userId], references: [id])
+  grants            MembershipGrant[]
   @@unique([workspaceId, userId, role])
   @@index([workspaceId])
   @@index([userId])
+}
+
+// F-Admin (D1): audited per-membership capability grants — the "who granted whom, when"
+// a fiduciary product needs. Effective caps = roleMap(role) ∪ expand(live grants).
+model MembershipGrant {
+  id           String     @id @default(uuid())
+  membershipId String
+  bundle       Bundle
+  grantedById  String
+  grantedAt    DateTime   @default(now())
+  revokedAt    DateTime?
+  revokedById  String?
+  membership   Membership @relation(fields: [membershipId], references: [id])
+  @@index([membershipId])
+  // Live-uniqueness — at most ONE non-revoked grant per (membership, bundle) — is a raw
+  // PARTIAL unique index added in the migration (WHERE "revokedAt" IS NULL). Prisma can't
+  // express a filtered unique and won't drift on it (mirrors RiskFlag_active_unique). A
+  // plain @@unique would collide on re-grant-after-revoke.
 }
 
 enum Role {
   WORKSPACE_ADMIN
   MANAGER
   FIDUCIARY
+  ORG_ADMIN         // F-Admin: people/config power, ZERO data caps (onboards staff, wires delegate assignments, cannot open a tenancy)
   CLIENT_VIEWER
   AGENT
   MANAGING_AGENT    // execution delegate: read + broad write, confined to Membership.assignedClientIds
@@ -72,6 +92,16 @@ enum Role {
   AUDITOR
   LANDLORD          // self-service supply-side persona; scoped to one Contact via Membership.subjectContactId
   TENANT            // self-service demand-side persona; scoped to one Contact via Membership.subjectContactId
+}
+
+// F-Admin (D1): grantable capability bundles, unioned OVER the role map
+// (effective = roleMap(role) ∪ expand(grants)). Empty on deploy, so every existing
+// membership's effective capabilities are byte-identical — no parity migration.
+enum Bundle {
+  PRINCIPAL
+  ORG_ADMIN
+  DELEGATE
+  CLIENT_VIEWER
 }
 // Platform admin is NOT a membership role: the Seneschal operator plane runs under PlatformAdminContext
 // (User.isPlatformAdmin), reaches lifecycle/billing/aggregate stats only, and holds zero Membership rows (F-Admin §3.1).
