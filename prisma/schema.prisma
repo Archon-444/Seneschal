@@ -20,7 +20,7 @@ model Workspace {
   name        String
   type        WorkspaceType
   createdAt   DateTime @default(now())
-  suspendedAt DateTime?            // F-Admin §3.2: temporary platform suspend (distinct from archive)
+  suspendedAt DateTime?            // F-Admin §3.2: temporary platform suspend — blocks the interactive door (authz) only; the daily sweep keeps running (runner.ts). Distinct from archive (terminal).
   archivedAt  DateTime?
   memberships Membership[]
   @@index([type])

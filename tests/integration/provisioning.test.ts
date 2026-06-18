@@ -140,6 +140,24 @@ describe("workspace lifecycle", () => {
     await expect(authz(principal.id, workspaceId)).rejects.toThrow(/archived/i);
   });
 
+  it("the daily sweep still processes a SUSPENDED workspace, but never an ARCHIVED one (the other half of §3.2)", async () => {
+    // Interactive enforcement (above) is only half the decision. Suspend pauses the customer's
+    // PEOPLE; the background plane keeps watching so deadlines/risk/evidence don't lapse silently
+    // during a pause. This locks that asymmetry: adding `suspendedAt: null` to the sweep filter
+    // turns this red — surfacing the decision instead of letting a "fix" reverse it quietly.
+    const { sweepableWorkspaces } = await import("@/server/outbox/runner");
+    const active = await provisionWorkspace(ctx, { name: "Active", type: "OWNER", customerEmail: "a@sweep.example", customerName: "A" });
+    const suspended = await provisionWorkspace(ctx, { name: "Suspended", type: "OWNER", customerEmail: "s@sweep.example", customerName: "S" });
+    const archived = await provisionWorkspace(ctx, { name: "Archived", type: "OWNER", customerEmail: "z@sweep.example", customerName: "Z" });
+    await suspendWorkspace(ctx, suspended.workspaceId);
+    await archiveWorkspace(ctx, archived.workspaceId);
+
+    const sweptIds = (await sweepableWorkspaces()).map((w) => w.id);
+    expect(sweptIds).toContain(active.workspaceId);
+    expect(sweptIds).toContain(suspended.workspaceId); // suspend ≠ stop monitoring
+    expect(sweptIds).not.toContain(archived.workspaceId); // archive is terminal
+  });
+
   it("rejects lifecycle ops on an unknown workspace", async () => {
     await expect(suspendWorkspace(ctx, "does-not-exist")).rejects.toThrow(/not found/i);
     await expect(attachPlan(ctx, "x", "nope")).rejects.toThrow();

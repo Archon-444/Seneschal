@@ -22,14 +22,28 @@ export const handlers: Record<string, OutboxHandler> = {
   "whatsapp.status": applyWhatsappEvents,
 };
 
+/**
+ * Workspaces a daily sweep processes. ARCHIVED (terminal) workspaces are excluded — never touched
+ * again. SUSPENDED workspaces are DELIBERATELY INCLUDED: a platform suspend pauses only the
+ * interactive door (authz(), F-Admin §3.2 in authz.ts), not this background plane — so late-cheque,
+ * proof, risk and deadline/evidence monitoring keep running through a temporary suspension and
+ * nothing lapses silently while the customer's people are locked out. Adding `suspendedAt: null`
+ * here would quietly reverse that decision; provisioning.test.ts's sweep test guards it.
+ */
+export function sweepableWorkspaces() {
+  return prisma.workspace.findMany({ where: { archivedAt: null } });
+}
+
 /** One daily pass: late cheques, overdue proofs, risk re-evaluation, ladders, digest. */
 export async function runDailyJobs(): Promise<void> {
-  const workspaces = await prisma.workspace.findMany({ where: { archivedAt: null } });
-  for (const ws of workspaces) {
+  for (const ws of await sweepableWorkspaces()) {
     await detectLatePayments(ws.id);
     await sweepOverdueProofRequests(ws.id);
     await evaluateWorkspaceRisk(ws.id);
     await runAlertLadders(ws.id);
+    // These dispatch for SUSPENDED workspaces too (sweepableWorkspaces includes them): a suspended
+    // customer's users still receive digests. Deliberate — suspend pauses interactive access, not
+    // the background plane. To mute email on suspend, skip these when ws.suspendedAt is set.
     await sendUserDailyDigests(ws.id); // rolls each user's pending feed items into one email
     await sendUserWeeklyDigests(ws.id); // weekly portfolio summary + WEEKLY-cadence items
   }

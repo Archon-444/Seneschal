@@ -97,6 +97,9 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
   // build a context until it is restored. AuthzError (not a generic throw) so resolveCtxFor treats
   // it like any other inaccessible workspace: fall through to another active one if the user has
   // it, else deny. Enforced here, the single context door, so Suspend/Archive aren't cosmetic.
+  // This is the INTERACTIVE plane only: the daily sweep (runner.ts sweepableWorkspaces) deliberately
+  // keeps processing a SUSPENDED workspace so monitoring doesn't lapse during a pause — only ARCHIVE
+  // (terminal) is excluded from both planes.
   if (workspace?.archivedAt) throw new AuthzError("Workspace archived", 403);
   if (workspace?.suspendedAt) throw new AuthzError("Workspace suspended", 403);
   return contextFromMembership(user, membership, grantedBundles, delegateClientIds);
