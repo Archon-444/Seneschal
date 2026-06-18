@@ -58,3 +58,7 @@ export function decree43(currentRent: number, marketRentAvg: number): RentPositi
     inputs: { currentRent, marketRentAvg },
   };
 }
+
+/** The provenance label PR6 captures persist with their computed fields, so
+ *  every backfilled-vs-contemporaneous comparison reads the same string. */
+export const DECREE_43_CALCULATOR_VERSION = "decree_43_v1";

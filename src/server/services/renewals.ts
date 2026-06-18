@@ -8,7 +8,7 @@ import { resolveClientScopeIds } from "./clientScope";
 import { resolveDelegateScopeIds } from "./delegateScope";
 import { createSecureLink, consumeLinkUse } from "./secureLinks";
 import { getTenancy, setTenancyStatus } from "./tenancies";
-import { decree43, type RentPositionResult } from "../calculators/rent";
+import { DECREE_43_CALCULATOR_VERSION, decree43, type RentPositionResult } from "../calculators/rent";
 import {
   contractExpiry,
   daysBetween,
@@ -85,16 +85,43 @@ export interface CaptureIndexInput {
   marketRentAvg: number;
   capturedAt?: Date;
   source?: string;
+  /** PR6: the index family this figure came from (DLD's 2025 Smart Rental Index,
+   *  the legacy RERA tool, or a manual concierge capture). Defaults to the live
+   *  index for new captures. */
+  indexSource?: "SMART_RENTAL_INDEX_2025" | "RERA_INDEX_LEGACY" | "MANUAL_CONCIERGE";
+  /** PR6: optional comparable basis (community/building/size/bedrooms used to
+   *  read the index), persisted verbatim so the capture is reproducible. */
+  comparableBasis?: Record<string, unknown>;
+  /** PR6: optional pointer to the source artefact (URL/screenshot id/reference). */
+  sourceRef?: Record<string, unknown>;
   note?: string;
 }
 
-/** Record a manually-captured market-rent index figure against a tenancy. */
+/**
+ * Record a manually-captured market-rent index figure against a tenancy.
+ *
+ * PR6: the capture now persists its decree-43 derivation IN THE SAME ROW, stamped
+ * with the live calculator version — so a renewal report can cite the figure AND
+ * the math that yielded permittedNewRentMax without re-running anything. The
+ * computed fields go ONLY into contemporaneous captures; older rows (pre-PR6)
+ * keep their backfill NULLs and are rendered distinctly.
+ *
+ * The evidence row is stamped at the capture moment (createdAt defaults to now),
+ * not batched against a later renewal-pipeline step — emit-at-the-real-moment is
+ * the whole point of an append-only timeline.
+ */
 export async function captureRentIndex(ctx: AuthzContext, input: CaptureIndexInput) {
   require_(ctx, "renewals.write");
   if (!(input.marketRentAvg > 0)) {
     throw new AuthzError("Market rent must be a positive amount", 422);
   }
   const tenancy = await getTenancy(ctx, input.tenancyId); // enforces workspace + client scope
+
+  // PR6 provenance: compute permittedNewRentMax at capture time, against the
+  // tenancy's annualRent AS IT STANDS NOW. This figure is the snapshot — it must
+  // not be recomputed later from a changed rent, or the row would lie about what
+  // was known at capture moment.
+  const position = decree43(Number(tenancy!.annualRent), input.marketRentAvg);
 
   const capture = await prisma.rentIndexCapture.create({
     data: {
@@ -106,6 +133,15 @@ export async function captureRentIndex(ctx: AuthzContext, input: CaptureIndexInp
       capturedAt: input.capturedAt ?? new Date(),
       capturedById: ctx.userId,
       note: input.note ?? null,
+      // PR6 fields
+      indexSource: input.indexSource ?? "SMART_RENTAL_INDEX_2025",
+      gapPct: new Prisma.Decimal(position.gapPct),
+      permittedPct: position.bandPct,
+      permittedNewRentMax: new Prisma.Decimal(position.ceiling),
+      calculatorVersion: DECREE_43_CALCULATOR_VERSION,
+      comparableBasis: (input.comparableBasis as Prisma.InputJsonValue | undefined) ?? undefined,
+      sourceRef: (input.sourceRef as Prisma.InputJsonValue | undefined) ?? undefined,
+      // backfilledAt stays NULL — this is a contemporaneous capture.
     },
   });
   await recordEvidence({
@@ -118,7 +154,14 @@ export async function captureRentIndex(ctx: AuthzContext, input: CaptureIndexInp
     scopeId: input.tenancyId,
     tenancyId: input.tenancyId,
     propertyId: tenancy!.propertyId,
-    payload: { marketRentAvg: input.marketRentAvg, source: capture.source },
+    payload: {
+      marketRentAvg: input.marketRentAvg,
+      source: capture.source,
+      indexSource: capture.indexSource,
+      permittedPct: position.bandPct,
+      permittedNewRentMax: position.ceiling,
+      calculatorVersion: DECREE_43_CALCULATOR_VERSION,
+    },
   });
   await recordAudit({
     workspaceId: ctx.workspaceId,
@@ -505,6 +548,23 @@ export async function proposeOffer(ctx: AuthzContext, input: OfferInput) {
   });
   const version = (last?.version ?? 0) + 1;
 
+  // PR6: snapshot the index-indicated ceiling AT THE MOMENT THE OFFER IS PROPOSED.
+  // The field is intentionally NOT recomputed if a later capture changes the
+  // figure — an offer's compliance posture has to be reproducible from the row
+  // alone. Source preference: a capture explicitly linked to the case
+  // (RenewalCase.indexCaptureId), else the latest capture against the tenancy.
+  // Backfilled rows (NULL permittedNewRentMax) contribute no snapshot.
+  const linkedCapture = renewalCase!.indexCaptureId
+    ? await prisma.rentIndexCapture.findUnique({ where: { id: renewalCase!.indexCaptureId } })
+    : null;
+  const latestCapture =
+    linkedCapture ??
+    (await prisma.rentIndexCapture.findFirst({
+      where: { tenancyId: renewalCase!.tenancyId, permittedNewRentMax: { not: null } },
+      orderBy: { capturedAt: "desc" },
+    }));
+  const permittedMaxSnapshot = latestCapture?.permittedNewRentMax ?? null;
+
   const offer = await prisma.offer.create({
     data: {
       workspaceId: ctx.workspaceId,
@@ -521,6 +581,7 @@ export async function proposeOffer(ctx: AuthzContext, input: OfferInput) {
       status: input.party === "TENANT" ? "COUNTERED" : "SENT",
       createdById: ctx.userId,
       viaSecureLinkId: input.viaSecureLinkId ?? null,
+      permittedMaxSnapshot,
     },
   });
   await prisma.renewalCase.update({ where: { id: renewalCase!.id }, data: { status: "NEGOTIATING" } });
@@ -866,4 +927,102 @@ export async function listOffersForTenant(ctx: AuthzContext, tenancyId: string) 
     where: { workspaceId: ctx.workspaceId, tenancyId },
     orderBy: { version: "desc" },
   });
+}
+
+export interface MintRenewedTenancyInput {
+  renewalCaseId: string;
+  /** First day of the successor tenancy (Asia/Dubai date-only). */
+  startDate: Date;
+  /** Last day of the successor tenancy. */
+  endDate: Date;
+  /** Annual rent for the successor tenancy (the agreed figure). */
+  annualRent: number;
+  /** Optional successor contract document. */
+  contractDocId?: string;
+  paymentTermsNote?: string;
+  noticePeriodDays?: number;
+}
+
+/**
+ * Mint the successor Tenancy from an AGREED RenewalCase.
+ *
+ * The successor row carries `renewsFromTenancyId` pointing at the predecessor;
+ * the predecessor's status moves to RENEWED; the case's `renewedTenancyId` is
+ * set (and the case status moves to RENEWED).
+ *
+ * Single evidence event — RENEWAL_COMPLETED, emitted at THIS moment. We do NOT
+ * back-fill the prior renewal events (ASSESSMENT_CREATED / INDEX_CAPTURED /
+ * NOTICE_GENERATED|APPROVED|SERVED / OFFER_PROPOSED|COUNTERED|ACCEPTED /
+ * TENANT_ACKNOWLEDGED) here — those rows were already emitted at their own
+ * moments. Batching them at mint time would stamp every one with the mint
+ * timestamp and the timeline would be a lie.
+ */
+export async function mintRenewedTenancy(ctx: AuthzContext, input: MintRenewedTenancyInput) {
+  require_(ctx, "renewals.decide");
+  const rc = await prisma.renewalCase.findUnique({ where: { id: input.renewalCaseId } });
+  assertSameWorkspace(ctx, rc);
+  if (rc!.status !== "AGREED") {
+    throw new AuthzError(`Case must be AGREED to mint a successor (current: ${rc!.status})`, 422);
+  }
+  if (rc!.renewedTenancyId) {
+    throw new AuthzError("A successor tenancy has already been minted for this case", 409);
+  }
+  if (!(input.annualRent > 0)) throw new AuthzError("Successor rent must be a positive amount", 422);
+  if (input.endDate.getTime() <= input.startDate.getTime()) {
+    throw new AuthzError("Successor endDate must be after startDate", 422);
+  }
+  const predecessor = await getTenancy(ctx, rc!.tenancyId); // client-scope gate
+
+  const successor = await prisma.tenancy.create({
+    data: {
+      workspaceId: ctx.workspaceId,
+      propertyId: rc!.propertyId,
+      landlordContactId: predecessor!.landlordContactId,
+      tenantContactId: predecessor!.tenantContactId,
+      startDate: toUtcDateOnly(input.startDate),
+      endDate: toUtcDateOnly(input.endDate),
+      annualRent: new Prisma.Decimal(input.annualRent),
+      paymentTermsNote: input.paymentTermsNote ?? predecessor!.paymentTermsNote ?? null,
+      noticePeriodDays: input.noticePeriodDays ?? predecessor!.noticePeriodDays,
+      status: "ACTIVE",
+      source: "MANUAL",
+      contractDocId: input.contractDocId ?? null,
+      renewsFromTenancyId: predecessor!.id,
+    },
+  });
+  await prisma.$transaction([
+    prisma.tenancy.update({ where: { id: predecessor!.id }, data: { status: "RENEWED" } }),
+    prisma.renewalCase.update({
+      where: { id: rc!.id },
+      data: { status: "RENEWED", renewedTenancyId: successor.id },
+    }),
+  ]);
+  await recordEvidence({
+    workspaceId: ctx.workspaceId,
+    type: "RENEWAL_COMPLETED",
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    scopeType: "RENEWAL_CASE",
+    scopeId: rc!.id,
+    tenancyId: successor.id,
+    propertyId: rc!.propertyId,
+    payload: {
+      predecessorTenancyId: predecessor!.id,
+      successorTenancyId: successor.id,
+      annualRent: input.annualRent,
+      startDate: input.startDate.toISOString(),
+      endDate: input.endDate.toISOString(),
+    },
+  });
+  await recordAudit({
+    workspaceId: ctx.workspaceId,
+    actorType: ctx.isStaff ? "STAFF" : "USER",
+    actorId: ctx.userId,
+    onBehalfOfId: ctx.onBehalfOfId,
+    verb: "renewal.mint_successor",
+    objectType: "RenewalCase",
+    objectId: rc!.id,
+  });
+  return successor;
 }
