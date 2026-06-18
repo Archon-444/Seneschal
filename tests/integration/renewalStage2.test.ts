@@ -11,8 +11,8 @@ import {
   openRenewalCase,
   proposeOffer,
 } from "@/server/services/renewals";
-import { approveNotice, prepareNotice, serveNoticeFormal } from "@/server/services/notice";
-import { evaluateRenewalRisk } from "@/server/services/risk";
+import { approveNotice, prepareNotice, serveNoticeFormal, serveRenewalNotice } from "@/server/services/notice";
+import { evaluateWorkspaceRisk } from "@/server/services/risk";
 
 // PR6b — Stage-2 services. Provenance, single-event-per-transition discipline,
 // successor lineage, and the two new risk evaluators.
@@ -204,51 +204,60 @@ describe("mintRenewedTenancy — single event, lineage stamped, no back-filled c
   });
 });
 
-describe("evaluateRenewalRisk — two new evaluators", () => {
-  it("PROPOSED_INCREASE_ABOVE_INDEX_BAND raises when proposedRent exceeds the ceiling, clears below", async () => {
+describe("renewal risk wiring — production paths raise flags", () => {
+  it("PROPOSED_INCREASE_ABOVE_INDEX_BAND raises from proposeOffer and follows the active offer", async () => {
     await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 100_000 }); // ceiling = 84_000
     const rc = await openRenewalCase(W.ctx, tenancyId);
-    await prisma.renewalCase.update({
-      where: { id: rc.id },
-      data: { proposedRent: new Prisma.Decimal(90_000) }, // above ceiling
-    });
-    await evaluateRenewalRisk(rc.id);
-    const raised = await prisma.riskFlag.findFirst({
-      where: { scopeId: rc.id, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", status: "OPEN" },
-    });
-    expect(raised).toBeTruthy();
 
-    await prisma.renewalCase.update({
-      where: { id: rc.id },
-      data: { proposedRent: new Prisma.Decimal(82_000) }, // at/below ceiling
+    const high = await proposeOffer(W.ctx, {
+      renewalCaseId: rc.id,
+      party: "LANDLORD",
+      annualRent: 90_000,
+      paymentSchedule: "4 cheques",
     });
-    await evaluateRenewalRisk(rc.id);
-    const cleared = await prisma.riskFlag.findFirst({
-      where: { scopeId: rc.id, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", status: { in: ["OPEN", "ACKNOWLEDGED"] } },
+    const afterHigh = await prisma.renewalCase.findUnique({ where: { id: rc.id } });
+    expect(afterHigh!.currentOfferId).toBe(high.id);
+    expect(afterHigh!.proposedRent).toBeNull();
+    expect(
+      await prisma.riskFlag.findFirst({
+        where: { scopeId: rc.id, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", status: "OPEN" },
+      }),
+    ).toBeTruthy();
+
+    const low = await proposeOffer(W.ctx, {
+      renewalCaseId: rc.id,
+      party: "TENANT",
+      annualRent: 82_000,
+      paymentSchedule: "4 cheques",
     });
-    expect(cleared).toBeNull();
+    const afterLow = await prisma.renewalCase.findUnique({ where: { id: rc.id } });
+    expect(afterLow!.currentOfferId).toBe(low.id);
+    expect(
+      await prisma.riskFlag.findFirst({
+        where: {
+          scopeId: rc.id,
+          code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND",
+          status: { in: ["OPEN", "ACKNOWLEDGED"] },
+        },
+      }),
+    ).toBeNull();
   });
 
-  it("RENEWAL_NOTICE_WINDOW_MISSED raises past the gate when no notice served, clears on serve", async () => {
+  it("RENEWAL_NOTICE_WINDOW_MISSED raises from the workspace sweep and clears through canonical notice service", async () => {
     const rc = await openRenewalCase(W.ctx, tenancyId);
-    // Force gate into the past, no notice yet.
     await prisma.renewalCase.update({
       where: { id: rc.id },
       data: { noticeGateAt: daysFromNow(-2), noticeServedAt: null },
     });
-    await evaluateRenewalRisk(rc.id);
+
+    await evaluateWorkspaceRisk(W.workspaceId);
     expect(
       await prisma.riskFlag.findFirst({
         where: { scopeId: rc.id, code: "RENEWAL_NOTICE_WINDOW_MISSED", status: "OPEN" },
       }),
     ).toBeTruthy();
 
-    // Serve a notice → clear.
-    await prisma.renewalCase.update({
-      where: { id: rc.id },
-      data: { noticeServedAt: new Date() },
-    });
-    await evaluateRenewalRisk(rc.id);
+    await serveRenewalNotice(W.ctx, { renewalCaseId: rc.id, serviceMethod: "EMAIL" });
     expect(
       await prisma.riskFlag.findFirst({
         where: {

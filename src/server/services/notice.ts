@@ -3,7 +3,8 @@ import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, require_ } from "../authz";
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
-import { getTenancy } from "./tenancies";
+import { getTenancy, setTenancyStatus } from "./tenancies";
+import { evaluateRenewalRisk } from "./risk";
 
 // Notice service (PR6 Stage-2). The landlord's change/renewal notice was
 // previously implicit on RenewalCase.noticeServedAt/noticeDocId; this surface
@@ -13,9 +14,9 @@ import { getTenancy } from "./tenancies";
 // the timeline lie; on an append-only platform the timeline's truthfulness IS
 // the product.
 //
-// The two paths can coexist with the legacy renewals.serveNotice (which just
-// stamps the case): operators using the formal flow get the three rows in order;
-// operators using the quick path keep their single row.
+// This is the only notice-serving path: production callers either drive each
+// transition explicitly or call serveRenewalNotice(), which performs the same
+// GENERATED → APPROVED → SERVED state machine.
 
 export interface PrepareNoticeInput {
   renewalCaseId: string;
@@ -129,7 +130,7 @@ export async function serveNoticeFormal(ctx: AuthzContext, input: ServeNoticeInp
     throw new AuthzError(`Notice must be APPROVED before service (current: ${notice!.status})`, 422);
   }
   const rc = await prisma.renewalCase.findUnique({ where: { id: notice!.renewalCaseId } });
-  await getTenancy(ctx, rc!.tenancyId);
+  const tenancy = await getTenancy(ctx, rc!.tenancyId);
 
   const servedAt = input.servedAt ?? new Date();
   await prisma.$transaction([
@@ -153,6 +154,9 @@ export async function serveNoticeFormal(ctx: AuthzContext, input: ServeNoticeInp
       },
     }),
   ]);
+  if (tenancy.status === "ACTIVE" || tenancy.status === "RENEWAL_DUE") {
+    await setTenancyStatus(ctx, rc!.tenancyId, "NOTICE_SERVED");
+  }
   await recordEvidence({
     workspaceId: ctx.workspaceId,
     type: "NOTICE_SERVED",
@@ -174,5 +178,25 @@ export async function serveNoticeFormal(ctx: AuthzContext, input: ServeNoticeInp
     objectType: "Notice",
     objectId: input.noticeId,
   });
+  await evaluateRenewalRisk(rc!.id);
   return prisma.notice.findUnique({ where: { id: input.noticeId } });
+}
+
+export async function serveRenewalNotice(
+  ctx: AuthzContext,
+  input: { renewalCaseId: string; serviceMethod?: ServiceMethod; serviceRef?: string; servedAt?: Date; docId?: string },
+) {
+  const notice = await prepareNotice(ctx, {
+    renewalCaseId: input.renewalCaseId,
+    kind: "RENEWAL_CHANGE",
+    docId: input.docId,
+  });
+  await approveNotice(ctx, notice.id);
+  return serveNoticeFormal(ctx, {
+    noticeId: notice.id,
+    serviceMethod: input.serviceMethod ?? "EMAIL",
+    serviceRef: input.serviceRef,
+    servedAt: input.servedAt,
+    docId: input.docId,
+  });
 }

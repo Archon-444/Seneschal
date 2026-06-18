@@ -225,10 +225,9 @@ export async function clearProofOverdue(proofRequestId: string, workspaceId: str
  *
  * Raises/clears the two Stage-2 renewal codes against the case scope:
  *
- *   PROPOSED_INCREASE_ABOVE_INDEX_BAND — raised when the case's proposedRent
- *   exceeds the live capture's permittedNewRentMax (the index-indicated ceiling
- *   from decree43). Cleared when the proposal is at or below the ceiling, or
- *   either the proposal or the ceiling is unknown.
+ *   PROPOSED_INCREASE_ABOVE_INDEX_BAND — raised when the active Offer
+ *   exceeds the index-indicated ceiling. RenewalCase.proposedRent is legacy/cache
+ *   data only; the offer row is the source of truth for the live proposal.
  *
  *   RENEWAL_NOTICE_WINDOW_MISSED — raised when today (Asia/Dubai) is past
  *   noticeGateAt and noticeServedAt is still NULL. Cleared once a notice is
@@ -256,8 +255,18 @@ export async function evaluateRenewalRisk(renewalCaseId: string, db: Db = prisma
         where: { tenancyId: rc.tenancyId, permittedNewRentMax: { not: null } },
         orderBy: { capturedAt: "desc" },
       });
-  const ceiling = capture?.permittedNewRentMax ? Number(capture.permittedNewRentMax) : null;
-  const proposed = rc.proposedRent ? Number(rc.proposedRent) : null;
+  const activeOffer = rc.currentOfferId
+    ? await db.offer.findUnique({ where: { id: rc.currentOfferId } })
+    : await db.offer.findFirst({
+        where: { renewalCaseId: rc.id, status: { in: ["SENT", "COUNTERED", "ACCEPTED"] } },
+        orderBy: { version: "desc" },
+      });
+  const ceiling = activeOffer?.permittedMaxSnapshot
+    ? Number(activeOffer.permittedMaxSnapshot)
+    : capture?.permittedNewRentMax
+      ? Number(capture.permittedNewRentMax)
+      : null;
+  const proposed = activeOffer ? Number(activeOffer.annualRent) : null;
   if (ceiling != null && proposed != null && proposed > ceiling) {
     await raiseFlag(db, { ...base, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", severity: "WARN" });
   } else {
@@ -297,6 +306,12 @@ export async function evaluateWorkspaceRisk(workspaceId: string) {
     select: { id: true },
   });
   for (const t of tenancies) await evaluateRiskForTenancy(t.id);
+
+  const renewalCases = await prisma.renewalCase.findMany({
+    where: { workspaceId, archivedAt: null, status: { notIn: ["RENEWED", "DECLINED", "LAPSED"] } },
+    select: { id: true },
+  });
+  for (const rc of renewalCases) await evaluateRenewalRisk(rc.id);
 }
 
 // ── Queries + acknowledge

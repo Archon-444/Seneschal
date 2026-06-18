@@ -14,7 +14,6 @@ import {
   sendOfferToTenant,
 } from "@/server/services/renewals";
 import { approveNotice, prepareNotice, serveNoticeFormal } from "@/server/services/notice";
-import { evaluateRenewalRisk } from "@/server/services/risk";
 import { validateLinkToken } from "@/server/services/secureLinks";
 
 // PR6c — end-to-end walkthrough of the Stage-2 renewal pipeline. This is the
@@ -136,12 +135,7 @@ describe("end-to-end Stage-2 renewal walkthrough", () => {
     expect(rcAfter!.status).toBe("AGREED");
     await new Promise((r) => setTimeout(r, 5));
 
-    // --- 8. Evaluate risk — proposal at the ceiling, gate not yet missed.
-    await prisma.renewalCase.update({
-      where: { id: rc.id },
-      data: { proposedRent: new Prisma.Decimal(84_000) },
-    });
-    await evaluateRenewalRisk(rc.id);
+    // --- 8. Proposal risk was evaluated by the offer/response production path.
     const aboveBand = await prisma.riskFlag.findFirst({
       where: { scopeId: rc.id, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", status: "OPEN" },
     });

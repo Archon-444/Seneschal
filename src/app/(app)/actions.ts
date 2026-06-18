@@ -14,6 +14,7 @@ import * as moveIn from "@/server/services/moveIn";
 import * as tenancies from "@/server/services/tenancies";
 import * as deadlines from "@/server/services/deadlines";
 import * as renewals from "@/server/services/renewals";
+import { serveRenewalNotice } from "@/server/services/notice";
 import * as consent from "@/server/services/consent";
 import * as payments from "@/server/services/payments";
 import * as documents from "@/server/services/documents";
@@ -219,7 +220,7 @@ export async function acceptOfferAction(formData: FormData) {
 
 export async function serveNoticeAction(formData: FormData) {
   const ctx = await requireCtx();
-  await renewals.serveNotice(ctx, s(formData, "renewalCaseId"));
+  await serveRenewalNotice(ctx, { renewalCaseId: s(formData, "renewalCaseId") });
   revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
 }
 

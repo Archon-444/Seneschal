@@ -13,8 +13,8 @@ import {
   openRenewalCase,
   proposeOffer,
   respondToOfferViaLink,
-  serveNotice,
 } from "@/server/services/renewals";
+import { serveRenewalNotice } from "@/server/services/notice";
 import { createSecureLink, validateLinkToken } from "@/server/services/secureLinks";
 
 let W: TestActor;
@@ -195,7 +195,7 @@ describe("renewal negotiation", () => {
 
   it("serving notice records evidence and moves the case + tenancy", async () => {
     const rc = await openRenewalCase(W.ctx, tenancyId);
-    await serveNotice(W.ctx, rc.id);
+    await serveRenewalNotice(W.ctx, { renewalCaseId: rc.id });
     const after = await prisma.renewalCase.findUnique({ where: { id: rc.id } });
     expect(after!.status).toBe("NOTICE_SERVED");
     expect(after!.noticeServedAt).toBeTruthy();
