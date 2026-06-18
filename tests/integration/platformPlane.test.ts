@@ -99,6 +99,7 @@ describe("platform plane is data-blind by construction", () => {
       "properties",
       "seatsUsed",
       "subscriptionStatus",
+      "suspended",
       "tenanciesByStatus",
       "type",
       "workspaceId",

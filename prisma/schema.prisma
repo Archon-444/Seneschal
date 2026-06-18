@@ -20,6 +20,7 @@ model Workspace {
   name        String
   type        WorkspaceType
   createdAt   DateTime @default(now())
+  suspendedAt DateTime?            // F-Admin §3.2: temporary platform suspend (distinct from archive)
   archivedAt  DateTime?
   memberships Membership[]
   @@index([type])
@@ -123,6 +124,25 @@ enum Bundle {
   ORG_ADMIN
   DELEGATE
   CLIENT_VIEWER
+}
+
+// F-Admin §3.4 / §4.1: seat-zero (platform-issued) and in-org member invites. Token-hash
+// discipline reused from SecureLink — only the hash is stored, the raw token is returned once.
+model WorkspaceInvite {
+  id              String    @id @default(uuid())
+  workspaceId     String
+  email           String
+  intendedBundles Bundle[]
+  tokenHash       String    @unique
+  invitedById     String?               // null when platform-issued seat-zero
+  platformIssued  Boolean   @default(false)
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  acceptedUserId  String?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  @@index([workspaceId])
+  @@index([email])
 }
 // Platform admin is NOT a membership role: the Seneschal operator plane runs under PlatformAdminContext
 // (User.isPlatformAdmin), reaches lifecycle/billing/aggregate stats only, and holds zero Membership rows (F-Admin §3.1).

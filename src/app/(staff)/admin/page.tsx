@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { requirePlatformAdmin } from "@/server/auth/request";
 import { platformStats } from "@/server/admin/platformStats";
-import { Badge, Card, KpiCard, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Card, KpiCard, LinkButton, PageHeader, Table, Td } from "@/components/ui";
 import { formatDubaiDate } from "@/server/calculators/dates";
+import { archiveAction, suspendAction, unsuspendAction } from "./actions";
 
 // Platform console (F-Admin §3, §7). Unreachable without isPlatformAdmin. Shows
 // lifecycle/billing/aggregate HEALTH only — counts, statuses, timestamps. No customer
@@ -33,6 +34,11 @@ export default async function AdminPage() {
       <PageHeader
         title="Platform console"
         subtitle="Lifecycle, billing & aggregate health across every workspace — never customer data."
+        actions={
+          <LinkButton href="/admin/new" variant="primary">
+            Provision workspace
+          </LinkButton>
+        }
       />
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Active workspaces" value={String(totals.active)} />
@@ -66,13 +72,15 @@ export default async function AdminPage() {
             "Sends ok/fail/queued",
             "Subscription",
             "Last activity",
+            "",
           ]}
         >
           {stats.map((s) => (
             <tr key={s.workspaceId}>
               <Td>
                 {s.name}
-                {s.archived && <span className="ml-2 text-xs text-muted">(archived)</span>}
+                {s.archived && <span className="ml-2 text-xs text-claret-700">(archived)</span>}
+                {!s.archived && s.suspended && <span className="ml-2 text-xs text-amber-700">(suspended)</span>}
               </Td>
               <Td>
                 <Badge value={s.type} />
@@ -94,6 +102,24 @@ export default async function AdminPage() {
               </Td>
               <Td className="figure text-xs">
                 {s.lastActivityAt ? formatDubaiDate(s.lastActivityAt) : "—"}
+              </Td>
+              <Td>
+                {!s.archived && (
+                  <div className="flex gap-1.5 text-xs">
+                    <form action={s.suspended ? unsuspendAction : suspendAction}>
+                      <input type="hidden" name="workspaceId" value={s.workspaceId} />
+                      <button className="rounded-md border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
+                        {s.suspended ? "Unsuspend" : "Suspend"}
+                      </button>
+                    </form>
+                    <form action={archiveAction}>
+                      <input type="hidden" name="workspaceId" value={s.workspaceId} />
+                      <button className="rounded-md border border-line px-2 py-1 text-claret-700 hover:bg-claret-100">
+                        Archive
+                      </button>
+                    </form>
+                  </div>
+                )}
               </Td>
             </tr>
           ))}

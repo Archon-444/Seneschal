@@ -15,6 +15,7 @@ export interface WorkspaceStat {
   name: string;
   type: string;
   archived: boolean;
+  suspended: boolean;
   seatsUsed: number;
   subscriptionStatus: string | null;
   properties: number;
@@ -48,7 +49,7 @@ export async function platformStats(_ctx: PlatformAdminContext): Promise<Workspa
     subs,
     lastActivity,
   ] = await Promise.all([
-    prisma.workspace.findMany({ select: { id: true, name: true, type: true, archivedAt: true } }),
+    prisma.workspace.findMany({ select: { id: true, name: true, type: true, archivedAt: true, suspendedAt: true } }),
     prisma.property.groupBy({ by: ["workspaceId"], _count: { _all: true } }),
     prisma.tenancy.groupBy({ by: ["workspaceId", "status"], _count: { _all: true } }),
     prisma.proofRequest.groupBy({
@@ -121,6 +122,7 @@ export async function platformStats(_ctx: PlatformAdminContext): Promise<Workspa
     name: w.name,
     type: w.type,
     archived: w.archivedAt !== null,
+    suspended: w.suspendedAt !== null,
     seatsUsed: seats.get(w.id) ?? 0,
     subscriptionStatus: subByWs.get(w.id) ?? null,
     properties: props.get(w.id) ?? 0,
