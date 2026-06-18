@@ -4,7 +4,7 @@ import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, req
 import { recordEvidence } from "../evidence";
 import { notify } from "../notify";
 import { ingestDocument, logDocumentAccess } from "./documents";
-import { createSecureLink } from "./secureLinks";
+import { createSecureLink, PROOF_LINK_DEFAULT_MAX_USES } from "./secureLinks";
 import { raiseProofOverdue, clearProofOverdue } from "./risk";
 import { resolveClientScopeIds } from "./clientScope";
 import { assertReadable, contactScopedWhere } from "./contactScope";
@@ -84,6 +84,7 @@ export async function sendProofRequest(ctx: AuthzContext, proofRequestId: string
     scopeType: "PROOF_REQUEST",
     scopeId: proofRequestId,
     contactId: contact.id,
+    maxUses: PROOF_LINK_DEFAULT_MAX_USES, // H5: cap replay on newly-minted proof links
   });
   const token = url.slice(url.lastIndexOf("/") + 1);
   const { intakeAddress } = await import("./emailIntake");

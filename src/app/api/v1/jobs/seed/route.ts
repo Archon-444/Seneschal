@@ -9,8 +9,11 @@ import { normalizeAdminEmail, runSeed } from "@/server/seed";
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
+  // H9: default-deny. Requires BOTH the cron secret AND an explicit opt-in flag,
+  // so an exposed CRON_SECRET alone can't bootstrap/overwrite a deployment's data.
   const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
+  const enabled = process.env.SEED_API_ENABLED === "true";
+  if (!enabled || !secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   // optional body: { "adminEmail": "you@yourdomain" } — added as FIDUCIARY in
@@ -28,9 +31,17 @@ export async function POST(req: NextRequest) {
     // empty/non-JSON body is fine
   }
   const result = await runSeed({ adminEmail });
+  // H9: never echo the sign-in identity in a production response — it points an
+  // attacker who already breached the gate at a real account. Surface it only to
+  // the server log in prod; dev keeps it in the response for convenience.
+  const signInAs = adminEmail ?? "operator@example.com";
+  if (process.env.NODE_ENV === "production") {
+    console.log(`[seed] sign in as ${signInAs}`);
+    return NextResponse.json({ ok: true, proofLinkUrl: result.proofLinkUrl });
+  }
   return NextResponse.json({
     ok: true,
     proofLinkUrl: result.proofLinkUrl, // null when a live link already exists
-    signInAs: adminEmail ?? "operator@example.com",
+    signInAs,
   });
 }

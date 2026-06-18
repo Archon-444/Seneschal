@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { generateToken, sha256Hex } from "./crypto";
 import { toUtcDateOnly } from "./calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./services/deadlines";
+import { PROOF_LINK_DEFAULT_MAX_USES } from "./services/secureLinks";
 import { evaluateRiskForTenancy } from "./services/risk";
 import { newStorageKey, storage } from "./storage";
 import { listingReadiness } from "./calculators/listingReadiness";
@@ -421,6 +422,7 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
         contactId: samir.id,
         tokenHash,
         expiresAt: new Date(Date.now() + 30 * 86_400_000),
+        maxUses: PROOF_LINK_DEFAULT_MAX_USES, // H5: cap replay on the seeded proof link
         createdById: operator.id,
       },
     });

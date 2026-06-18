@@ -12,6 +12,19 @@ import { recordEvidence } from "../evidence";
 // (T5.2 — its own insert-only table, never buried in AuditEvent); downloads
 // only via signed expiring URLs (T5.1).
 
+/**
+ * Thrown when a normal read path touches an archived document (H7). Archive =
+ * inaccessible: byte and metadata access are revoked. Admin/audit paths that
+ * legitimately need archived rows opt in via `includeArchived`.
+ */
+export class ArchivedDocumentError extends Error {
+  readonly status = 404;
+  constructor(id: string) {
+    super(`Document ${id} is archived`);
+    this.name = "ArchivedDocumentError";
+  }
+}
+
 export interface UploadInput {
   scopeType: ScopeType;
   scopeId?: string;
@@ -138,10 +151,18 @@ export async function listDocuments(
   });
 }
 
-export async function getDocument(ctx: AuthzContext, id: string) {
+export async function getDocument(
+  ctx: AuthzContext,
+  id: string,
+  opts?: { includeArchived?: boolean },
+) {
   require_(ctx, "documents.read");
   const doc = await prisma.document.findUnique({ where: { id } });
   await assertReadable(ctx, { kind: "document", row: doc });
+  // H7: archived docs are inaccessible through normal read paths (this gates
+  // getDocumentUrl → no signed URLs issued for archived). Audit paths pass
+  // includeArchived so an archived doc's history stays reviewable.
+  if (!opts?.includeArchived && doc!.archivedAt) throw new ArchivedDocumentError(id);
   return doc!;
 }
 
@@ -161,6 +182,10 @@ export async function getDocumentUrl(ctx: AuthzContext, id: string) {
 export async function readDocumentBytes(documentId: string) {
   const doc = await prisma.document.findUnique({ where: { id: documentId } });
   if (!doc) return null;
+  // H7: an archived doc serves no bytes. The signed-URL route treats null as
+  // 404, so any previously-issued URL stops resolving the moment we archive
+  // (app-proxied storage — the route reads bytes here, not a direct blob URL).
+  if (doc.archivedAt) return null;
   const data = await storage().get(doc.storageKey);
   if (sha256Hex(data) !== doc.sha256) {
     throw new Error(`Integrity failure: stored hash mismatch for document ${documentId}`);
@@ -183,7 +208,8 @@ export async function archiveDocument(ctx: AuthzContext, id: string) {
 
 export async function getDocumentAccessLog(ctx: AuthzContext, documentId: string) {
   require_(ctx, "documents.read");
-  await getDocument(ctx, documentId);
+  // Audit history stays reviewable after archive (the gate is still scope-checked).
+  await getDocument(ctx, documentId, { includeArchived: true });
   return prisma.documentAccessLog.findMany({
     where: { documentId },
     orderBy: { createdAt: "desc" },

@@ -1,4 +1,4 @@
-import type { LinkPurpose, ScopeType } from "@prisma/client";
+import type { LinkPurpose, Prisma, ScopeType } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, assertSameWorkspace, require_, scope } from "../authz";
 import type { Capability } from "../capabilities";
@@ -10,6 +10,9 @@ import { recordAudit } from "../audit";
 // never appear in logs.
 
 const DEFAULT_TTL_DAYS = 14;
+/** Default cap for newly-minted proof-upload links (H5). Bounds replay on an
+ *  uncapped link; does not backfill links already issued. */
+export const PROOF_LINK_DEFAULT_MAX_USES = 20;
 
 export async function createSecureLink(
   ctx: AuthzContext,
@@ -76,12 +79,33 @@ export async function validateLinkToken(token: string): Promise<LinkValidation> 
   return { ok: true, link };
 }
 
-export async function consumeLinkUse(linkId: string) {
+/**
+ * Atomically consume one use of a link (H4 — TOCTOU fix).
+ *
+ * The guard (revoked / expired / maxUses) is re-checked *inside the same
+ * UPDATE that increments*, so two concurrent requests to a `maxUses=1` link can
+ * never both consume — exactly one statement matches a row, the other affects
+ * zero. Returns whether this caller won the use; callers MUST consume **before**
+ * the side effect and short-circuit on `consumed === false`.
+ *
+ * Prisma's query builder can't compare two columns (`useCount < maxUses`), so
+ * this is raw SQL. `validateLinkToken` remains for friendly pre-checks, but this
+ * is the authoritative gate.
+ */
+export async function consumeLinkUse(
+  linkId: string,
+  db: Prisma.TransactionClient = prisma,
+): Promise<{ consumed: boolean }> {
   // scope-audit: public link consumption by id (no ctx); validated upstream by token.
-  await prisma.secureLink.update({
-    where: { id: linkId },
-    data: { useCount: { increment: 1 } },
-  });
+  const affected = await db.$executeRaw`
+    UPDATE "SecureLink"
+       SET "useCount" = "useCount" + 1
+     WHERE id = ${linkId}
+       AND "revokedAt" IS NULL
+       AND "expiresAt" > now()
+       AND ("maxUses" IS NULL OR "useCount" < "maxUses")
+  `;
+  return { consumed: affected === 1 };
 }
 
 export async function revokeSecureLink(ctx: AuthzContext, linkId: string) {

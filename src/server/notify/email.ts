@@ -18,13 +18,18 @@ function consoleAdapter(): ProviderAdapter {
 
 function resendAdapter(): ProviderAdapter {
   return {
-    async send({ to, subject, body }) {
+    async send({ to, subject, body, idempotencyKey }) {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      };
+      // H1: Resend treats Idempotency-Key as a deduper across retries within
+      // 24h. A worker that crashed after Resend accepted will hit the same
+      // key on retry and Resend returns the original id instead of resending.
+      if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           from: process.env.EMAIL_FROM ?? "Seneschal <noreply@example.com>",
           to: [to],

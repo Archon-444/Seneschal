@@ -170,8 +170,43 @@ describe("secure links (T7.2)", () => {
     });
     const token = url.split("/link/")[1];
     expect((await secureLinks.validateLinkToken(token)).ok).toBe(true);
-    await secureLinks.consumeLinkUse(linkId);
+    expect(await secureLinks.consumeLinkUse(linkId)).toEqual({ consumed: true });
     expect(await secureLinks.validateLinkToken(token)).toEqual({ ok: false, reason: "exhausted" });
+  });
+
+  it("H4: concurrent consume of a maxUses=1 link yields exactly one winner", async () => {
+    const { request } = await makeRequestWithLink();
+    const { linkId } = await secureLinks.createSecureLink(W.ctx, {
+      purpose: "PROOF_UPLOAD",
+      scopeType: "PROOF_REQUEST",
+      scopeId: request.id,
+      maxUses: 1,
+    });
+    // Ten simultaneous requests — the atomic guarded UPDATE must let exactly
+    // one win. A non-atomic check-then-increment would let several through.
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => secureLinks.consumeLinkUse(linkId)),
+    );
+    expect(results.filter((r) => r.consumed)).toHaveLength(1);
+    const link = await prisma.secureLink.findUnique({ where: { id: linkId } });
+    expect(link!.useCount).toBe(1);
+  });
+
+  it("H4: a revoked or expired link cannot be consumed", async () => {
+    const { request } = await makeRequestWithLink();
+    const { linkId } = await secureLinks.createSecureLink(W.ctx, {
+      purpose: "PROOF_UPLOAD",
+      scopeType: "PROOF_REQUEST",
+      scopeId: request.id,
+    });
+    await secureLinks.revokeSecureLink(W.ctx, linkId);
+    expect(await secureLinks.consumeLinkUse(linkId)).toEqual({ consumed: false });
+  });
+
+  it("H5: newly-minted proof links carry a default maxUses cap", async () => {
+    const { token } = await makeRequestWithLink();
+    const v = await secureLinks.validateLinkToken(token);
+    expect(v.ok && v.link.maxUses).toBe(20);
   });
 
   it("unknown token is not found", async () => {

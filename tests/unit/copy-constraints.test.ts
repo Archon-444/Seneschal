@@ -16,12 +16,19 @@ import { BANNED_COPY, findBannedCopy } from "../copyConstraints";
 // and the server layer (notification bodies, reports, link-page server text).
 const ROOTS = ["src/app/(app)", "src/app/link", "src/components", "src/server"];
 
+// Files that DEFINE the banned phrases (as data, for their own gate to reject)
+// — including them here would be circular. PR6c's renewalCopy.ts is the renewal
+// compliance gate's own definition file; it ships the banned strings exactly so
+// it can detect and refuse them at render time. That is the opposite of leaking
+// banned copy to users.
+const EXCLUDED = new Set(["src/server/services/renewalCopy.ts"]);
+
 function walk(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) out.push(...walk(full));
-    else if (full.endsWith(".tsx") || full.endsWith(".ts")) out.push(full);
+    else if ((full.endsWith(".tsx") || full.endsWith(".ts")) && !EXCLUDED.has(full)) out.push(full);
   }
   return out;
 }

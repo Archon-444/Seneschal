@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requestOtp, verifyOtp } from "@/server/auth";
 import { SESSION_COOKIE, homePathFor, requireCtx } from "@/server/auth/request";
+import { consumeRateLimit } from "@/server/services/rateLimit";
 import { dispatchPending } from "@/server/outbox";
 import { handlers } from "@/server/outbox/runner";
 
@@ -11,9 +12,20 @@ export type LoginState =
   | { step: "email"; error?: string }
   | { step: "code"; email: string; error?: string };
 
+// H8: per-IP cap on OTP requests (durable, survives serverless cold starts). The
+// per-email cooldown in requestOtp stops inbox flooding; this stops an IP from
+// spraying requests across many addresses. Generic message — IP-based, so it
+// reveals nothing about which emails exist.
+const OTP_IP_LIMIT = 10;
+const OTP_IP_WINDOW_MS = 10 * 60_000;
+
 export async function requestOtpAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim();
   if (!email) return { step: "email", error: "Enter your email." };
+  const h = await headers();
+  const ip = (h.get("x-forwarded-for") ?? "unknown").split(",")[0].trim() || "unknown";
+  const rl = await consumeRateLimit(`otp-ip:${ip}`, OTP_IP_LIMIT, OTP_IP_WINDOW_MS);
+  if (!rl.ok) return { step: "email", error: "Too many attempts. Please wait a few minutes and try again." };
   await requestOtp(email);
   // No resident worker on serverless: flush the outbox inline so the OTP email
   // leaves immediately. The cron route re-dispatches anything that fails here.

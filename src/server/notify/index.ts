@@ -53,6 +53,11 @@ export async function notify(input: NotifyInput, db: Prisma.TransactionClient = 
       "notification.send",
       { messageId: message.id, toAddress: input.toAddress ?? null, preferChannel: input.preferChannel ?? null },
       db,
+      // H1: the NotificationMessage row id is the natural send-idempotency key.
+      // It also pins the (topic, idempotencyKey) unique constraint to "one
+      // outbox row per message" — a retry of `notify()` for the same message
+      // throws P2002 instead of double-queueing.
+      { idempotencyKey: `notification.send:${message.id}` },
     );
   }
   return message;
@@ -63,11 +68,15 @@ export interface ProviderAdapter {
     to: string;
     subject: string | null;
     body: string;
+    idempotencyKey?: string | null;
   }): Promise<{ providerRef: string | null }>;
 }
 
 /** Outbox handler: deliver a queued NotificationMessage via its channel adapter. */
-export async function deliverNotification(payload: Record<string, unknown>): Promise<void> {
+export async function deliverNotification(
+  payload: Record<string, unknown>,
+  ctx?: { idempotencyKey: string | null },
+): Promise<void> {
   const messageId = payload.messageId as string;
   const message = await prisma.notificationMessage.findUnique({ where: { id: messageId } });
   if (!message || message.status !== "QUEUED") return; // idempotent
@@ -114,6 +123,7 @@ export async function deliverNotification(payload: Record<string, unknown>): Pro
       to,
       subject: message.subject,
       body: message.bodyRef ?? "",
+      idempotencyKey: ctx?.idempotencyKey ?? null,
     });
     await prisma.notificationMessage.update({
       where: { id: messageId },

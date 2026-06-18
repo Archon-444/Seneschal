@@ -62,6 +62,49 @@ describe("upload pipeline (T5.1)", () => {
   });
 });
 
+describe("archived document access (H7)", () => {
+  async function makeArchivedDoc() {
+    const doc = await documents.uploadDocument(W.ctx, {
+      scopeType: "WORKSPACE",
+      kind: "OTHER",
+      fileName: "secret.txt",
+      mime: "text/plain",
+      data: Buffer.from("sensitive"),
+    });
+    await documents.archiveDocument(W.ctx, doc.id);
+    return doc;
+  }
+
+  it("getDocument throws ArchivedDocumentError for an archived doc", async () => {
+    const doc = await makeArchivedDoc();
+    await expect(documents.getDocument(W.ctx, doc.id)).rejects.toBeInstanceOf(
+      documents.ArchivedDocumentError,
+    );
+  });
+
+  it("getDocumentUrl refuses to mint a signed URL for an archived doc", async () => {
+    const doc = await makeArchivedDoc();
+    await expect(documents.getDocumentUrl(W.ctx, doc.id)).rejects.toBeInstanceOf(
+      documents.ArchivedDocumentError,
+    );
+  });
+
+  it("readDocumentBytes returns null so the signed-URL route 404s", async () => {
+    const doc = await makeArchivedDoc();
+    expect(await documents.readDocumentBytes(doc.id)).toBeNull();
+  });
+
+  it("audit history stays reviewable via includeArchived", async () => {
+    const doc = await makeArchivedDoc();
+    // getDocumentAccessLog opts into archived rows; UPLOADED + DELETED(=archive) logged.
+    const log = await documents.getDocumentAccessLog(W.ctx, doc.id);
+    expect(log.map((l) => l.action).sort()).toEqual(["DELETED", "UPLOADED"]);
+    // explicit opt-in returns the row
+    const withArchived = await documents.getDocument(W.ctx, doc.id, { includeArchived: true });
+    expect(withArchived.archivedAt).not.toBeNull();
+  });
+});
+
 describe("storage driver contract", () => {
   it("ingestDocument persists the canonical key returned by put()", async () => {
     const doc = await documents.uploadDocument(W.ctx, {

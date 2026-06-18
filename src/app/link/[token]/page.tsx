@@ -1,4 +1,5 @@
 import { validateLinkToken } from "@/server/services/secureLinks";
+import { isQuarantined } from "@/server/config/features";
 import { getProofRequestForLink } from "@/server/services/externalProof";
 import { getOfferForLink } from "@/server/services/renewals";
 import { getListingForLink } from "@/server/services/listings";
@@ -15,6 +16,24 @@ export default async function ExternalLinkPage({ params }: { params: Promise<{ t
   const validation = await validateLinkToken(token);
 
   if (!validation.ok) {
+    return (
+      <SafeShell>
+        <h1 className="font-display text-2xl text-navy-900">This link is no longer available</h1>
+        <p className="mt-3 text-sm text-navy-500">
+          The link may have expired, been used already, or been withdrawn. Please contact the person
+          who sent it to request a new one.
+        </p>
+      </SafeShell>
+    );
+  }
+
+  // Pilot quarantine (see QUARANTINE.md). Gate on the link PURPOSE at branch
+  // dispatch — ahead of consume and any data fetch — so a held PASSPORT_SHARE/
+  // LISTING_VIEW token stays dormant (useCount untouched) rather than burned.
+  if (
+    (validation.link.purpose === "LISTING_VIEW" && isQuarantined("listings")) ||
+    (validation.link.purpose === "PASSPORT_SHARE" && isQuarantined("passport"))
+  ) {
     return (
       <SafeShell>
         <h1 className="font-display text-2xl text-navy-900">This link is no longer available</h1>

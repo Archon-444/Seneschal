@@ -9,12 +9,30 @@ import { recordAudit } from "../audit";
 const OTP_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_OTP_ATTEMPTS = 5;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 
 export async function requestOtp(email: string): Promise<void> {
   const normalized = email.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { email: normalized } });
   // Always behave identically whether or not the account exists.
   if (!user) return;
+
+  // H8: per-email cooldown. Silently ignore a resend inside the window so a
+  // victim's inbox can't be flooded. Silent (not an error) on purpose — a louder
+  // response only for accounts that exist would leak existence, breaking the
+  // account-oblivious behaviour above. The earlier code stays valid.
+  const recent = await prisma.authOtp.findFirst({
+    where: { email: normalized, createdAt: { gt: new Date(Date.now() - OTP_RESEND_COOLDOWN_MS) } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (recent) return;
+
+  // H8: invalidate any prior unused, still-valid codes before issuing a new one,
+  // so a reissue leaves exactly one live code (no stockpile of valid OTPs).
+  await prisma.authOtp.updateMany({
+    where: { email: normalized, usedAt: null, expiresAt: { gt: new Date() } },
+    data: { expiresAt: new Date() },
+  });
 
   const { code, codeHash } = generateOtp();
   await prisma.authOtp.create({

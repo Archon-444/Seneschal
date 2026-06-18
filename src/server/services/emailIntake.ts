@@ -21,12 +21,16 @@ export async function processInboundProofEmail(message: {
   if (!validation.ok) return { accepted: false, reason: validation.reason };
   if (message.attachments.length === 0) return { accepted: false, reason: "no_attachments" };
 
+  // H4: consume-first; a lost race (e.g. duplicate inbound delivery of the same
+  // mail) short-circuits before re-ingesting the attachments.
+  const { consumed } = await consumeLinkUse(validation.link.id);
+  if (!consumed) return { accepted: false, reason: "exhausted" };
+
   await submitProofViaLink(
     validation.link,
     message.attachments,
     message.text?.slice(0, 2000) || message.subject,
   );
-  await consumeLinkUse(validation.link.id);
 
   // inbound message recorded for the notification log
   await prisma.notificationMessage.create({

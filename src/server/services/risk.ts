@@ -85,17 +85,9 @@ async function clearFlag(
     },
   });
   if (!open) return;
-  // The unique key includes status, so two CLEARED rows for the same scope+code
-  // would collide. History lives in evidence events; keep only the latest cleared row.
-  await db.riskFlag.deleteMany({
-    where: {
-      workspaceId: args.workspaceId,
-      scopeType: args.scopeType,
-      scopeId: args.scopeId,
-      code: args.code,
-      status: "CLEARED",
-    },
-  });
+  // H2: the unique constraint is now partial (active flags only), so CLEARED rows
+  // may accumulate as history — no need to delete prior cleared rows before this
+  // transition. The append-only ledger keeps the full trail.
   await db.riskFlag.update({
     where: { id: open.id },
     data: { status: "CLEARED", clearedAt: new Date(), clearedById: args.clearedById ?? null },
@@ -226,6 +218,60 @@ export async function clearProofOverdue(proofRequestId: string, workspaceId: str
     scopeId: proofRequestId,
     code: "PROOF_OVERDUE",
   });
+}
+
+/**
+ * PR6 renewal risk evaluator (idempotent, per-case).
+ *
+ * Raises/clears the two Stage-2 renewal codes against the case scope:
+ *
+ *   PROPOSED_INCREASE_ABOVE_INDEX_BAND — raised when the case's proposedRent
+ *   exceeds the live capture's permittedNewRentMax (the index-indicated ceiling
+ *   from decree43). Cleared when the proposal is at or below the ceiling, or
+ *   either the proposal or the ceiling is unknown.
+ *
+ *   RENEWAL_NOTICE_WINDOW_MISSED — raised when today (Asia/Dubai) is past
+ *   noticeGateAt and noticeServedAt is still NULL. Cleared once a notice is
+ *   served (or the gate is no longer past, e.g. after a noticeGateAt move).
+ *
+ * Idempotent: safe to call after any field change on the case or its capture;
+ * the underlying raise/clear are no-ops if state already matches.
+ */
+export async function evaluateRenewalRisk(renewalCaseId: string, db: Db = prisma) {
+  const rc = await db.renewalCase.findUnique({ where: { id: renewalCaseId } });
+  if (!rc || rc.archivedAt) return;
+
+  const base = {
+    workspaceId: rc.workspaceId,
+    scopeType: "RENEWAL_CASE" as ScopeType,
+    scopeId: rc.id,
+    tenancyId: rc.tenancyId,
+    propertyId: rc.propertyId,
+  };
+
+  // PROPOSED_INCREASE_ABOVE_INDEX_BAND
+  const capture = rc.indexCaptureId
+    ? await db.rentIndexCapture.findUnique({ where: { id: rc.indexCaptureId } })
+    : await db.rentIndexCapture.findFirst({
+        where: { tenancyId: rc.tenancyId, permittedNewRentMax: { not: null } },
+        orderBy: { capturedAt: "desc" },
+      });
+  const ceiling = capture?.permittedNewRentMax ? Number(capture.permittedNewRentMax) : null;
+  const proposed = rc.proposedRent ? Number(rc.proposedRent) : null;
+  if (ceiling != null && proposed != null && proposed > ceiling) {
+    await raiseFlag(db, { ...base, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", severity: "WARN" });
+  } else {
+    await clearFlag(db, { ...base, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND" });
+  }
+
+  // RENEWAL_NOTICE_WINDOW_MISSED
+  const today = todayInDubai();
+  const gatePassed = rc.noticeGateAt ? today.getTime() > rc.noticeGateAt.getTime() : false;
+  if (gatePassed && !rc.noticeServedAt) {
+    await raiseFlag(db, { ...base, code: "RENEWAL_NOTICE_WINDOW_MISSED", severity: "CRITICAL" });
+  } else {
+    await clearFlag(db, { ...base, code: "RENEWAL_NOTICE_WINDOW_MISSED" });
+  }
 }
 
 /** TENANCY_OVERLAP raised from import conflict detection (T6.1). */

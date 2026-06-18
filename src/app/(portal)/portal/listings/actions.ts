@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
+import { assertNotQuarantined } from "@/server/config/features";
 import * as listings from "@/server/services/listings";
 import * as offers from "@/server/services/offers";
 import * as contractPack from "@/server/services/contractPack";
@@ -41,6 +42,7 @@ function fields(formData: FormData): ListingInput {
 }
 
 export async function createListingAction(formData: FormData) {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   const propertyId = s(formData, "propertyId");
   const listing = await listings.createListing(ctx, propertyId, fields(formData));
@@ -48,6 +50,7 @@ export async function createListingAction(formData: FormData) {
 }
 
 export async function updateListingAction(formData: FormData) {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   const id = s(formData, "id");
   await listings.updateListing(ctx, id, fields(formData));
@@ -55,6 +58,7 @@ export async function updateListingAction(formData: FormData) {
 }
 
 export async function publishListingAction(formData: FormData) {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   const id = s(formData, "id");
   await listings.publishListing(ctx, id);
@@ -62,12 +66,14 @@ export async function publishListingAction(formData: FormData) {
 }
 
 export async function archiveListingAction(formData: FormData) {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   await listings.archiveListing(ctx, s(formData, "id"));
   redirect("/portal/listings");
 }
 
 export async function proposeOfferAction(formData: FormData) {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   const listingId = s(formData, "listingId");
   await offers.proposeNewTenancyOffer(ctx, listingId, {
@@ -80,24 +86,28 @@ export async function proposeOfferAction(formData: FormData) {
 }
 
 export async function acceptOfferAction(formData: FormData) {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   await offers.acceptNewTenancyOffer(ctx, s(formData, "offerId"));
   revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
 }
 
 export async function generateContractPackAction(formData: FormData) {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   await contractPack.generateContractPack(ctx, s(formData, "offerId"));
   revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
 }
 
 export async function sendContractPackAction(formData: FormData) {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   await contractPack.markContractPackSent(ctx, s(formData, "packId"), opt(formData, "eSignRef"));
   revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
 }
 
 export async function signContractPackAction(formData: FormData) {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   await contractPack.markContractPackSigned(ctx, s(formData, "packId"), opt(formData, "eSignRef"));
   revalidatePath(`/portal/listings/${s(formData, "listingId")}`);
@@ -109,6 +119,7 @@ export async function createListingShareLinkAction(
   _prev: { url?: string; error?: string },
   formData: FormData,
 ): Promise<{ url?: string; error?: string }> {
+  assertNotQuarantined("listings"); // POST-able independent of the gated page
   const ctx = await requireCtx();
   try {
     const { url } = await listings.createListingShareLink(ctx, s(formData, "id"));
