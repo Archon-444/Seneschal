@@ -32,7 +32,7 @@ export default async function PortalLayout({ children }: { children: React.React
   return (
     <AppShell
       nav={nav}
-      isStaff={user.isStaff}
+      isStaff={user.isPlatformAdmin}
       workspaceName={workspaceName}
       user={{ name: user.name, email: user.email, role: ctx.role }}
       initialCollapsed={initialCollapsed}

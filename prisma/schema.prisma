@@ -33,14 +33,14 @@ enum WorkspaceType {
 }
 
 model User {
-  id          String   @id @default(uuid())
-  email       String   @unique
-  phone       String?  @unique
-  name        String
-  locale      String   @default("en")
-  isStaff     Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  memberships Membership[]
+  id              String   @id @default(uuid())
+  email           String   @unique
+  phone           String?  @unique
+  name            String
+  locale          String   @default("en")
+  isPlatformAdmin Boolean  @default(false)   // Seneschal operator: lifecycle/billing/aggregate stats only, NEVER customer data (F-Admin §3). Holds zero Membership rows.
+  createdAt       DateTime @default(now())
+  memberships     Membership[]
 }
 
 model Membership {
@@ -73,7 +73,8 @@ enum Role {
   LANDLORD          // self-service supply-side persona; scoped to one Contact via Membership.subjectContactId
   TENANT            // self-service demand-side persona; scoped to one Contact via Membership.subjectContactId
 }
-// Staff is NOT a membership role: staff access goes through the audited admin service path only (User.isStaff).
+// Platform admin is NOT a membership role: the Seneschal operator plane runs under PlatformAdminContext
+// (User.isPlatformAdmin), reaches lifecycle/billing/aggregate stats only, and holds zero Membership rows (F-Admin §3.1).
 
 // ───────────────────────────── Core records [1A]
 

@@ -1,125 +1,26 @@
 import type { Role, User } from "@prisma/client";
 import { prisma } from "../db";
-import { authz, AuthzError, isPersonaRole, type AuthzContext } from "../authz";
+import { AuthzError, isPersonaRole } from "../authz";
 import { recordAudit } from "../audit";
 
-// Admin service path (T1.5 — release blocking). The ONLY door for staff
-// actions: every call requires User.isStaff and writes AuditEvent with
-// on-behalf-of attribution. Normal app paths never reach these functions.
+// Provisioning writes for the platform operator (F-Admin §3.4 seat-zero / persona onboarding).
+//
+// F-Admin teardown (D2): the cross-workspace DATA reads that used to live here
+// (staffListWorkspaces/Notifications/RiskFlags/ExtractionQueue, staffAuditStream,
+// staffListUsers) are GONE — the platform plane sees aggregate stats only, via
+// `src/server/admin/platformStats.ts`. The break-glass rail `staffActAs` is DELETED, not
+// gated (it was latent and the wrong shape; §3.5). What remains is membership creation,
+// reconciled into the in-org member-management service in Phase 3.
 
-function assertStaff(staff: User): void {
-  if (!staff.isStaff) throw new AuthzError("Staff only", 403);
-}
-
-export async function staffListWorkspaces(staff: User) {
-  assertStaff(staff);
-  await recordAudit({
-    actorType: "STAFF",
-    actorId: staff.id,
-    verb: "workspace.list",
-    objectType: "Workspace",
-  });
-  return prisma.workspace.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { memberships: { include: { user: true } } },
-  });
-}
-
-export async function staffListUsers(staff: User) {
-  assertStaff(staff);
-  await recordAudit({
-    actorType: "STAFF",
-    actorId: staff.id,
-    verb: "user.list",
-    objectType: "User",
-  });
-  return prisma.user.findMany({ orderBy: { createdAt: "desc" } });
-}
-
-export async function staffListNotifications(staff: User, workspaceId?: string) {
-  assertStaff(staff);
-  await recordAudit({
-    workspaceId,
-    actorType: "STAFF",
-    actorId: staff.id,
-    verb: "notification.list",
-    objectType: "NotificationMessage",
-  });
-  return prisma.notificationMessage.findMany({
-    where: workspaceId ? { workspaceId } : {},
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-}
-
-export async function staffListRiskFlags(staff: User, workspaceId?: string) {
-  assertStaff(staff);
-  await recordAudit({
-    workspaceId,
-    actorType: "STAFF",
-    actorId: staff.id,
-    verb: "riskflag.list",
-    objectType: "RiskFlag",
-  });
-  return prisma.riskFlag.findMany({
-    where: { ...(workspaceId ? { workspaceId } : {}), status: { in: ["OPEN", "ACKNOWLEDGED"] } },
-    orderBy: { raisedAt: "desc" },
-    take: 200,
-  });
-}
-
-export async function staffListExtractionQueue(staff: User) {
-  assertStaff(staff);
-  await recordAudit({
-    actorType: "STAFF",
-    actorId: staff.id,
-    verb: "extraction.list",
-    objectType: "ExtractionJob",
-  });
-  return prisma.extractionJob.findMany({
-    where: { status: { in: ["PENDING", "EXTRACTED", "REVIEWING"] } },
-    orderBy: { createdAt: "asc" },
-  });
-}
-
-export async function staffAuditStream(staff: User, workspaceId?: string) {
-  assertStaff(staff);
-  return prisma.auditEvent.findMany({
-    where: workspaceId ? { workspaceId } : {},
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-}
-
-/**
- * On-behalf-of acting: returns an AuthzContext impersonating a member of the
- * target workspace, with onBehalfOfId set so every downstream evidence/audit
- * row carries the attribution. Audited at acquisition.
- */
-export async function staffActAs(
-  staff: User,
-  workspaceId: string,
-  targetUserId: string,
-): Promise<AuthzContext> {
-  assertStaff(staff);
-  const ctx = await authz(targetUserId, workspaceId);
-  await recordAudit({
-    workspaceId,
-    actorType: "STAFF",
-    actorId: staff.id,
-    onBehalfOfId: targetUserId,
-    verb: "staff.act_as",
-    objectType: "Workspace",
-    objectId: workspaceId,
-  });
-  return { ...ctx, isStaff: true, onBehalfOfId: targetUserId, userId: staff.id };
+function assertPlatformAdmin(operator: User): void {
+  if (!operator.isPlatformAdmin) throw new AuthzError("Platform admin only", 403);
 }
 
 export async function staffCreateMembership(
-  staff: User,
+  operator: User,
   args: { workspaceId: string; userId: string; role: Role; clientPrincipalId?: string; subjectContactId?: string },
 ) {
-  assertStaff(staff);
+  assertPlatformAdmin(operator);
   // Mirror the contextFromMembership guards at creation so a scoped role can never be
   // onboarded without its scope (which would later fail authz() with "missing scope").
   if (isPersonaRole(args.role) && !args.subjectContactId) {
@@ -140,7 +41,7 @@ export async function staffCreateMembership(
   await recordAudit({
     workspaceId: args.workspaceId,
     actorType: "STAFF",
-    actorId: staff.id,
+    actorId: operator.id,
     onBehalfOfId: args.userId,
     verb: "membership.create",
     objectType: "Membership",

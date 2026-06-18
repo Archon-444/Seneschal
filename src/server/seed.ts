@@ -76,12 +76,12 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     update: {},
     create: { email: operatorEmail, name: "", locale: "en" },
   });
-  const staff = await prisma.user.upsert({
+  const platformOperator = await prisma.user.upsert({
     where: { email: "staff@seneschal.example" },
     update: {},
-    create: { email: "staff@seneschal.example", name: "Seneschal Staff", isStaff: true },
+    create: { email: "staff@seneschal.example", name: "Seneschal Operator", isPlatformAdmin: true },
   });
-  void staff;
+  void platformOperator;
 
   await prisma.membership.upsert({
     where: {

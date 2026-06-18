@@ -2,7 +2,14 @@ import { cookies } from "next/headers";
 import type { Role } from "@prisma/client";
 import { prisma } from "../db";
 import { sessionUser } from "./index";
-import { authz, AuthzError, isPersonaRole, pickMembership, type AuthzContext } from "../authz";
+import {
+  authz,
+  AuthzError,
+  isPersonaRole,
+  pickMembership,
+  type AuthzContext,
+  type PlatformAdminContext,
+} from "../authz";
 
 export const SESSION_COOKIE = "seneschal_session";
 export const WORKSPACE_COOKIE = "seneschal_workspace";
@@ -51,9 +58,14 @@ export function homePathFor(role: Role): string {
   return isPersonaRole(role) ? "/portal" : "/dashboard";
 }
 
-export async function requireStaff() {
+/**
+ * The platform-operator door. Returns a PlatformAdminContext that carries no scope and
+ * cannot be passed to a data service (compile error — F-Admin §5). A platform admin holds
+ * no Membership, so they can never obtain an AuthzContext for any workspace.
+ */
+export async function requirePlatformAdmin(): Promise<PlatformAdminContext> {
   const user = await currentUser();
   if (!user) throw new AuthzError("Not signed in", 401);
-  if (!user.isStaff) throw new AuthzError("Staff only", 403);
-  return user;
+  if (!user.isPlatformAdmin) throw new AuthzError("Platform admin only", 403);
+  return { kind: "platform", userId: user.id };
 }

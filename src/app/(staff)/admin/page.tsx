@@ -1,103 +1,104 @@
 import { redirect } from "next/navigation";
-import { requireStaff } from "@/server/auth/request";
-import {
-  staffAuditStream,
-  staffListExtractionQueue,
-  staffListNotifications,
-  staffListRiskFlags,
-  staffListWorkspaces,
-} from "@/server/services/admin";
-import { Badge, Card, PageHeader, Table, Td } from "@/components/ui";
+import { requirePlatformAdmin } from "@/server/auth/request";
+import { platformStats } from "@/server/admin/platformStats";
+import { Badge, Card, KpiCard, PageHeader, Table, Td } from "@/components/ui";
+import { formatDubaiDate } from "@/server/calculators/dates";
 
-// Screen 15 — staff console (T10.3). Unreachable without isStaff; every read audited.
+// Platform console (F-Admin §3, §7). Unreachable without isPlatformAdmin. Shows
+// lifecycle/billing/aggregate HEALTH only — counts, statuses, timestamps. No customer
+// data: the cross-workspace risk-flag/notification/member-email row reads were removed in
+// the F-Admin teardown; this reads `platformStats` scalars exclusively.
 
 export default async function AdminPage() {
-  let staff;
+  let ctx;
   try {
-    staff = await requireStaff();
+    ctx = await requirePlatformAdmin();
   } catch {
     redirect("/dashboard");
   }
-  const [workspaces, queue, notifications, flags, audit] = await Promise.all([
-    staffListWorkspaces(staff!),
-    staffListExtractionQueue(staff!),
-    staffListNotifications(staff!),
-    staffListRiskFlags(staff!),
-    staffAuditStream(staff!),
-  ]);
+  const stats = await platformStats(ctx!);
+
+  const totals = stats.reduce(
+    (acc, s) => ({
+      active: acc.active + (s.archived ? 0 : 1),
+      seats: acc.seats + s.seatsUsed,
+      openFlags: acc.openFlags + s.openRiskFlags,
+      failedSends: acc.failedSends + s.notifications.failed,
+    }),
+    { active: 0, seats: 0, openFlags: 0, failedSends: 0 },
+  );
 
   return (
     <>
-      <PageHeader title="Staff console" subtitle="Every staff action is audited with on-behalf-of attribution" />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Workspaces</h2>
-          <Table headers={["Name", "Type", "Members"]}>
-            {workspaces.map((w) => (
-              <tr key={w.id}>
-                <Td>{w.name}</Td>
-                <Td><Badge value={w.type} /></Td>
-                <Td className="text-xs">
-                  {w.memberships.map((m) => `${m.user.email} (${m.role})`).join(", ")}
-                </Td>
-              </tr>
-            ))}
-          </Table>
-        </Card>
-        <Card>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Extraction review queue</h2>
-          {queue.length === 0 ? (
-            <p className="text-sm text-navy-300">Queue empty.</p>
-          ) : (
-            <Table headers={["Created", "Workspace", "Status"]}>
-              {queue.map((j) => (
-                <tr key={j.id}>
-                  <Td className="figure text-xs">{j.createdAt.toISOString().slice(0, 10)}</Td>
-                  <Td className="figure text-xs">{j.workspaceId.slice(0, 8)}…</Td>
-                  <Td><Badge value={j.status} /></Td>
-                </tr>
-              ))}
-            </Table>
-          )}
-        </Card>
-        <Card>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Notification log</h2>
-          <Table headers={["When", "Channel", "Template", "Status"]}>
-            {notifications.slice(0, 15).map((n) => (
-              <tr key={n.id}>
-                <Td className="figure text-xs">{n.createdAt.toISOString().replace("T", " ").slice(0, 16)}</Td>
-                <Td>{n.channel}</Td>
-                <Td className="text-xs">{n.templateCode ?? "—"}</Td>
-                <Td><Badge value={n.status} /></Td>
-              </tr>
-            ))}
-          </Table>
-        </Card>
-        <Card>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Open risk flags (all workspaces)</h2>
-          <Table headers={["Raised", "Code", "Severity"]}>
-            {flags.slice(0, 15).map((f) => (
-              <tr key={f.id}>
-                <Td className="figure text-xs">{f.raisedAt.toISOString().slice(0, 10)}</Td>
-                <Td><Badge value={f.code} /></Td>
-                <Td><Badge value={f.severity} /></Td>
-              </tr>
-            ))}
-          </Table>
-        </Card>
+      <PageHeader
+        title="Platform console"
+        subtitle="Lifecycle, billing & aggregate health across every workspace — never customer data."
+      />
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Active workspaces" value={String(totals.active)} />
+        <KpiCard label="Seats in use" value={String(totals.seats)} />
+        <KpiCard
+          label="Open risk flags"
+          value={String(totals.openFlags)}
+          tone={totals.openFlags > 0 ? "warn" : "default"}
+        />
+        <KpiCard
+          label="Failed sends"
+          value={String(totals.failedSends)}
+          tone={totals.failedSends > 0 ? "danger" : "default"}
+        />
       </div>
-      <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Audit stream</h2>
-      <Table headers={["When (UTC)", "Actor", "Verb", "Object", "On behalf of"]}>
-        {audit.slice(0, 30).map((a) => (
-          <tr key={a.id}>
-            <Td className="figure text-xs">{a.createdAt.toISOString().replace("T", " ").slice(0, 19)}</Td>
-            <Td className="text-xs">{a.actorType} {a.actorId?.slice(0, 8) ?? ""}</Td>
-            <Td className="figure text-xs">{a.verb}</Td>
-            <Td className="text-xs">{a.objectType}</Td>
-            <Td className="text-xs">{a.onBehalfOfId?.slice(0, 8) ?? "—"}</Td>
-          </tr>
-        ))}
-      </Table>
+
+      {stats.length === 0 ? (
+        <Card>
+          <p className="text-sm text-muted">No workspaces provisioned yet.</p>
+        </Card>
+      ) : (
+        <Table
+          headers={[
+            "Workspace",
+            "Type",
+            "Seats",
+            "Properties",
+            "Active tenancies",
+            "Open proofs",
+            "Open flags",
+            "Sends ok/fail/queued",
+            "Subscription",
+            "Last activity",
+          ]}
+        >
+          {stats.map((s) => (
+            <tr key={s.workspaceId}>
+              <Td>
+                {s.name}
+                {s.archived && <span className="ml-2 text-xs text-muted">(archived)</span>}
+              </Td>
+              <Td>
+                <Badge value={s.type} />
+              </Td>
+              <Td className="figure">{s.seatsUsed}</Td>
+              <Td className="figure">{s.properties}</Td>
+              <Td className="figure">{s.tenanciesByStatus.ACTIVE ?? 0}</Td>
+              <Td className="figure">{s.openProofRequests}</Td>
+              <Td className="figure">{s.openRiskFlags}</Td>
+              <Td className="figure text-xs">
+                {s.notifications.sent}/{s.notifications.failed}/{s.notifications.queued}
+              </Td>
+              <Td>
+                {s.subscriptionStatus ? (
+                  <Badge value={s.subscriptionStatus.toUpperCase()} />
+                ) : (
+                  <span className="text-muted">—</span>
+                )}
+              </Td>
+              <Td className="figure text-xs">
+                {s.lastActivityAt ? formatDubaiDate(s.lastActivityAt) : "—"}
+              </Td>
+            </tr>
+          ))}
+        </Table>
+      )}
     </>
   );
 }

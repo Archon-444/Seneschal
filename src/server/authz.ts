@@ -20,9 +20,27 @@ export interface AuthzContext {
    * invariant for a delegate (an empty set would be a workspace-wide leak).
    */
   delegateClientIds: string[];
+  /**
+   * Audit-actor hint only (labels evidence/audit rows STAFF vs USER). Sourced from
+   * User.isPlatformAdmin. NOT a capability or scope input — it never widens a read.
+   * After the F-Admin teardown a platform admin holds no Membership, so no readable
+   * AuthzContext is ever built with this true; the flag stays for forward-compatible
+   * on-behalf-of attribution if a customer-visible, audited support mode returns (§3.5).
+   */
   isStaff: boolean;
   /** Staff acting on behalf of a user via the admin service path. */
   onBehalfOfId?: string;
+}
+
+/**
+ * The platform-operator plane (F-Admin §3). Deliberately does NOT carry workspaceId,
+ * role, or any scope, and is branded `kind: "platform"` so it cannot structurally unify
+ * with AuthzContext — passing it to a data service is a COMPILE error, not a runtime
+ * denial. The operator provisions/bills/reads aggregate stats and never reaches a row.
+ */
+export interface PlatformAdminContext {
+  readonly kind: "platform";
+  userId: string;
 }
 
 /** TENANT and LANDLORD are single-Contact self-service personas. */
@@ -122,7 +140,7 @@ export function contextFromMembership(user: User, membership: Membership): Authz
     clientPrincipalId: membership.role === "CLIENT_VIEWER" ? membership.clientPrincipalId : null,
     subjectContactId: isPersonaRole(membership.role) ? membership.subjectContactId : null,
     delegateClientIds: isDelegateRole(membership.role) ? membership.assignedClientIds : [],
-    isStaff: user.isStaff,
+    isStaff: user.isPlatformAdmin,
   };
 }
 
