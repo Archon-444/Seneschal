@@ -13,7 +13,7 @@ import { resolveClientScopeIds, scopeMatchClauses, type ClientScopeIds } from ".
 //
 // A delegate's scope keys on the single pivot every record reaches its client
 // through — `Property.clientPrincipalId` — so the resolution reuses CLIENT_VIEWER's
-// `resolveClientScopeIds` with `{ in: assignedClientIds }` (one query, no per-client
+// `resolveClientScopeIds` with `{ in: delegateClientIds }` (one query, no per-client
 // fan-out). Only the scope-polymorphic tables (Document, ProofRequest) genuinely
 // need the resolved id-set; the rest fall out of the same struct.
 

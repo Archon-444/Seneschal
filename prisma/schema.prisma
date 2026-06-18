@@ -50,12 +50,12 @@ model Membership {
   role              Role
   clientPrincipalId String?          // required when role = CLIENT_VIEWER (scopes to one client)
   subjectContactId  String?          // required when role = TENANT | LANDLORD (scopes to one Contact)
-  assignedClientIds String[] @default([])  // required when role = MANAGING_AGENT (scopes read+write to this set of clients)
   createdAt         DateTime @default(now())
   revokedAt         DateTime?
   workspace         Workspace @relation(fields: [workspaceId], references: [id])
   user              User      @relation(fields: [userId], references: [id])
   grants            MembershipGrant[]
+  clientAssignments ClientAssignment[]   // F-Admin (D3): a MANAGING_AGENT's delegate scope (was assignedClientIds[])
   @@unique([workspaceId, userId, role])
   @@index([workspaceId])
   @@index([userId])
@@ -79,6 +79,27 @@ model MembershipGrant {
   // plain @@unique would collide on re-grant-after-revoke.
 }
 
+// F-Admin (D3): the people×clients assignment grid — the delegate's scope, as an AUDITED
+// join (was Membership.assignedClientIds[]). An assignment is a delegation ACT, not state, so
+// provenance (assignedById/assignedAt, revokedAt/revokedById) is inseparable from the row.
+// resolveClientScopeIds reads the LIVE rows; there is no cached array to drift.
+model ClientAssignment {
+  id                String     @id @default(uuid())
+  workspaceId       String
+  membershipId      String                  // the delegate (MANAGING_AGENT)
+  clientPrincipalId String
+  assignedById      String?                 // null = backfilled/system: provenance is pre-audit, never fabricated
+  assignedAt        DateTime   @default(now())
+  backfilledAt      DateTime?                // set ONLY by the array→table backfill; flags "we don't know who originally granted"
+  revokedAt         DateTime?
+  revokedById       String?
+  membership        Membership @relation(fields: [membershipId], references: [id])
+  @@index([workspaceId, membershipId])
+  // Live-uniqueness — one non-revoked assignment per (membership, client) — is a raw PARTIAL
+  // unique index in the migration (WHERE "revokedAt" IS NULL). Prisma can't express a filtered
+  // unique; a plain @@unique would collide the instant a revoked client is re-assigned.
+}
+
 enum Role {
   WORKSPACE_ADMIN
   MANAGER
@@ -86,7 +107,7 @@ enum Role {
   ORG_ADMIN         // F-Admin: people/config power, ZERO data caps (onboards staff, wires delegate assignments, cannot open a tenancy)
   CLIENT_VIEWER
   AGENT
-  MANAGING_AGENT    // execution delegate: read + broad write, confined to Membership.assignedClientIds
+  MANAGING_AGENT    // execution delegate: read + broad write, confined to its live ClientAssignment rows
   LICENSED_PARTNER
   VENDOR
   AUDITOR

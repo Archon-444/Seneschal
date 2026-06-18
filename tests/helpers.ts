@@ -71,10 +71,20 @@ export async function addMember(
       role,
       clientPrincipalId: clientPrincipalId ?? null,
       subjectContactId: subjectContactId ?? null,
-      assignedClientIds: assignedClientIds ?? [],
     },
   });
-  return { ctx: contextFromMembership(user, membership), userId: user.id, workspaceId };
+  // F-Admin (D3): a delegate's scope is live ClientAssignment rows, not an array column.
+  const clientIds = assignedClientIds ?? [];
+  for (const cpId of clientIds) {
+    await prisma.clientAssignment.create({
+      data: { workspaceId, membershipId: membership.id, clientPrincipalId: cpId, assignedById: user.id },
+    });
+  }
+  return {
+    ctx: contextFromMembership(user, membership, [], clientIds),
+    userId: user.id,
+    workspaceId,
+  };
 }
 
 /** Add a MANAGING_AGENT (execution delegate) scoped to a set of ClientPrincipals. */

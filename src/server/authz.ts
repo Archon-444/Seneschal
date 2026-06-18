@@ -86,7 +86,13 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
   const membership = pickMembership(memberships);
   if (!membership) throw new AuthzError("No access to this workspace");
 
-  return contextFromMembership(user, membership, await liveGrantBundles(membership.id));
+  // F-Admin (D1/D3): grants and delegate client-scope are now AUDITED join rows, not columns on
+  // the membership, so they must be loaded async here and threaded into the (sync) context builder.
+  const [grantedBundles, delegateClientIds] = await Promise.all([
+    liveGrantBundles(membership.id),
+    liveDelegateClientIds(membership.id, membership.workspaceId),
+  ]);
+  return contextFromMembership(user, membership, grantedBundles, delegateClientIds);
 }
 
 /** The live (non-revoked) capability bundles granted to a membership (F-Admin D1). */
@@ -96,6 +102,19 @@ async function liveGrantBundles(membershipId: string): Promise<Bundle[]> {
     select: { bundle: true },
   });
   return grants.map((g) => g.bundle);
+}
+
+/**
+ * The live (non-revoked) client ids a delegate membership is assigned (F-Admin D3). Filtered by
+ * the membership's own workspace as a fail-closed guard: a join row that somehow referenced
+ * another workspace's membership contributes nothing rather than widening scope.
+ */
+async function liveDelegateClientIds(membershipId: string, workspaceId: string): Promise<string[]> {
+  const rows = await prisma.clientAssignment.findMany({
+    where: { membershipId, workspaceId, revokedAt: null },
+    select: { clientPrincipalId: true },
+  });
+  return rows.map((r) => r.clientPrincipalId);
 }
 
 /**
@@ -141,6 +160,7 @@ export function contextFromMembership(
   user: User,
   membership: Membership,
   grantedBundles: Bundle[] = [],
+  delegateClientIds: string[] = [],
 ): AuthzContext {
   if (membership.role === "CLIENT_VIEWER" && !membership.clientPrincipalId) {
     throw new AuthzError("CLIENT_VIEWER membership missing client scope");
@@ -148,9 +168,11 @@ export function contextFromMembership(
   if (isPersonaRole(membership.role) && !membership.subjectContactId) {
     throw new AuthzError(`${membership.role} membership missing contact scope`);
   }
-  if (isDelegateRole(membership.role) && membership.assignedClientIds.length === 0) {
+  if (isDelegateRole(membership.role) && delegateClientIds.length === 0) {
     // An unscoped delegate would read+write the whole workspace — fail closed,
-    // exactly as a persona without a subjectContactId does above.
+    // exactly as a persona without a subjectContactId does above. The scope now comes
+    // from live ClientAssignment rows (D3), so a delegate whose assignments were all
+    // revoked can no longer build a readable context at all.
     throw new AuthzError("MANAGING_AGENT membership missing client scope");
   }
   return {
@@ -159,7 +181,7 @@ export function contextFromMembership(
     role: membership.role,
     clientPrincipalId: membership.role === "CLIENT_VIEWER" ? membership.clientPrincipalId : null,
     subjectContactId: isPersonaRole(membership.role) ? membership.subjectContactId : null,
-    delegateClientIds: isDelegateRole(membership.role) ? membership.assignedClientIds : [],
+    delegateClientIds: isDelegateRole(membership.role) ? delegateClientIds : [],
     grantedBundles,
     isStaff: user.isPlatformAdmin,
   };
