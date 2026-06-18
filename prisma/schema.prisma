@@ -176,12 +176,18 @@ model Tenancy {
   contractDocId    String?
   createdAt        DateTime      @default(now())
   archivedAt       DateTime?
+  /** PR6: lineage to the predecessor tenancy when this row was minted by
+   *  mintRenewedTenancy. NULL on original (non-renewal) tenancies. */
+  renewsFromTenancyId String?
+  renewsFrom       Tenancy?      @relation("TenancyRenewal", fields: [renewsFromTenancyId], references: [id])
+  successors       Tenancy[]     @relation("TenancyRenewal")
   property         Property      @relation(fields: [propertyId], references: [id])
   contractDoc      Document?     @relation("TenancyContract", fields: [contractDocId], references: [id])
   paymentItems     PaymentItem[]
   deadlines        Deadline[]
   @@index([workspaceId, propertyId])
   @@index([workspaceId, endDate])
+  @@index([renewsFromTenancyId])
 }
 
 enum TenancyStatus {
@@ -913,6 +919,12 @@ enum EvidenceType {
   REPORT_EXPORTED
   EVIDENCE_PACK_EXPORTED
   RENEWAL_ASSESSMENT_CREATED
+  // PR6 (Stage-2): renewal-completed event. There was no reserved value for this
+  // — every other renewal event was already in the enum, but the terminal
+  // "successor tenancy minted" event was not. This is the only enum addition
+  // PR6 makes (the "zero enum churn" plan called out exactly this as the case
+  // where surfacing it is required).
+  RENEWAL_COMPLETED
   INDEX_CAPTURED
   NOTICE_GENERATED
   NOTICE_APPROVED
@@ -998,6 +1010,11 @@ enum RiskCode {
   DOCUMENT_EXPIRED
   APPROVAL_PENDING_TOO_LONG
   TENANCY_OVERLAP
+  // PR6 (Stage-2): renewal risk codes.
+  /** Proposed rent exceeds the index-indicated maximum from the live capture. */
+  PROPOSED_INCREASE_ABOVE_INDEX_BAND
+  /** Today is past the case's noticeGateAt and no notice has been served. */
+  RENEWAL_NOTICE_WINDOW_MISSED
 }
 enum Severity {
   INFO
@@ -1148,11 +1165,35 @@ model RentIndexCapture {
   propertyId    String
   marketRentAvg Decimal  @db.Decimal(12, 2)   // index average market rent (manual capture)
   source        String   @default("DLD Smart Rental Index")
+  // PR6 Stage-2 additions. The computed fields (gapPct/permittedPct/permittedNewRentMax)
+  // are NULLABLE *on purpose* — a backfilled row from before this PR has no honest
+  // contemporaneous assessment and must NOT be back-filled by recomputing
+  // decree43() against a reconstructed historical rent (that would write a
+  // present-day figure onto a row dated months ago, indistinguishable from a real
+  // capture-time assessment — a direct violation of provenance). New captures
+  // populate all three at capture time; old rows keep NULLs and a sourceRef set
+  // to MANUAL_CONCIERGE.
+  indexSource         IndexSource?
+  gapPct              Decimal?     @db.Decimal(5, 4)
+  permittedPct        Int?
+  permittedNewRentMax Decimal?     @db.Decimal(12, 2)
+  calculatorVersion   String?
+  comparableBasis     Json?
+  sourceRef           Json?
+  /** Set on rows backfilled by the migration (NULL on contemporaneous captures);
+   *  the UI must render backfilled rows distinctly. */
+  backfilledAt        DateTime?
   capturedAt    DateTime                       // when the figure was read from the official source
   capturedById  String?
   note          String?
   createdAt     DateTime @default(now())
   @@index([workspaceId, tenancyId])
+}
+
+enum IndexSource {
+  SMART_RENTAL_INDEX_2025
+  RERA_INDEX_LEGACY
+  MANUAL_CONCIERGE
 }
 
 // A captured index figure reusable across units in a community (optionally a
@@ -1186,6 +1227,16 @@ model RenewalCase {
   noticeServedAt      DateTime?                          // when the change notice was served
   noticeDocId         String?                            // Document holding the served notice
   decidedOfferId      String?                            // the accepted Offer
+  // PR6 Stage-2 additions.
+  /** The successor tenancy minted by mintRenewedTenancy (1:1 with this case). */
+  renewedTenancyId    String?       @unique
+  indexCaptureId      String?                            // the IndexCapture this case quotes
+  proposedRent        Decimal?      @db.Decimal(12, 2)   // landlord's proposed new annual rent
+  proposedStartDate   DateTime?
+  proposedEndDate     DateTime?
+  currentNoticeId     String?                            // active Notice driving the timeline
+  currentOfferId      String?                            // active Offer under negotiation
+  archivedAt          DateTime?
   createdById         String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
@@ -1213,6 +1264,14 @@ model Offer {
   status          OfferStatus @default(SENT)
   createdById     String?
   viaSecureLinkId String?                           // set when a tenant responds via secure link
+  // PR6 Stage-2 additions. The snapshot is the permittedNewRentMax this offer was
+  // measured against at the moment it was sent; it does NOT auto-update if a
+  // later capture changes the ceiling. That's the whole point: an offer's
+  // compliance posture has to be reproducible from the row alone.
+  permittedMaxSnapshot  Decimal?  @db.Decimal(12, 2)
+  responseDueDeadlineId String?
+  proposedStartDate     DateTime?
+  proposedEndDate       DateTime?
   createdAt       DateTime    @default(now())
   @@unique([renewalCaseId, version])
   @@index([workspaceId, renewalCaseId])
@@ -1229,6 +1288,54 @@ enum OfferStatus {
   ACCEPTED
   SUPERSEDED
   WITHDRAWN
+}
+
+// PR6 (Stage-2): the landlord's change/renewal notice. Previously implicit
+// (a NOTICE_SERVED evidence row + RenewalCase.noticeServedAt/noticeDocId);
+// promoted to a standalone row so the GENERATED → APPROVED → SERVED transitions
+// and the served-by-which-method metadata are first-class. Each transition emits
+// its own evidence row at its own moment (Notice service in PR6b enforces this).
+model Notice {
+  id              String       @id @default(uuid())
+  workspaceId     String
+  renewalCaseId   String
+  kind            NoticeKind
+  status          NoticeStatus @default(GENERATED)
+  generatedAt     DateTime     @default(now())
+  approvedAt      DateTime?
+  approvedById    String?
+  servedAt        DateTime?
+  servedById      String?
+  serviceMethod   ServiceMethod?
+  serviceRef      String?                            // e.g. courier tracking id / inbox ref
+  docId           String?                            // the served Notice document
+  templateCode    String?                            // for compliance-copy audit (PR6c)
+  templateVersion String?
+  archivedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  @@index([workspaceId, renewalCaseId])
+  @@index([workspaceId, status])
+}
+
+enum NoticeKind {
+  RENEWAL_CHANGE
+  NON_RENEWAL
+}
+
+enum NoticeStatus {
+  GENERATED
+  APPROVED
+  SERVED
+  WITHDRAWN
+}
+
+enum ServiceMethod {
+  EMAIL
+  COURIER
+  IN_PERSON
+  REGISTERED_POST
+  OTHER
 }
 
 enum RenewalStatus {
