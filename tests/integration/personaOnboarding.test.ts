@@ -9,12 +9,14 @@ import { authz } from "@/server/authz";
 // the service (otherwise authz() later throws "missing contact scope").
 
 let W: TestActor;
-let staff: { id: string; isStaff: boolean };
+let staff: { id: string; isPlatformAdmin: boolean };
 
 beforeEach(async () => {
   await resetDb();
   W = await makeWorkspace("Onboarding WS");
-  staff = await prisma.user.create({ data: { email: `staff-${Date.now()}@test.example`, name: "Staff", isStaff: true } });
+  staff = await prisma.user.create({
+    data: { email: `staff-${Date.now()}@test.example`, name: "Operator", isPlatformAdmin: true },
+  });
 });
 
 describe("staffCreateMembership for personas", () => {

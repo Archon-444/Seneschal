@@ -20,6 +20,7 @@ model Workspace {
   name        String
   type        WorkspaceType
   createdAt   DateTime @default(now())
+  suspendedAt DateTime?            // F-Admin §3.2: temporary platform suspend — blocks the interactive door (authz) only; the daily sweep keeps running (runner.ts). Distinct from archive (terminal).
   archivedAt  DateTime?
   memberships Membership[]
   @@index([type])
@@ -33,14 +34,14 @@ enum WorkspaceType {
 }
 
 model User {
-  id          String   @id @default(uuid())
-  email       String   @unique
-  phone       String?  @unique
-  name        String
-  locale      String   @default("en")
-  isStaff     Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  memberships Membership[]
+  id              String   @id @default(uuid())
+  email           String   @unique
+  phone           String?  @unique
+  name            String
+  locale          String   @default("en")
+  isPlatformAdmin Boolean  @default(false)   // Seneschal operator: lifecycle/billing/aggregate stats only, NEVER customer data (F-Admin §3). Holds zero Membership rows.
+  createdAt       DateTime @default(now())
+  memberships     Membership[]
 }
 
 model Membership {
@@ -50,30 +51,105 @@ model Membership {
   role              Role
   clientPrincipalId String?          // required when role = CLIENT_VIEWER (scopes to one client)
   subjectContactId  String?          // required when role = TENANT | LANDLORD (scopes to one Contact)
-  assignedClientIds String[] @default([])  // required when role = MANAGING_AGENT (scopes read+write to this set of clients)
   createdAt         DateTime @default(now())
   revokedAt         DateTime?
   workspace         Workspace @relation(fields: [workspaceId], references: [id])
   user              User      @relation(fields: [userId], references: [id])
+  grants            MembershipGrant[]
+  clientAssignments ClientAssignment[]   // F-Admin (D3): a MANAGING_AGENT's delegate scope (was assignedClientIds[])
   @@unique([workspaceId, userId, role])
   @@index([workspaceId])
   @@index([userId])
+}
+
+// F-Admin (D1): audited per-membership capability grants — the "who granted whom, when"
+// a fiduciary product needs. Effective caps = roleMap(role) ∪ expand(live grants).
+model MembershipGrant {
+  id           String     @id @default(uuid())
+  membershipId String
+  bundle       Bundle
+  grantedById  String
+  grantedAt    DateTime   @default(now())
+  revokedAt    DateTime?
+  revokedById  String?
+  membership   Membership @relation(fields: [membershipId], references: [id])
+  @@index([membershipId])
+  // Live-uniqueness — at most ONE non-revoked grant per (membership, bundle) — is a raw
+  // PARTIAL unique index added in the migration (WHERE "revokedAt" IS NULL). Prisma can't
+  // express a filtered unique and won't drift on it (mirrors RiskFlag_active_unique). A
+  // plain @@unique would collide on re-grant-after-revoke.
+}
+
+// F-Admin (D3): the people×clients assignment grid — the delegate's scope, as an AUDITED
+// join (was Membership.assignedClientIds[]). An assignment is a delegation ACT, not state, so
+// provenance (assignedById/assignedAt, revokedAt/revokedById) is inseparable from the row.
+// resolveClientScopeIds reads the LIVE rows; there is no cached array to drift.
+model ClientAssignment {
+  id                String     @id @default(uuid())
+  workspaceId       String
+  membershipId      String                  // the delegate (MANAGING_AGENT)
+  clientPrincipalId String
+  assignedById      String?                 // null = backfilled/system: provenance is pre-audit, never fabricated
+  assignedAt        DateTime   @default(now())
+  backfilledAt      DateTime?                // set ONLY by the array→table backfill; flags "we don't know who originally granted"
+  revokedAt         DateTime?
+  revokedById       String?
+  membership        Membership @relation(fields: [membershipId], references: [id])
+  @@index([workspaceId, membershipId])
+  // Live-uniqueness — one non-revoked assignment per (membership, client) — is a raw PARTIAL
+  // unique index in the migration (WHERE "revokedAt" IS NULL). Prisma can't express a filtered
+  // unique; a plain @@unique would collide the instant a revoked client is re-assigned.
 }
 
 enum Role {
   WORKSPACE_ADMIN
   MANAGER
   FIDUCIARY
+  ORG_ADMIN         // F-Admin: people/config power, ZERO data caps (onboards staff, wires delegate assignments, cannot open a tenancy)
   CLIENT_VIEWER
   AGENT
-  MANAGING_AGENT    // execution delegate: read + broad write, confined to Membership.assignedClientIds
+  MANAGING_AGENT    // execution delegate: read + broad write, confined to its live ClientAssignment rows
   LICENSED_PARTNER
   VENDOR
   AUDITOR
   LANDLORD          // self-service supply-side persona; scoped to one Contact via Membership.subjectContactId
   TENANT            // self-service demand-side persona; scoped to one Contact via Membership.subjectContactId
 }
-// Staff is NOT a membership role: staff access goes through the audited admin service path only (User.isStaff).
+
+// F-Admin (D1): capability bundles, unioned OVER the role map (effective = roleMap ∪ grants).
+// IMPORTANT — only ORG_ADMIN is actually honored as a grant (capabilities.GRANT_HONORED_BUNDLES).
+// PRINCIPAL/DELEGATE/CLIENT_VIEWER are RESERVED but NOT grantable: a grant carries no scope, and
+// scope(ctx) narrows by ROLE only, so honoring a DATA bundle would confer caps with a workspace-
+// wide read (a leak). Those data shapes come from the BASE ROLE — PRINCIPAL via seat-zero
+// (WORKSPACE_ADMIN), DELEGATE via a MANAGING_AGENT membership + the assignment grid. Do not honor
+// a data bundle without first teaching scope(ctx) to narrow grant-derived data caps.
+enum Bundle {
+  PRINCIPAL
+  ORG_ADMIN
+  DELEGATE
+  CLIENT_VIEWER
+}
+
+// F-Admin §3.4 / §4.1: seat-zero (platform-issued) and in-org member invites. Token-hash
+// discipline reused from SecureLink — only the hash is stored, the raw token is returned once.
+model WorkspaceInvite {
+  id              String    @id @default(uuid())
+  workspaceId     String
+  email           String
+  intendedBundles Bundle[]  @default([])
+  tokenHash       String    @unique
+  invitedById     String?               // null when platform-issued seat-zero
+  platformIssued  Boolean   @default(false)
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  acceptedUserId  String?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  @@index([workspaceId])
+  @@index([email])
+}
+// Platform admin is NOT a membership role: the Seneschal operator plane runs under PlatformAdminContext
+// (User.isPlatformAdmin), reaches lifecycle/billing/aggregate stats only, and holds zero Membership rows (F-Admin §3.1).
 
 // ───────────────────────────── Core records [1A]
 

@@ -1,6 +1,6 @@
-import type { Membership, Role, User } from "@prisma/client";
+import type { Bundle, Membership, Role, User } from "@prisma/client";
 import { prisma } from "./db";
-import { roleHas, type Capability } from "./capabilities";
+import { bundleHas, GRANT_HONORED_BUNDLES, roleHas, type Capability } from "./capabilities";
 
 // Single authorization helper (T1.2 — release blocking).
 // Every service function takes an AuthzContext; no Prisma call exists outside
@@ -20,9 +20,33 @@ export interface AuthzContext {
    * invariant for a delegate (an empty set would be a workspace-wide leak).
    */
   delegateClientIds: string[];
+  /**
+   * F-Admin (D1): the live capability bundles granted to THIS membership, on top of its
+   * role. Effective caps = roleMap(role) ∪ expand(grantedBundles). Empty for every existing
+   * membership (no backfill), so effective caps are unchanged until a bundle is granted.
+   */
+  grantedBundles: Bundle[];
+  /**
+   * Audit-actor hint only (labels evidence/audit rows STAFF vs USER). Sourced from
+   * User.isPlatformAdmin. NOT a capability or scope input — it never widens a read.
+   * After the F-Admin teardown a platform admin holds no Membership, so no readable
+   * AuthzContext is ever built with this true; the flag stays for forward-compatible
+   * on-behalf-of attribution if a customer-visible, audited support mode returns (§3.5).
+   */
   isStaff: boolean;
   /** Staff acting on behalf of a user via the admin service path. */
   onBehalfOfId?: string;
+}
+
+/**
+ * The platform-operator plane (F-Admin §3). Deliberately does NOT carry workspaceId,
+ * role, or any scope, and is branded `kind: "platform"` so it cannot structurally unify
+ * with AuthzContext — passing it to a data service is a COMPILE error, not a runtime
+ * denial. The operator provisions/bills/reads aggregate stats and never reaches a row.
+ */
+export interface PlatformAdminContext {
+  readonly kind: "platform";
+  userId: string;
 }
 
 /** TENANT and LANDLORD are single-Contact self-service personas. */
@@ -62,7 +86,52 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
   const membership = pickMembership(memberships);
   if (!membership) throw new AuthzError("No access to this workspace");
 
-  return contextFromMembership(user, membership);
+  // F-Admin (D1/D3): grants and delegate client-scope are now AUDITED join rows, not columns on
+  // the membership, so they must be loaded async here and threaded into the (sync) context builder.
+  const [grantedBundles, delegateClientIds, workspace] = await Promise.all([
+    liveGrantBundles(membership.id),
+    liveDelegateClientIds(membership.id, membership.workspaceId),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { suspendedAt: true, archivedAt: true } }),
+  ]);
+  // F-Admin §3.2: a platform suspend/archive pauses the customer workspace — its members cannot
+  // build a context until it is restored. AuthzError (not a generic throw) so resolveCtxFor treats
+  // it like any other inaccessible workspace: fall through to another active one if the user has
+  // it, else deny. Enforced here, the single context door, so Suspend/Archive aren't cosmetic.
+  // This is the INTERACTIVE plane only: the daily sweep (runner.ts sweepableWorkspaces) deliberately
+  // keeps processing a SUSPENDED workspace so monitoring doesn't lapse during a pause — only ARCHIVE
+  // (terminal) is excluded from both planes.
+  if (workspace?.archivedAt) throw new AuthzError("Workspace archived", 403);
+  if (workspace?.suspendedAt) throw new AuthzError("Workspace suspended", 403);
+  return contextFromMembership(user, membership, grantedBundles, delegateClientIds);
+}
+
+/**
+ * The live (non-revoked) capability bundles granted to a membership (F-Admin D1) — filtered to
+ * GRANT_HONORED_BUNDLES. This is the read-layer backstop for the capability∪scope seam: a grant
+ * unions caps over the base role but carries no scope, and scope(ctx) narrows by ROLE only, so a
+ * data-bundle grant would confer caps with a workspace-wide read. Honoring only the people-power
+ * overlay makes any data-bundle grant row (forged, legacy, or a future code path) INERT here,
+ * independent of the issuance guard in members.ts. See capabilities.ts GRANT_HONORED_BUNDLES.
+ */
+async function liveGrantBundles(membershipId: string): Promise<Bundle[]> {
+  const grants = await prisma.membershipGrant.findMany({
+    where: { membershipId, revokedAt: null, bundle: { in: GRANT_HONORED_BUNDLES } },
+    select: { bundle: true },
+  });
+  return grants.map((g) => g.bundle);
+}
+
+/**
+ * The live (non-revoked) client ids a delegate membership is assigned (F-Admin D3). Filtered by
+ * the membership's own workspace as a fail-closed guard: a join row that somehow referenced
+ * another workspace's membership contributes nothing rather than widening scope.
+ */
+async function liveDelegateClientIds(membershipId: string, workspaceId: string): Promise<string[]> {
+  const rows = await prisma.clientAssignment.findMany({
+    where: { membershipId, workspaceId, revokedAt: null },
+    select: { clientPrincipalId: true },
+  });
+  return rows.map((r) => r.clientPrincipalId);
 }
 
 /**
@@ -75,15 +144,16 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
 const ROLE_RANK: Record<Role, number> = {
   WORKSPACE_ADMIN: 0,
   FIDUCIARY: 1,
-  MANAGER: 2,
-  MANAGING_AGENT: 3,
-  CLIENT_VIEWER: 4,
-  AGENT: 5,
-  LICENSED_PARTNER: 6,
-  VENDOR: 7,
-  AUDITOR: 8,
-  LANDLORD: 9,
-  TENANT: 10,
+  ORG_ADMIN: 2,
+  MANAGER: 3,
+  MANAGING_AGENT: 4,
+  CLIENT_VIEWER: 5,
+  AGENT: 6,
+  LICENSED_PARTNER: 7,
+  VENDOR: 8,
+  AUDITOR: 9,
+  LANDLORD: 10,
+  TENANT: 11,
 };
 
 export function rolePrecedence(role: Role): number {
@@ -103,16 +173,23 @@ export function pickMembership<M extends { role: Role; createdAt: Date }>(member
   )[0];
 }
 
-export function contextFromMembership(user: User, membership: Membership): AuthzContext {
+export function contextFromMembership(
+  user: User,
+  membership: Membership,
+  grantedBundles: Bundle[] = [],
+  delegateClientIds: string[] = [],
+): AuthzContext {
   if (membership.role === "CLIENT_VIEWER" && !membership.clientPrincipalId) {
     throw new AuthzError("CLIENT_VIEWER membership missing client scope");
   }
   if (isPersonaRole(membership.role) && !membership.subjectContactId) {
     throw new AuthzError(`${membership.role} membership missing contact scope`);
   }
-  if (isDelegateRole(membership.role) && membership.assignedClientIds.length === 0) {
+  if (isDelegateRole(membership.role) && delegateClientIds.length === 0) {
     // An unscoped delegate would read+write the whole workspace — fail closed,
-    // exactly as a persona without a subjectContactId does above.
+    // exactly as a persona without a subjectContactId does above. The scope now comes
+    // from live ClientAssignment rows (D3), so a delegate whose assignments were all
+    // revoked can no longer build a readable context at all.
     throw new AuthzError("MANAGING_AGENT membership missing client scope");
   }
   return {
@@ -121,16 +198,33 @@ export function contextFromMembership(user: User, membership: Membership): Authz
     role: membership.role,
     clientPrincipalId: membership.role === "CLIENT_VIEWER" ? membership.clientPrincipalId : null,
     subjectContactId: isPersonaRole(membership.role) ? membership.subjectContactId : null,
-    delegateClientIds: isDelegateRole(membership.role) ? membership.assignedClientIds : [],
-    isStaff: user.isStaff,
+    delegateClientIds: isDelegateRole(membership.role) ? delegateClientIds : [],
+    grantedBundles,
+    isStaff: user.isPlatformAdmin,
   };
 }
 
-/** Assert the context holds a capability. */
-export function require_(ctx: AuthzContext, capability: Capability): void {
-  if (!roleHas(ctx.role, capability)) {
-    throw new AuthzError(`Role ${ctx.role} lacks ${capability}`);
+/**
+ * Does the context hold a capability? Effective = roleMap(role) ∪ expand(grantedBundles)
+ * (F-Admin §2.3). NEVER consults ROLE_RANK, isStaff, or workspace seniority — the single
+ * property the §8 rank-never-grants test protects. Delete a wire here and that test goes red.
+ */
+export function hasCapability(ctx: AuthzContext, capability: Capability): boolean {
+  if (roleHas(ctx.role, capability)) return true;
+  return ctx.grantedBundles.some((bundle) => bundleHas(bundle, capability));
+}
+
+/** Assert the context holds a capability (the granted-bundle union; §2.3). */
+export function assertCapability(ctx: AuthzContext, capability: Capability): void {
+  if (!hasCapability(ctx, capability)) {
+    const via = ctx.grantedBundles.length ? ` (+bundles ${ctx.grantedBundles.join(",")})` : "";
+    throw new AuthzError(`Role ${ctx.role}${via} lacks ${capability}`);
   }
+}
+
+/** Established name used across the service layer; delegates to assertCapability. */
+export function require_(ctx: AuthzContext, capability: Capability): void {
+  assertCapability(ctx, capability);
 }
 
 /**

@@ -12,6 +12,7 @@ describe("role precedence", () => {
     const operators = [
       "WORKSPACE_ADMIN",
       "FIDUCIARY",
+      "ORG_ADMIN",
       "MANAGER",
       "CLIENT_VIEWER",
       "AGENT",

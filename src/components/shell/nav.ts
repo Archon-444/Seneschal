@@ -69,6 +69,9 @@ export const NAV: NavItem[] = [
   { href: "/evidence", label: "Evidence", icon: "evidence", cap: "evidence.read" },
   { href: "/risk", label: "Risk flags", icon: "risk", cap: "riskflags.read" },
   { href: "/reports", label: "Reports", icon: "reports", cap: "reports.read" },
+  // F-Admin: in-org people plane — visible to PRINCIPAL/ORG_ADMIN (members/clients.assign), not data roles.
+  { href: "/members", label: "Members", icon: "contacts", cap: "members.read" },
+  { href: "/members/assignments", label: "Assignments", icon: "clients", cap: "clients.assign" },
 ];
 
 /** Operator nav filtered to the role's capabilities — a MANAGING_AGENT delegate sees

@@ -76,12 +76,12 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     update: {},
     create: { email: operatorEmail, name: "", locale: "en" },
   });
-  const staff = await prisma.user.upsert({
+  const platformOperator = await prisma.user.upsert({
     where: { email: "staff@seneschal.example" },
     update: {},
-    create: { email: "staff@seneschal.example", name: "Seneschal Staff", isStaff: true },
+    create: { email: "staff@seneschal.example", name: "Seneschal Operator", isPlatformAdmin: true },
   });
-  void staff;
+  void platformOperator;
 
   await prisma.membership.upsert({
     where: {
@@ -555,18 +555,31 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     update: {},
     create: { email: "agent@example.com", name: "Mariam Al Suwaidi", locale: "en" },
   });
-  await prisma.membership.upsert({
+  const agentMembership = await prisma.membership.upsert({
     where: {
       workspaceId_userId_role: { workspaceId: workspace.id, userId: agentUser.id, role: "MANAGING_AGENT" },
     },
-    update: { assignedClientIds: [alNoor.id], revokedAt: null },
+    update: { revokedAt: null },
     create: {
       workspaceId: workspace.id,
       userId: agentUser.id,
       role: "MANAGING_AGENT",
-      assignedClientIds: [alNoor.id],
     },
   });
+  // F-Admin (D3): the delegate's scope is now a live ClientAssignment row (assigned to ONLY Al Noor).
+  const existingAssignment = await prisma.clientAssignment.findFirst({
+    where: { membershipId: agentMembership.id, clientPrincipalId: alNoor.id, revokedAt: null },
+  });
+  if (!existingAssignment) {
+    await prisma.clientAssignment.create({
+      data: {
+        workspaceId: workspace.id,
+        membershipId: agentMembership.id,
+        clientPrincipalId: alNoor.id,
+        assignedById: platformOperator.id,
+      },
+    });
+  }
 
   // ── Listings (1B): a draft listing on the vacant Palm Vista villa. Deliberately
   // missing the RERA permit, so it sits below the publish gate — a live demo of the

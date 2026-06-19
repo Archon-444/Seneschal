@@ -50,7 +50,7 @@ export function Sidebar({
   return (
     <nav className="flex-1 space-y-0.5 px-3 py-4">
       {nav.map((item) => link(item.href, item.label, item.icon))}
-      {isStaff && <div className="mt-4">{link("/admin", "Staff console", "staff", true)}</div>}
+      {isStaff && <div className="mt-4">{link("/admin", "Platform console", "staff", true)}</div>}
     </nav>
   );
 }

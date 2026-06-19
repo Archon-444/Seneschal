@@ -1,11 +1,22 @@
-import type { Role } from "@prisma/client";
+import type { Bundle, Role } from "@prisma/client";
 
 // Role × capability map (T1.3) — the spec §3 access matrix as a code table.
 // Frontend filtering is never enforcement; this table is.
+//
+// F-Admin (D1): data capabilities answer "may this verb exist for this user at all"; scope
+// answers "which rows". Capabilities are resolved as roleMap(role) ∪ expand(grants) — never
+// from ROLE_RANK or isStaff (see authz.ts assertCapability). ORG_ADMIN is the decorrelated
+// shape: people/config power, zero data.
 
 export const CAPABILITIES = [
+  // people / configuration (F-Admin §2.1) — people-power, no data
   "workspace.manage",
+  "workspace.configure",
+  "members.read",
+  "members.invite",
   "members.manage",
+  "clients.assign",
+  // data
   "clients.read",
   "clients.write",
   "contacts.read",
@@ -61,6 +72,19 @@ export type Capability = (typeof CAPABILITIES)[number];
 
 const ALL = [...CAPABILITIES] as Capability[];
 
+// People/config power — the decorrelated set. A DATA role (e.g. FIDUCIARY) must NOT gain
+// these just because it holds "all data": granting staff and reconfiguring the workspace is
+// a different axis (F-Admin §2). Only WORKSPACE_ADMIN (PRINCIPAL) and ORG_ADMIN hold them.
+// Exported so the grant-resolution premise test can assert the honored bundle set is data-free.
+export const PEOPLE_ADMIN: Capability[] = [
+  "workspace.manage",
+  "workspace.configure",
+  "members.read",
+  "members.invite",
+  "members.manage",
+  "clients.assign",
+];
+
 const READ_PORTFOLIO: Capability[] = [
   "clients.read",
   "contacts.read",
@@ -76,9 +100,45 @@ const READ_PORTFOLIO: Capability[] = [
   "reports.read",
 ];
 
+// ORG_ADMIN (F-Admin §2.2): members + assignment + workspace config, and NOTHING else. No
+// workspace.manage (the heavier WORKSPACE_ADMIN cap), no data. This is the office manager.
+const ORG_ADMIN_CAPS: Capability[] = [
+  "workspace.configure",
+  "members.read",
+  "members.invite",
+  "members.manage",
+  "clients.assign",
+];
+
+// Execution delegate (F0d): read + broad operational WRITE, every path confined to its live
+// ClientAssignment rows (AuthzContext.delegateClientIds) — see services/delegateScope.ts.
+// NOT the fiduciary-control caps (proofs.decide), the roster (clients.*), members/workspace
+// admin, renewals.decide, landlords.verify, or cross-client reports.* — simply not granted.
+const DELEGATE_CAPS: Capability[] = [
+  "contacts.read",
+  "properties.read",
+  "properties.write",
+  "tenancies.read",
+  "tenancies.write",
+  "tenancies.upload",
+  "payments.read",
+  "payments.write",
+  "deadlines.read",
+  "deadlines.write",
+  "renewals.read",
+  "documents.read",
+  "documents.write",
+  "proofs.read",
+  "proofs.write",
+];
+
 export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
+  // PRINCIPAL: see-all-do-all within the workspace (data + people/config).
   WORKSPACE_ADMIN: ALL,
-  FIDUCIARY: ALL.filter((c) => c !== "workspace.manage" && c !== "members.manage"),
+  // Data-power principal: every DATA cap, but NOT people/config (decorrelated — F-Admin §2).
+  FIDUCIARY: ALL.filter((c) => !PEOPLE_ADMIN.includes(c)),
+  // Decorrelated people-admin: people/config only, zero data (F-Admin §2.2).
+  ORG_ADMIN: ORG_ADMIN_CAPS,
   MANAGER: [
     ...READ_PORTFOLIO,
     "clients.write",
@@ -126,29 +186,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "proofs.read",
     "documents.read",
   ],
-  // Execution delegate (F0d): read + broad WRITE, but every path is confined to
-  // Membership.assignedClientIds (AuthzContext.delegateClientIds) — see
-  // services/delegateScope.ts. It does NOT hold the fiduciary-control caps
-  // (proofs.decide), the roster (clients.*), members/workspace admin,
-  // renewals.decide, landlords.verify, or cross-client reports.* — those are simply
-  // not granted here. listings.*/offers.*/contracts.* arrive with their surfaces.
-  MANAGING_AGENT: [
-    "contacts.read",
-    "properties.read",
-    "properties.write",
-    "tenancies.read",
-    "tenancies.write",
-    "tenancies.upload",
-    "payments.read",
-    "payments.write",
-    "deadlines.read",
-    "deadlines.write",
-    "renewals.read",
-    "documents.read",
-    "documents.write",
-    "proofs.read",
-    "proofs.write",
-  ],
+  MANAGING_AGENT: DELEGATE_CAPS,
   LICENSED_PARTNER: [
     "properties.read",
     "tenancies.read",
@@ -203,3 +241,41 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
 export function roleHas(role: Role, capability: Capability): boolean {
   return ROLE_CAPABILITIES[role].includes(capability);
 }
+
+// F-Admin (D1): the capability expansion of each bundle. NOTE this is the *definition* of
+// what a bundle means, NOT the set of bundles that may be granted — see GRANT_HONORED_BUNDLES.
+export const BUNDLE_CAPABILITIES: Record<Bundle, Capability[]> = {
+  PRINCIPAL: ALL,
+  ORG_ADMIN: ORG_ADMIN_CAPS,
+  DELEGATE: DELEGATE_CAPS,
+  CLIENT_VIEWER: READ_PORTFOLIO,
+};
+
+export function bundleHas(bundle: Bundle, capability: Capability): boolean {
+  return BUNDLE_CAPABILITIES[bundle].includes(capability);
+}
+
+// The ONLY bundles honored as additive grants. A grant unions caps OVER the base role, but it
+// CANNOT carry its own scope — scope(ctx) narrows by ROLE (delegate/persona/client-viewer), and
+// knows nothing about a grant-derived data cap. So honoring a DATA bundle here would confer the
+// capability while the read stayed workspace-wide: a leak. ORG_ADMIN is the only additive-safe
+// overlay (people/config power, reads no row).
+//
+// PRINCIPAL/DELEGATE/CLIENT_VIEWER stay in `enum Bundle` as RESERVED (§2.1) but are NOT honored:
+// those data shapes come from the BASE ROLE — PRINCIPAL via platform seat-zero (WORKSPACE_ADMIN),
+// DELEGATE via a MANAGING_AGENT membership + the assignment grid. Do NOT add a data bundle here
+// without first teaching scope(ctx) to narrow grant-derived data caps; the honored-set-is-data-free
+// test (tests/integration/capabilityGrants.test.ts) fails the moment this set gains a data bundle.
+export const GRANT_HONORED_BUNDLES: Bundle[] = ["ORG_ADMIN"];
+
+// Platform-plane capabilities (F-Admin §2.1) — reserved now so later splits are config, not
+// migration. NOT part of the in-org Capability union: the operator plane runs under
+// PlatformAdminContext and is gated by isPlatformAdmin, never by require_(ctx, …).
+export const PLATFORM_CAPABILITIES = [
+  "platform.workspaces.manage",
+  "platform.entitlements.manage",
+  "platform.invites.issue",
+  "platform.stats.read",
+] as const;
+
+export type PlatformCapability = (typeof PLATFORM_CAPABILITIES)[number];

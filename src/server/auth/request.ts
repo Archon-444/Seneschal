@@ -2,7 +2,14 @@ import { cookies } from "next/headers";
 import type { Role } from "@prisma/client";
 import { prisma } from "../db";
 import { sessionUser } from "./index";
-import { authz, AuthzError, isPersonaRole, pickMembership, type AuthzContext } from "../authz";
+import {
+  authz,
+  AuthzError,
+  isPersonaRole,
+  pickMembership,
+  type AuthzContext,
+  type PlatformAdminContext,
+} from "../authz";
 
 export const SESSION_COOKIE = "seneschal_session";
 export const WORKSPACE_COOKIE = "seneschal_workspace";
@@ -21,25 +28,37 @@ export async function currentUser() {
 export async function requireCtx(): Promise<AuthzContext> {
   const user = await currentUser();
   if (!user) throw new AuthzError("Not signed in", 401);
-
   const jar = await cookies();
-  const preferred = jar.get(WORKSPACE_COOKIE)?.value;
+  return resolveCtxFor(user.id, jar.get(WORKSPACE_COOKIE)?.value ?? null);
+}
+
+/**
+ * Resolve a user's context for a preferred workspace, falling back to their highest-precedence
+ * membership. Extracted from `requireCtx` (which only adds the cookie read) so the fail-closed
+ * decision is testable without a request context.
+ *
+ * Fail-closed boundary: fall through to the fallback ONLY when the preferred workspace is genuinely
+ * inaccessible (an `AuthzError` — e.g. the cookie points at a workspace the user lost). An
+ * INFRASTRUCTURE error (a failing grant/assignment load inside `authz`) must NOT be swallowed into a
+ * silent switch to a different workspace — it propagates as a denial, never a scope-switch.
+ */
+export async function resolveCtxFor(userId: string, preferred: string | null): Promise<AuthzContext> {
   if (preferred) {
     try {
-      return await authz(user.id, preferred);
-    } catch {
-      // fall through to first membership
+      return await authz(userId, preferred);
+    } catch (e) {
+      if (!(e instanceof AuthzError)) throw e;
     }
   }
-  // No preferred workspace: choose the highest-precedence membership across all
-  // workspaces (operator roles over personas), not merely the oldest row, so a
-  // user who is both an operator and a tenant lands in a deterministic scope.
+  // No (accessible) preferred workspace: choose the highest-precedence membership across all
+  // workspaces (operator roles over personas), not merely the oldest row, so a user who is both an
+  // operator and a tenant lands in a deterministic scope.
   const memberships = await prisma.membership.findMany({
-    where: { userId: user.id, revokedAt: null },
+    where: { userId, revokedAt: null },
   });
   const membership = pickMembership(memberships);
   if (!membership) throw new AuthzError("No workspace membership", 403);
-  return authz(user.id, membership.workspaceId);
+  return authz(userId, membership.workspaceId);
 }
 
 /**
@@ -48,12 +67,20 @@ export async function requireCtx(): Promise<AuthzContext> {
  * login action, and the root page so targets are deterministic.
  */
 export function homePathFor(role: Role): string {
-  return isPersonaRole(role) ? "/portal" : "/dashboard";
+  if (isPersonaRole(role)) return "/portal";
+  // A decorrelated org-admin holds no data caps, so the data dashboard isn't its home.
+  if (role === "ORG_ADMIN") return "/members";
+  return "/dashboard";
 }
 
-export async function requireStaff() {
+/**
+ * The platform-operator door. Returns a PlatformAdminContext that carries no scope and
+ * cannot be passed to a data service (compile error — F-Admin §5). A platform admin holds
+ * no Membership, so they can never obtain an AuthzContext for any workspace.
+ */
+export async function requirePlatformAdmin(): Promise<PlatformAdminContext> {
   const user = await currentUser();
   if (!user) throw new AuthzError("Not signed in", 401);
-  if (!user.isStaff) throw new AuthzError("Staff only", 403);
-  return user;
+  if (!user.isPlatformAdmin) throw new AuthzError("Platform admin only", 403);
+  return { kind: "platform", userId: user.id };
 }

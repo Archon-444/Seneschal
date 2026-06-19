@@ -87,7 +87,7 @@ export async function verifyOtp(
     }),
   ]);
   await recordAudit({
-    actorType: user.isStaff ? "STAFF" : "USER",
+    actorType: user.isPlatformAdmin ? "STAFF" : "USER",
     actorId: user.id,
     verb: "session.create",
     objectType: "Session",

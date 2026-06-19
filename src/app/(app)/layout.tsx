@@ -31,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <AppShell
       nav={navForRole(role)}
-      isStaff={user.isStaff}
+      isStaff={user.isPlatformAdmin}
       workspaceName={workspaceName}
       user={{ name: user.name, email: user.email, role }}
       initialCollapsed={initialCollapsed}
