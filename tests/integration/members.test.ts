@@ -30,6 +30,22 @@ describe("people-power, decorrelated", () => {
     await expect(listMembers(W.ctx)).rejects.toThrow(/lacks/);
   });
 
+  it("a data-only member (MANAGER, AGENT) wields no people-power — invite and grant both fail closed", async () => {
+    // The first test pins this for FIDUCIARY; generalise to the delegate/agent data roles and to
+    // grantBundle (members.manage), so holding data caps can never confer a people-plane verb.
+    const target = await addMember(W.workspaceId, "AGENT");
+    const targetM = await prisma.membership.findFirstOrThrow({
+      where: { workspaceId: W.workspaceId, userId: target.userId },
+    });
+    for (const role of ["MANAGER", "AGENT"] as const) {
+      const member = await addMember(W.workspaceId, role);
+      await expect(inviteOrgAdmin(member.ctx, `x-${role.toLowerCase()}@x.example`)).rejects.toThrow(/lacks/);
+      await expect(
+        grantBundle(member.ctx, { membershipId: targetM.id, bundle: "ORG_ADMIN" }),
+      ).rejects.toThrow(/lacks/);
+    }
+  });
+
   it("invite → accept seats an ORG_ADMIN whose context resolves with people-power, no data", async () => {
     const { token } = await inviteOrgAdmin(admin.ctx, "office@x.example");
     const { userId } = await acceptInvite(token, { name: "Office Manager" });

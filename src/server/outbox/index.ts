@@ -44,6 +44,22 @@ export async function enqueue(
 const MAX_ATTEMPTS = 5;
 const LEASE_MS = 60_000; // a worker has one minute to finish a row or the lease expires
 
+// Keys removed from a retained Outbox.payload once the row reaches a terminal state
+// (dispatched, or failed after MAX_ATTEMPTS). `body` carries a sensitive notification body —
+// an OTP code that notify() deliberately keeps off the message row — so it must not persist at
+// rest after the send is done or permanently dead. Stripped ONLY at terminal: a retry (status
+// back to pending) still needs the body. A no-op for payloads that have no such key.
+const TERMINAL_PAYLOAD_STRIP_KEYS = ["body"] as const;
+
+export function scrubTerminalPayload(payload: unknown): Prisma.InputJsonValue {
+  if (payload == null || typeof payload !== "object" || Array.isArray(payload)) {
+    return (payload ?? null) as Prisma.InputJsonValue;
+  }
+  const clone: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
+  for (const k of TERMINAL_PAYLOAD_STRIP_KEYS) delete clone[k];
+  return clone as Prisma.InputJsonValue;
+}
+
 export interface OutboxEntry {
   id: string;
   topic: string;
@@ -113,7 +129,8 @@ export async function dispatchPending(
       await handler(entry.payload as Record<string, unknown>, { idempotencyKey: entry.idempotencyKey });
       await prisma.outbox.update({
         where: { id: entry.id },
-        data: { status: "dispatched", attempts: { increment: 1 }, lockedUntil: null },
+        // Terminal success: scrub any transient secret from the retained payload.
+        data: { status: "dispatched", attempts: { increment: 1 }, lockedUntil: null, payload: scrubTerminalPayload(entry.payload) },
       });
     } catch (err) {
       const attempts = entry.attempts + 1;
@@ -126,6 +143,8 @@ export async function dispatchPending(
           lockedUntil: null,
           // exponential backoff: 1m, 2m, 4m, 8m
           availableAt: new Date(Date.now() + 60_000 * 2 ** (attempts - 1)),
+          // Strip the transient secret only when this failure is terminal; a pending retry needs the body.
+          ...(failed ? { payload: scrubTerminalPayload(entry.payload) } : {}),
         },
       });
       console.error(`[outbox] ${entry.topic} attempt ${attempts} failed:`, err);

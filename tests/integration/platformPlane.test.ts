@@ -81,6 +81,18 @@ describe("platform plane is data-blind by construction", () => {
       data: { workspaceId: ws.workspaceId, userId: member.id, role: "MANAGER" },
     });
 
+    // Named CUSTOMER rows that platformStats aggregates over (it counts properties; tenants are
+    // contacts on tenancies). Their names are exactly what would leak if someone "enriched" the
+    // console with row data — so assert the behavioral leak-check covers them, not just the email.
+    const buildingName = "Sentinel-Heights-Tower";
+    const tenantName = "Sentinel-Tenant-Name";
+    await prisma.property.create({
+      data: { workspaceId: ws.workspaceId, community: "Sentinel Marina", building: buildingName, unitNo: "9999" },
+    });
+    await prisma.contact.create({
+      data: { workspaceId: ws.workspaceId, kind: "TENANT", name: tenantName },
+    });
+
     const operatorCtx: PlatformAdminContext = { kind: "platform", userId: "op" };
     const stats = await platformStats(operatorCtx);
     const acme = stats.find((s) => s.name === "Acme Holdings");
@@ -104,7 +116,10 @@ describe("platform plane is data-blind by construction", () => {
       "type",
       "workspaceId",
     ]);
-    // The decisive behavioral check: the member's email is nowhere in the payload.
+    // The decisive behavioral check: the member's email is nowhere in the payload…
     expect(JSON.stringify(stats)).not.toContain(secret);
+    // …and neither is any named customer row (building, tenant) it merely counts.
+    expect(JSON.stringify(stats)).not.toContain(buildingName);
+    expect(JSON.stringify(stats)).not.toContain(tenantName);
   });
 });

@@ -3,7 +3,7 @@ import { requirePlatformAdmin } from "@/server/auth/request";
 import { platformStats } from "@/server/admin/platformStats";
 import { Badge, Card, KpiCard, LinkButton, PageHeader, Table, Td } from "@/components/ui";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { archiveAction, suspendAction, unsuspendAction } from "./actions";
+import { archiveAction, suspendAction, unarchiveAction, unsuspendAction } from "./actions";
 
 // Platform console (F-Admin §3, §7). Unreachable without isPlatformAdmin. Shows
 // lifecycle/billing/aggregate HEALTH only — counts, statuses, timestamps. No customer
@@ -104,22 +104,32 @@ export default async function AdminPage() {
                 {s.lastActivityAt ? formatDubaiDate(s.lastActivityAt) : "—"}
               </Td>
               <Td>
-                {!s.archived && (
-                  <div className="flex gap-1.5 text-xs">
-                    <form action={s.suspended ? unsuspendAction : suspendAction}>
+                <div className="flex gap-1.5 text-xs">
+                  {s.archived ? (
+                    // Archive is recoverable — an archived workspace offers only Unarchive.
+                    <form action={unarchiveAction}>
                       <input type="hidden" name="workspaceId" value={s.workspaceId} />
-                      <button className="rounded-md border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
-                        {s.suspended ? "Unsuspend" : "Suspend"}
+                      <button className="rounded-md border border-line px-2 py-1 text-verde-700 hover:bg-verde-100">
+                        Unarchive
                       </button>
                     </form>
-                    <form action={archiveAction}>
-                      <input type="hidden" name="workspaceId" value={s.workspaceId} />
-                      <button className="rounded-md border border-line px-2 py-1 text-claret-700 hover:bg-claret-100">
-                        Archive
-                      </button>
-                    </form>
-                  </div>
-                )}
+                  ) : (
+                    <>
+                      <form action={s.suspended ? unsuspendAction : suspendAction}>
+                        <input type="hidden" name="workspaceId" value={s.workspaceId} />
+                        <button className="rounded-md border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
+                          {s.suspended ? "Unsuspend" : "Suspend"}
+                        </button>
+                      </form>
+                      <form action={archiveAction}>
+                        <input type="hidden" name="workspaceId" value={s.workspaceId} />
+                        <button className="rounded-md border border-line px-2 py-1 text-claret-700 hover:bg-claret-100">
+                          Archive
+                        </button>
+                      </form>
+                    </>
+                  )}
+                </div>
               </Td>
             </tr>
           ))}

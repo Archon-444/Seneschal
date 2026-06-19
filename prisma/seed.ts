@@ -6,14 +6,24 @@ import { prisma } from "../src/server/db";
 
 runSeed()
   .then((result) => {
-    if (result.proofLinkUrl) {
-      console.log(`\nSeeded live proof-upload link: ${result.proofLinkUrl}\n`);
+    console.log("\nSeed complete: demo workspaces ready.\n");
+
+    console.log("Workspaces (one per type):");
+    for (const w of result.workspaces) console.log(`  • ${w.name} [${w.type}]`);
+
+    console.log("\nMember logins — recurring relationships (OTP prints to the worker/console log in dev):");
+    for (const m of result.memberLogins) {
+      console.log(`  • ${m.email.padEnd(32)} ${String(m.role).padEnd(16)} → ${m.home}`);
     }
-    console.log("Seed complete: demo workspace ready.");
-    console.log("Sign in as operator@example.com (OTP appears in the worker/console log in dev).");
-    console.log("Tenant portal:   r.fernandes@example.com → /portal");
-    console.log("Landlord portal: owner@example.com → /portal");
-    console.log("Managing agent:  agent@example.com → /dashboard (scoped to Al Noor only)");
+
+    const links = [...result.linkUrls];
+    if (result.proofLinkUrl) links.push({ label: "Agent proof upload (Marina cheque 4)", url: result.proofLinkUrl });
+    if (links.length) {
+      console.log("\nLink-party URLs — episodic counterparties, no account (open directly):");
+      for (const l of links) console.log(`  • ${l.label}\n      ${l.url}`);
+    }
+
+    console.log("\nThe tenant is a LINK-PARTY, not a login: use the tenant offer/ID links above.");
   })
   .catch((e) => {
     console.error(e);

@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { enqueue } from "../outbox";
 import { whatsappConfigured } from "./whatsapp";
 import { hasActiveMessagingConsent } from "../services/consent";
+import { isSensitiveTemplate, redactedBodyFor } from "./categories";
 
 // Notification gateway (T9.1 — release blocking). `notify()` is the single writer
 // of NotificationMessage. EMAIL/WHATSAPP/SMS rows enqueue delivery via the outbox;
@@ -29,6 +30,12 @@ export interface NotifyInput {
 
 export async function notify(input: NotifyInput, db: Prisma.TransactionClient = prisma) {
   const isInApp = input.channel === "INAPP";
+  const sensitive = isSensitiveTemplate(input.templateCode);
+  // A sensitive body is a secret (OTP) — it must never become an in-app feed item, the very
+  // thing INAPP is. Fail closed: a sensitive template has no business on the INAPP channel.
+  if (sensitive && isInApp) {
+    throw new Error(`Sensitive template ${input.templateCode} cannot be delivered in-app`);
+  }
   const message = await db.notificationMessage.create({
     data: {
       workspaceId: input.workspaceId,
@@ -38,7 +45,9 @@ export async function notify(input: NotifyInput, db: Prisma.TransactionClient = 
       toContactId: input.toContactId ?? null,
       templateCode: input.templateCode,
       subject: input.subject ?? null,
-      bodyRef: input.body,
+      // Sensitive: store only the non-secret placeholder at rest; the live body rides the
+      // outbox payload (below) to the adapter and is never persisted on the message row.
+      bodyRef: sensitive ? redactedBodyFor(input.templateCode) : input.body,
       // A feed item exists == delivered; an external send starts QUEUED.
       status: isInApp ? "DELIVERED" : "QUEUED",
       relatedType: input.relatedType ?? null,
@@ -51,7 +60,15 @@ export async function notify(input: NotifyInput, db: Prisma.TransactionClient = 
   if (!isInApp) {
     await enqueue(
       "notification.send",
-      { messageId: message.id, toAddress: input.toAddress ?? null, preferChannel: input.preferChannel ?? null },
+      {
+        messageId: message.id,
+        toAddress: input.toAddress ?? null,
+        preferChannel: input.preferChannel ?? null,
+        // The live body travels ONLY on the outbox payload for sensitive sends (deliverNotification
+        // reads it instead of the redacted bodyRef). dispatchPending strips it on the terminal flip,
+        // so the secret persists nowhere once the send is done or permanently dead.
+        ...(sensitive ? { body: input.body } : {}),
+      },
       db,
       // H1: the NotificationMessage row id is the natural send-idempotency key.
       // It also pins the (topic, idempotencyKey) unique constraint to "one
@@ -80,6 +97,22 @@ export async function deliverNotification(
   const messageId = payload.messageId as string;
   const message = await prisma.notificationMessage.findUnique({ where: { id: messageId } });
   if (!message || message.status !== "QUEUED") return; // idempotent
+
+  // Sensitive templates carry their live body on the outbox payload, never on the message row
+  // (bodyRef holds only a redacted placeholder). Resolve it here and fail closed if it is absent —
+  // we must never deliver the placeholder as though it were the secret. Mark the message FAILED
+  // (a dead-letter) and log the template code + message id, never the code, so an auth-delivery
+  // gap stays debuggable. After a successful send dispatchPending strips this body, but the
+  // message is then SENT so the QUEUED guard above prevents any re-entry here.
+  const sensitive = isSensitiveTemplate(message.templateCode);
+  const body = sensitive ? (payload.body as string | undefined) : (message.bodyRef ?? "");
+  if (sensitive && (body === undefined || body === null)) {
+    console.error(
+      `[notify] sensitive ${message.templateCode} message ${messageId} has no deliverable body; marking FAILED`,
+    );
+    await prisma.notificationMessage.update({ where: { id: messageId }, data: { status: "FAILED" } });
+    return;
+  }
 
   // Resolve both addresses once — we may need email and/or phone.
   const user = message.toUserId ? await prisma.user.findUnique({ where: { id: message.toUserId } }) : null;
@@ -122,7 +155,7 @@ export async function deliverNotification(
     const { providerRef } = await adapter.send({
       to,
       subject: message.subject,
-      body: message.bodyRef ?? "",
+      body: body ?? "",
       idempotencyKey: ctx?.idempotencyKey ?? null,
     });
     await prisma.notificationMessage.update({

@@ -7,6 +7,7 @@ import {
   archiveWorkspace,
   provisionWorkspace,
   suspendWorkspace,
+  unarchiveWorkspace,
   unsuspendWorkspace,
 } from "@/server/admin/provisioning";
 
@@ -48,5 +49,11 @@ export async function unsuspendAction(formData: FormData) {
 export async function archiveAction(formData: FormData) {
   const ctx = await requirePlatformAdmin();
   await archiveWorkspace(ctx, String(formData.get("workspaceId")));
+  revalidatePath("/admin");
+}
+
+export async function unarchiveAction(formData: FormData) {
+  const ctx = await requirePlatformAdmin();
+  await unarchiveWorkspace(ctx, String(formData.get("workspaceId")));
   revalidatePath("/admin");
 }
