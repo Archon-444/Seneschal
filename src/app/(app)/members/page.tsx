@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { listMembers } from "@/server/services/members";
-import { Badge, Card, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Card, LinkButton, PageHeader, Table, Td } from "@/components/ui";
 import { formatDubaiDate } from "@/server/calculators/dates";
 import { InviteForm } from "./InviteForm";
 import {
@@ -24,8 +24,15 @@ export default async function MembersPage() {
   return (
     <>
       <PageHeader
-        title="Members"
+        title="Members & access"
         subtitle="Who can act in this workspace. Org-admins onboard people and wire delegate assignments — they hold no data access."
+        actions={
+          // Assignment is a relationship edit, not a top-level destination — reached from here.
+          // Anyone with members.read also holds clients.assign (both are PEOPLE_ADMIN).
+          <LinkButton href="/members/assignments" variant="secondary">
+            Assignments
+          </LinkButton>
+        }
       />
 
       <Card className="mb-6">

@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Sidebar } from "./Sidebar";
-import type { NavItem } from "./nav";
+import { NAV_ICONS } from "./navIcons";
+import { type NavItem } from "./nav";
 import { UserMenu } from "./UserMenu";
 import { NotificationBell } from "./NotificationBell";
+import { Dropdown } from "../menu";
 import { CloseIcon, MenuIcon, PanelLeftIcon } from "../icons";
 import { Logo } from "../Logo";
 
@@ -16,6 +18,7 @@ export function AppShell({
   isStaff,
   workspaceName,
   user,
+  creates = [],
   initialCollapsed,
   initialUnread,
   signOut,
@@ -25,6 +28,8 @@ export function AppShell({
   isStaff: boolean;
   workspaceName: string;
   user: { name: string; email: string; role: string };
+  /** "+ New" header actions, cap-filtered for the role. Empty for personas. */
+  creates?: NavItem[];
   initialCollapsed: boolean;
   initialUnread: number;
   signOut: () => Promise<void>;
@@ -104,6 +109,37 @@ export function AppShell({
             <PanelLeftIcon />
           </button>
           <div className="flex-1" />
+          {creates.length > 0 && (
+            <Dropdown
+              label="Create new"
+              align="right"
+              buttonClassName="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ivory-100 hover:bg-navy-800"
+              panelClassName="w-56 overflow-hidden rounded-lg border border-line bg-white py-1 shadow-lg"
+              button={
+                <>
+                  <span className="text-base leading-none" aria-hidden="true">+</span>
+                  <span className="hidden sm:inline">New</span>
+                </>
+              }
+            >
+              {(close) =>
+                creates.map((c) => {
+                  const Glyph = NAV_ICONS[c.icon];
+                  return (
+                    <Link
+                      key={c.href}
+                      href={c.href}
+                      role="menuitem"
+                      onClick={close}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-navy-700 hover:bg-ivory-100"
+                    >
+                      <Glyph className="shrink-0 text-navy-500" /> {c.label}
+                    </Link>
+                  );
+                })
+              }
+            </Dropdown>
+          )}
           <NotificationBell initialUnread={initialUnread} />
           <UserMenu
             name={user.name}

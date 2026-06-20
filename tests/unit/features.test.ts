@@ -26,4 +26,17 @@ describe("pilot quarantine flags", () => {
       expect((e as QuarantinedFeatureError).status).toBe(404);
     }
   });
+
+  it("the operator marketplace write actions fail closed while listings is quarantined", async () => {
+    // The gate is the FIRST line of each action (before requireCtx), so it throws without a DB or
+    // a request context — proving the nav removal is enforcement-backed, not hiding-only.
+    const actions = await import("@/app/(app)/actions");
+    for (const run of [
+      () => actions.setEnquiryStatusAction(new FormData()),
+      () => actions.createViewingAction(new FormData()),
+      () => actions.setViewingStatusAction(new FormData()),
+    ]) {
+      await expect(run()).rejects.toBeInstanceOf(QuarantinedFeatureError);
+    }
+  });
 });
