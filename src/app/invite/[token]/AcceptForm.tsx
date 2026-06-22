@@ -2,10 +2,11 @@
 
 import { useActionState } from "react";
 import { acceptInviteAction, type AcceptState } from "./actions";
-import { Button, Field, inputClass } from "@/components/ui";
+import { Field, FormStatus, inputClass } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export function AcceptForm({ token, email }: { token: string; email: string }) {
-  const [state, action, pending] = useActionState<AcceptState, FormData>(acceptInviteAction, null);
+  const [state, action] = useActionState<AcceptState, FormData>(acceptInviteAction, null);
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="token" value={token} />
@@ -15,10 +16,8 @@ export function AcceptForm({ token, email }: { token: string; email: string }) {
       <Field label="Confirm your email">
         <input name="confirmEmail" type="email" className={inputClass} placeholder={email} required />
       </Field>
-      {state?.error && <p className="text-sm text-claret-700">{state.error}</p>}
-      <Button type="submit" disabled={pending}>
-        {pending ? "Accepting…" : "Accept invitation"}
-      </Button>
+      <FormStatus error={state?.error} />
+      <SubmitButton pendingLabel="Accepting…">Accept invitation</SubmitButton>
     </form>
   );
 }

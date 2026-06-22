@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { inputClass } from "@/components/ui";
 import { requestOtpAction, verifyOtpAction, type LoginState } from "./actions";
 
 const initial: LoginState = { step: "email" };
@@ -26,7 +27,7 @@ export function LoginForm() {
             required
             autoFocus
             placeholder="you@example.com"
-            className="w-full rounded-md border border-ivory-300 px-3 py-2 text-sm focus:border-navy-300 focus:outline-none"
+            className={inputClass}
           />
         </>
       ) : (
@@ -44,7 +45,7 @@ export function LoginForm() {
             required
             autoFocus
             placeholder="000000"
-            className="figure w-full rounded-md border border-ivory-300 px-3 py-2 text-center text-2xl tracking-[0.5em] focus:border-navy-300 focus:outline-none"
+            className={`${inputClass} figure text-center text-2xl tracking-[0.5em]`}
           />
         </>
       )}
