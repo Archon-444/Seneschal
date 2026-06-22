@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { isPersonaRole } from "@/server/authz";
@@ -22,7 +22,17 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
   const ctx = await requireCtx();
   if (!isPersonaRole(ctx.role)) redirect("/portal");
   const { id } = await params;
-  const tenancy = await getTenancy(ctx, id); // 404s if out of scope
+  // Out-of-scope/missing tenancy → a real 404, matching the operator detail routes.
+  // getTenancy throws AuthzError(404) (no NEXT_* digest), which the client error
+  // boundary can't see, so convert here. Re-throw genuine control-flow signals
+  // (redirect/notFound) rather than swallowing them into a 404.
+  let tenancy!: Awaited<ReturnType<typeof getTenancy>>;
+  try {
+    tenancy = await getTenancy(ctx, id);
+  } catch (e) {
+    if (((e as { digest?: string })?.digest ?? "").startsWith("NEXT_")) throw e;
+    notFound();
+  }
 
   const docs = await listDocuments(ctx, { scopeType: "TENANCY", scopeId: id });
   const docLinks = await Promise.all(
