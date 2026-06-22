@@ -7,6 +7,7 @@ import {
   attachPlan,
   provisionWorkspace,
   suspendWorkspace,
+  unarchiveWorkspace,
   unsuspendWorkspace,
 } from "@/server/admin/provisioning";
 
@@ -156,6 +157,28 @@ describe("workspace lifecycle", () => {
     expect(sweptIds).toContain(active.workspaceId);
     expect(sweptIds).toContain(suspended.workspaceId); // suspend ≠ stop monitoring
     expect(sweptIds).not.toContain(archived.workspaceId); // archive is terminal
+  });
+
+  it("unarchive reverses the terminal lock: context resolves again and the sweep re-includes it", async () => {
+    // Archive is recoverable, not a delete. The two enforcement edges that archive flips —
+    // the interactive door (authz throws) and the background sweep (excluded) — must both flip back.
+    const { sweepableWorkspaces } = await import("@/server/outbox/runner");
+    const { workspaceId } = await provisionWorkspace(ctx, {
+      name: "Revive", type: "FIDUCIARY", customerEmail: "p@revive.example", customerName: "P",
+    });
+    const principal = await prisma.user.findUniqueOrThrow({ where: { email: "p@revive.example" } });
+
+    await archiveWorkspace(ctx, workspaceId);
+    await expect(authz(principal.id, workspaceId)).rejects.toThrow(/archived/i);
+    expect((await sweepableWorkspaces()).map((w) => w.id)).not.toContain(workspaceId);
+
+    await unarchiveWorkspace(ctx, workspaceId);
+    expect((await prisma.workspace.findUnique({ where: { id: workspaceId } }))!.archivedAt).toBeNull();
+    await expect(authz(principal.id, workspaceId)).resolves.toMatchObject({ role: "WORKSPACE_ADMIN" });
+    expect((await sweepableWorkspaces()).map((w) => w.id)).toContain(workspaceId);
+
+    const verbs = (await prisma.auditEvent.findMany({ where: { workspaceId } })).map((a) => a.verb);
+    expect(verbs).toContain("workspace.unarchive");
   });
 
   it("rejects lifecycle ops on an unknown workspace", async () => {

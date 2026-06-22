@@ -5,8 +5,12 @@ been made unreachable rather than deleted, so they can be revived later without
 re-implementing working code:
 
 - **`passport`** — the tenant reusable rental profile (`src/server/services/tenantPassport.ts`).
-- **`listings`** — the marketplace supply side (`src/server/services/listings.ts`),
-  and the public enquiry path reached through a listing (`src/server/services/enquiries.ts`).
+- **`listings`** — the whole deferred marketplace loop: the supply side
+  (`src/server/services/listings.ts`), the enquiry path
+  (`src/server/services/enquiries.ts`), and viewings
+  (`src/server/services/viewings.ts`). This covers both the public link flow **and**
+  the operator surfaces (`/enquiries`, `/viewings`). Reviving `listings` revives all
+  three together; split into its own flag if any should revive independently.
 
 Both were the deferred Stage-1B/2 marketplace concept. Keeping the code +
 tests dormant preserves optionality (the marketplace loop is the next strategic
@@ -21,11 +25,12 @@ hardcoded `true` (not env: fail-closed, prod can't be misconfigured *on*).
 
 | Surface | Location | Mechanism |
 |---|---|---|
-| Portal pages | `app/(portal)/portal/passport/page.tsx`, `.../listings/page.tsx`, `.../listings/[id]/page.tsx` | `notFound()` at top |
-| Edge (defense-in-depth) | `middleware.ts` | 404 on `/portal/passport/*`, `/portal/listings/*` |
+| Portal pages | `app/(portal)/portal/passport/`, `.../listings/` segment layouts | `notFound()` at the segment |
+| Operator pages | `app/(app)/enquiries/layout.tsx`, `app/(app)/viewings/layout.tsx` | `notFound()` at the segment |
+| Edge (defense-in-depth) | `middleware.ts` | 404 on `/portal/passport/*`, `/portal/listings/*`, `/enquiries/*`, `/viewings/*` |
 | Public link branches | `app/link/[token]/page.tsx` | `PASSPORT_SHARE` / `LISTING_VIEW` short-circuit to the "no longer available" page **before** consume/data-fetch (held tokens stay dormant, `useCount` untouched) |
-| Server actions | `.../passport/actions.ts`, `.../listings/actions.ts`, `submitEnquiryAction` in `app/link/[token]/actions.ts` | `assertNotQuarantined()` / error return |
-| Nav | `src/components/shell/nav.ts` | entries omitted when quarantined |
+| Server actions | `.../passport/actions.ts`, `.../listings/actions.ts`, `submitEnquiryAction` in `app/link/[token]/actions.ts`, and `setEnquiryStatusAction` / `createViewingAction` / `setViewingStatusAction` in `app/(app)/actions.ts` | `assertNotQuarantined()` / error return |
+| Nav | `src/components/shell/nav.ts` | marketplace entries (`/enquiries`, `/viewings`) **removed** from `NAV`; persona `passport`/`listings` entries omitted when quarantined |
 
 ## What is NOT changed
 

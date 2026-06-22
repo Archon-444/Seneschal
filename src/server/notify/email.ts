@@ -9,8 +9,12 @@ export function emailAdapter(): ProviderAdapter {
 
 function consoleAdapter(): ProviderAdapter {
   return {
-    async send({ to, subject }) {
-      console.log(`[email:console] to=${to} subject=${subject ?? "(none)"}`);
+    async send({ to, subject, body }) {
+      // Dev/preview retrieval path: the body (incl. a live OTP code) is logged ONLY outside
+      // production, so the builder can sign into seeded demo logins. In production the console
+      // adapter is not selected (resend is), and even if it were, the body is withheld.
+      const detail = process.env.NODE_ENV !== "production" ? ` body=${JSON.stringify(body)}` : "";
+      console.log(`[email:console] to=${to} subject=${subject ?? "(none)"}${detail}`);
       return { providerRef: `console-${Date.now()}` };
     },
   };

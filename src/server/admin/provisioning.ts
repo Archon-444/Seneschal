@@ -129,6 +129,19 @@ export async function archiveWorkspace(ctx: PlatformAdminContext, workspaceId: s
   return ws;
 }
 
+/**
+ * Reverse an archive (F-Admin §3.4). Archive is recoverable, not a delete: clearing
+ * `archivedAt` re-opens the interactive door (authz stops throwing "Workspace archived")
+ * and the daily sweep includes the workspace again (sweepableWorkspaces filters archivedAt).
+ * Mirrors unsuspendWorkspace; emits its own audit verb.
+ */
+export async function unarchiveWorkspace(ctx: PlatformAdminContext, workspaceId: string) {
+  await loadWorkspace(workspaceId);
+  const ws = await prisma.workspace.update({ where: { id: workspaceId }, data: { archivedAt: null } });
+  await recordAudit({ workspaceId, ...operatorActor(ctx), verb: "workspace.unarchive", objectType: "Workspace", objectId: workspaceId });
+  return ws;
+}
+
 /** Attach a plan (entitlement) to a workspace — billing record-keeping, not data. */
 export async function attachPlan(ctx: PlatformAdminContext, workspaceId: string, planCode: string) {
   const plan = await prisma.plan.findUnique({ where: { code: planCode } });

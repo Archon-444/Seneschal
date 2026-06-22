@@ -1,48 +1,12 @@
-import type { SVGProps } from "react";
 import type { Role } from "@prisma/client";
 import { roleHas, type Capability } from "@/server/capabilities";
 import { isQuarantined } from "@/server/config/features";
-import {
-  DashboardIcon,
-  OnboardIcon,
-  PropertiesIcon,
-  ClientsIcon,
-  ContactsIcon,
-  CalendarIcon,
-  RenewalsIcon,
-  PaymentsIcon,
-  VaultIcon,
-  ImportsIcon,
-  ProofsIcon,
-  EvidenceIcon,
-  RiskIcon,
-  ReportsIcon,
-  StaffIcon,
-} from "../icons";
+import type { IconKey } from "./navIcons";
 
-// Single source of truth for the nav rail, shared by the server layout (which owns NAV)
-// and the client Sidebar (which renders the glyphs). Lives here — not in the "use client"
-// Sidebar — so the server side never imports across the client boundary. Glyph components
-// can't cross the RSC boundary as props, so nav items carry a string key mapped here.
-export const NAV_ICONS = {
-  dashboard: DashboardIcon,
-  onboard: OnboardIcon,
-  properties: PropertiesIcon,
-  clients: ClientsIcon,
-  contacts: ContactsIcon,
-  calendar: CalendarIcon,
-  renewals: RenewalsIcon,
-  payments: PaymentsIcon,
-  vault: VaultIcon,
-  imports: ImportsIcon,
-  proofs: ProofsIcon,
-  evidence: EvidenceIcon,
-  risk: RiskIcon,
-  reports: ReportsIcon,
-  staff: StaffIcon,
-} satisfies Record<string, (p: SVGProps<SVGSVGElement>) => React.JSX.Element>;
-
-export type IconKey = keyof typeof NAV_ICONS;
+// Pure data/logic for the nav rail — NO JSX, so it imports cleanly into the server layout AND into
+// plain unit tests. The glyph registry (NAV_ICONS) lives in ./navIcons; nav items carry a string
+// `IconKey` mapped there. Re-exported for the client renderers that import the type from here.
+export type { IconKey };
 
 export interface NavItem {
   href: string;
@@ -50,29 +14,49 @@ export interface NavItem {
   icon: IconKey;
   /** Capability required to see this item; omitted means always shown to operators. */
   cap?: Capability;
+  /** Operator-nav zone. Omitted on persona/create items (rendered flat). */
+  zone?: "WORK" | "MANAGE";
+  /** WORK tier: `primary` is the always-visible spine; `secondary` sits under "More". */
+  tier?: "primary" | "secondary";
 }
 
+// The operator rail, zoned. WORK = the renewal lifecycle + the nouns it touches (a ≤7 primary
+// spine + a "More" group the Sidebar collapses); MANAGE = decorrelated people-power. Marketplace
+// routes (/enquiries, /viewings) are intentionally absent — they are fail-closed server-side
+// (the `listings` quarantine) and must not be advertised (see QUARANTINE.md). Creates are NOT
+// nav nouns; they live in the header "+ New" menu (CREATE_ACTIONS). Overview keeps a
+// portfolio-read cap on purpose: it is the home only for roles whose dashboard resolves —
+// dropping the cap would advertise a dead Overview to ORG_ADMIN (people-power, no data).
 export const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: "dashboard", cap: "properties.read" },
-  { href: "/onboarding/new", label: "Onboard tenancy", icon: "onboard", cap: "clients.write" },
-  { href: "/properties", label: "Properties", icon: "properties", cap: "properties.read" },
-  { href: "/clients", label: "Clients", icon: "clients", cap: "clients.read" },
-  { href: "/contacts", label: "Contacts", icon: "contacts", cap: "contacts.read" },
-  { href: "/calendar", label: "Calendar", icon: "calendar", cap: "deadlines.read" },
-  { href: "/renewals", label: "Renewals", icon: "renewals", cap: "renewals.read" },
-  { href: "/payments", label: "Payments", icon: "payments", cap: "payments.read" },
-  { href: "/vault", label: "Document vault", icon: "vault", cap: "documents.read" },
-  { href: "/imports", label: "Import & extract", icon: "imports", cap: "imports.manage" },
-  { href: "/proofs", label: "Proof requests", icon: "proofs", cap: "proofs.read" },
-  { href: "/enquiries", label: "Enquiries", icon: "contacts", cap: "enquiries.read" },
-  { href: "/viewings", label: "Viewings", icon: "calendar", cap: "viewings.read" },
-  { href: "/evidence", label: "Evidence", icon: "evidence", cap: "evidence.read" },
-  { href: "/risk", label: "Risk flags", icon: "risk", cap: "riskflags.read" },
-  { href: "/reports", label: "Reports", icon: "reports", cap: "reports.read" },
-  // F-Admin: in-org people plane — visible to PRINCIPAL/ORG_ADMIN (members/clients.assign), not data roles.
-  { href: "/members", label: "Members", icon: "contacts", cap: "members.read" },
-  { href: "/members/assignments", label: "Assignments", icon: "clients", cap: "clients.assign" },
+  // WORK — primary spine (daily)
+  { href: "/dashboard", label: "Overview", icon: "dashboard", cap: "properties.read", zone: "WORK", tier: "primary" },
+  { href: "/renewals", label: "Renewals", icon: "renewals", cap: "renewals.read", zone: "WORK", tier: "primary" },
+  { href: "/properties", label: "Properties", icon: "properties", cap: "properties.read", zone: "WORK", tier: "primary" },
+  { href: "/clients", label: "Clients", icon: "clients", cap: "clients.read", zone: "WORK", tier: "primary" },
+  { href: "/payments", label: "Payments", icon: "payments", cap: "payments.read", zone: "WORK", tier: "primary" },
+  { href: "/evidence", label: "Evidence", icon: "evidence", cap: "evidence.read", zone: "WORK", tier: "primary" },
+  // WORK — secondary (under "More"; re-homed under a primary noun in a later ticket)
+  { href: "/calendar", label: "Calendar", icon: "calendar", cap: "deadlines.read", zone: "WORK", tier: "secondary" },
+  { href: "/risk", label: "Risk flags", icon: "risk", cap: "riskflags.read", zone: "WORK", tier: "secondary" },
+  { href: "/proofs", label: "Proof requests", icon: "proofs", cap: "proofs.read", zone: "WORK", tier: "secondary" },
+  { href: "/vault", label: "Document vault", icon: "vault", cap: "documents.read", zone: "WORK", tier: "secondary" },
+  { href: "/contacts", label: "Contacts", icon: "contacts", cap: "contacts.read", zone: "WORK", tier: "secondary" },
+  { href: "/reports", label: "Reports", icon: "reports", cap: "reports.read", zone: "WORK", tier: "secondary" },
+  { href: "/imports", label: "Import & extract", icon: "imports", cap: "imports.manage", zone: "WORK", tier: "secondary" },
+  // MANAGE — in-org people & access (Assignments folded in on the page, not a top-level item)
+  { href: "/members", label: "Members & access", icon: "contacts", cap: "members.read", zone: "MANAGE" },
 ];
+
+// "+ New" header actions. Creates are actions, not destinations — cap-filtered like NAV. Only
+// standalone creates belong here (/tenancies/new needs a property context, so it is excluded).
+export const CREATE_ACTIONS: NavItem[] = [
+  { href: "/onboarding/new", label: "Onboard tenancy", icon: "onboard", cap: "clients.write" },
+  { href: "/properties/new", label: "Property", icon: "properties", cap: "properties.write" },
+];
+
+export function createsForRole(role: Role): NavItem[] {
+  return CREATE_ACTIONS.filter((item) => !item.cap || roleHas(role, item.cap));
+}
 
 /** Operator nav filtered to the role's capabilities — a MANAGING_AGENT delegate sees
  *  only its operational rails (no Clients/Imports/Reports/Enquiries/Viewings/etc.). */

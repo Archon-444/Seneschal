@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { ContactKind, DocumentKind, PaymentStatus, ScopeType } from "@prisma/client";
 import { requireCtx } from "@/server/auth/request";
+import { assertNotQuarantined } from "@/server/config/features";
 import * as clients from "@/server/services/clients";
 import * as contacts from "@/server/services/contacts";
 import * as properties from "@/server/services/properties";
@@ -101,6 +102,7 @@ export async function revokeLandlordVerificationAction(formData: FormData) {
 }
 
 export async function setEnquiryStatusAction(formData: FormData) {
+  assertNotQuarantined("listings"); // marketplace loop is quarantined out of the pilot
   const ctx = await requireCtx();
   await enquiries.setEnquiryStatus(
     ctx,
@@ -111,6 +113,7 @@ export async function setEnquiryStatusAction(formData: FormData) {
 }
 
 export async function createViewingAction(formData: FormData) {
+  assertNotQuarantined("listings"); // marketplace loop is quarantined out of the pilot
   const ctx = await requireCtx();
   await viewings.createViewing(ctx, {
     propertyId: s(formData, "propertyId"),
@@ -124,6 +127,7 @@ export async function createViewingAction(formData: FormData) {
 }
 
 export async function setViewingStatusAction(formData: FormData) {
+  assertNotQuarantined("listings"); // marketplace loop is quarantined out of the pilot
   const ctx = await requireCtx();
   await viewings.setViewingStatus(
     ctx,

@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dropdown } from "../menu";
-import { BellIcon, CheckAllIcon } from "../icons";
+import { BellIcon, CheckAllIcon, ChevronDownIcon } from "../icons";
 import { shouldApplyCount } from "./notificationBadge";
+import { notificationHref } from "./notificationHref";
 
 const POLL_MS = 60_000;
 
@@ -12,6 +13,8 @@ interface FeedItem {
   id: string;
   subject: string | null;
   category: string | null;
+  relatedType: string | null;
+  relatedId: string | null;
   urgent: boolean;
   readAt: string | null;
   createdAt: string;
@@ -131,7 +134,16 @@ export function NotificationBell({ initialUnread }: { initialUnread: number }) {
         </>
       }
     >
-      <BellPanel items={items} onOpen={onPanelOpen} onMarkRead={markRead} onMarkAll={markAll} unread={unread} />
+      {(close) => (
+        <BellPanel
+          items={items}
+          onOpen={onPanelOpen}
+          onMarkRead={markRead}
+          onMarkAll={markAll}
+          unread={unread}
+          onNavigate={close}
+        />
+      )}
     </Dropdown>
   );
 }
@@ -142,12 +154,14 @@ function BellPanel({
   onOpen,
   onMarkRead,
   onMarkAll,
+  onNavigate,
 }: {
   items: FeedItem[] | null;
   unread: number;
   onOpen: () => void;
   onMarkRead: (id: string) => void;
   onMarkAll: () => void;
+  onNavigate: () => void;
 }) {
   useEffect(() => {
     onOpen();
@@ -173,28 +187,52 @@ function BellPanel({
         ) : items.length === 0 ? (
           <p className="px-3 py-6 text-center text-sm text-muted">You&apos;re all caught up.</p>
         ) : (
-          items.map((it) => (
-            <button
-              key={it.id}
-              type="button"
-              role="menuitem"
-              onClick={() => onMarkRead(it.id)}
-              className={`flex w-full items-start gap-2 border-b border-l-2 border-line/60 px-3 py-2 text-left hover:bg-ivory-100 ${
-                it.readAt
-                  ? "border-l-transparent"
-                  : it.urgent
-                    ? "border-l-claret-500 bg-claret-500/[0.04]"
-                    : "border-l-gold-500 bg-gold-100/40"
-              }`}
-            >
-              <span className="min-w-0 flex-1">
-                <span className={`block truncate text-sm ${it.readAt ? "text-muted" : "text-navy-900"}`}>
-                  {it.subject ?? "Notification"}
+          items.map((it) => {
+            const href = notificationHref(it);
+            const tone = it.readAt
+              ? "border-l-transparent"
+              : it.urgent
+                ? "border-l-claret-500 bg-claret-500/[0.04]"
+                : "border-l-gold-500 bg-gold-100/40";
+            const cls = `group flex w-full items-center gap-2 border-b border-l-2 border-line/60 px-3 py-2 text-left hover:bg-ivory-100 ${tone}`;
+            const inner = (
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className={`block truncate text-sm ${it.readAt ? "text-muted" : "text-navy-900"}`}>
+                    {it.subject ?? "Notification"}
+                  </span>
+                  <span className="figure block text-[11px] text-muted">{shortDate(it.createdAt)}</span>
                 </span>
-                <span className="figure block text-[11px] text-muted">{shortDate(it.createdAt)}</span>
-              </span>
-            </button>
-          ))
+                {href && (
+                  <ChevronDownIcon
+                    width={14}
+                    height={14}
+                    className="shrink-0 -rotate-90 text-muted transition-colors group-hover:text-navy-700"
+                  />
+                )}
+              </>
+            );
+            // Clicking marks read (optimistically) AND navigates to the related item when there is
+            // one; a target-less item (e.g. a digest) stays a plain mark-read button.
+            return href ? (
+              <Link
+                key={it.id}
+                href={href}
+                role="menuitem"
+                onClick={() => {
+                  onMarkRead(it.id);
+                  onNavigate();
+                }}
+                className={cls}
+              >
+                {inner}
+              </Link>
+            ) : (
+              <button key={it.id} type="button" role="menuitem" onClick={() => onMarkRead(it.id)} className={cls}>
+                {inner}
+              </button>
+            );
+          })
         )}
       </div>
       <Link

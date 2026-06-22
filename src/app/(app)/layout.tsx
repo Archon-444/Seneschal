@@ -5,7 +5,7 @@ import { isPersonaRole } from "@/server/authz";
 import { unreadCount } from "@/server/services/notifications";
 import { logoutAction } from "../(auth)/login/actions";
 import { AppShell } from "@/components/shell/AppShell";
-import { navForRole } from "@/components/shell/nav";
+import { createsForRole, navForRole } from "@/components/shell/nav";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
@@ -34,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       isStaff={user.isPlatformAdmin}
       workspaceName={workspaceName}
       user={{ name: user.name, email: user.email, role }}
+      creates={createsForRole(role)}
       initialCollapsed={initialCollapsed}
       initialUnread={unread}
       signOut={logoutAction}
