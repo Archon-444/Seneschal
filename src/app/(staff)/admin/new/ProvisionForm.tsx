@@ -2,10 +2,11 @@
 
 import { useActionState } from "react";
 import { provisionAction, type ProvisionState } from "../actions";
-import { Button, Field, LinkButton, inputClass } from "@/components/ui";
+import { Field, FormStatus, LinkButton, inputClass } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export function ProvisionForm() {
-  const [state, action, pending] = useActionState<ProvisionState, FormData>(provisionAction, null);
+  const [state, action] = useActionState<ProvisionState, FormData>(provisionAction, null);
 
   if (state?.ok) {
     return (
@@ -26,7 +27,7 @@ export function ProvisionForm() {
 
   return (
     <form action={action} className="space-y-4">
-      <Field label="Organisation name">
+      <Field label="Organisation name" required>
         <input name="name" className={inputClass} required />
       </Field>
       <Field label="Workspace type">
@@ -36,16 +37,14 @@ export function ProvisionForm() {
           <option value="OPERATOR">Operator</option>
         </select>
       </Field>
-      <Field label="Principal name">
+      <Field label="Principal name" required>
         <input name="customerName" className={inputClass} required />
       </Field>
-      <Field label="Principal email">
+      <Field label="Principal email" required>
         <input name="customerEmail" type="email" className={inputClass} required />
       </Field>
-      {state && !state.ok && <p className="text-sm text-claret-700">{state.error}</p>}
-      <Button type="submit" disabled={pending}>
-        {pending ? "Provisioning…" : "Provision workspace"}
-      </Button>
+      <FormStatus error={state && !state.ok ? state.error : undefined} />
+      <SubmitButton pendingLabel="Provisioning…">Provision workspace</SubmitButton>
     </form>
   );
 }
