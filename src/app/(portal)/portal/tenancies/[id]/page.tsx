@@ -7,7 +7,8 @@ import { listOffersForTenant } from "@/server/services/renewals";
 import { listTenancyReceipts } from "@/server/services/payments";
 import { listDocuments, getDocumentUrl } from "@/server/services/documents";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, EmptyState, Field, inputClass, KpiCard, Money, PageHeader, Reminder, Table, Td } from "@/components/ui";
+import { Badge, Card, EmptyState, Field, inputClass, KpiCard, Money, PageHeader, Reminder, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { respondToOfferAction, uploadTenancyDocumentAction, viewReceiptAction } from "./actions";
 
 function propLabel(p: { community: string; building: string | null; unitNo: string | null }): string {
@@ -62,14 +63,14 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
       {ctx.role === "TENANT" && offers.length > 0 && (
         <Card className="mb-6">
           <h2 className="font-display mb-3 text-lg text-navy-900">Renewal proposal</h2>
-          <Table headers={["v", "From", "Annual rent", "Payment", "Status"]}>
+          <Table stack headers={["v", "From", "Annual rent", "Payment", "Status"]}>
             {offers.map((o) => (
               <tr key={o.id}>
-                <Td className="figure">{o.version}</Td>
-                <Td>{o.party}</Td>
-                <Td><Money amount={String(o.annualRent)} /></Td>
-                <Td>{o.paymentSchedule}</Td>
-                <Td><Badge value={o.status} /></Td>
+                <Td label="v" className="figure">{o.version}</Td>
+                <Td label="From">{o.party}</Td>
+                <Td label="Annual rent"><Money amount={String(o.annualRent)} /></Td>
+                <Td label="Payment">{o.paymentSchedule}</Td>
+                <Td label="Status"><Badge value={o.status} /></Td>
               </tr>
             ))}
           </Table>
@@ -80,7 +81,7 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
                 <input type="hidden" name="offerId" value={openOffer.id} />
                 <input type="hidden" name="action" value="ACCEPT" />
                 <p className="mb-2 text-sm text-navy-700">Accept the proposed terms.</p>
-                <Button type="submit">Accept</Button>
+                <SubmitButton pendingLabel="Accepting…">Accept</SubmitButton>
               </form>
               <form action={respondToOfferAction} className="rounded-md border border-line p-3">
                 <input type="hidden" name="tenancyId" value={id} />
@@ -90,7 +91,7 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
                 <div className="grid gap-2">
                   <Field label="Annual rent (AED)"><input name="annualRent" type="number" min="0" required className={inputClass} /></Field>
                   <Field label="Payment"><input name="paymentSchedule" required className={inputClass} placeholder="4 cheques" /></Field>
-                  <Button type="submit" variant="secondary">Send counter</Button>
+                  <SubmitButton variant="secondary" pendingLabel="Sending…">Send counter</SubmitButton>
                 </div>
               </form>
             </div>
@@ -100,17 +101,17 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
 
       <h2 className="mb-3 font-display text-xl text-navy-900">Payment schedule</h2>
       <p className="mb-3 text-xs text-muted">Record-keeping only — Seneschal never holds funds.</p>
-      <Table headers={["#", "Due", "Amount", "Instrument", "Status", "Receipt"]}>
+      <Table stack headers={["#", "Due", "Amount", "Instrument", "Status", "Receipt"]}>
         {tenancy.paymentItems.map((p) => {
           const receipt = receiptByItem.get(p.id);
           return (
             <tr key={p.id}>
-              <Td className="figure">{p.seq}</Td>
-              <Td className="figure">{formatDubaiDate(p.dueDate)}</Td>
-              <Td><Money amount={String(p.amount)} /></Td>
-              <Td>{p.instrument}{p.chequeNo ? ` · ${p.chequeNo}` : ""}</Td>
-              <Td><Badge value={p.status} /></Td>
-              <Td>
+              <Td label="#" className="figure">{p.seq}</Td>
+              <Td label="Due" className="figure">{formatDubaiDate(p.dueDate)}</Td>
+              <Td label="Amount"><Money amount={String(p.amount)} /></Td>
+              <Td label="Instrument">{p.instrument}{p.chequeNo ? ` · ${p.chequeNo}` : ""}</Td>
+              <Td label="Status"><Badge value={p.status} /></Td>
+              <Td label="Receipt">
                 {receipt ? (
                   <form action={viewReceiptAction}>
                     <input type="hidden" name="documentId" value={receipt.id} />
@@ -150,7 +151,7 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
                 <Field label="File">
                   <input name="file" type="file" required className={inputClass} />
                 </Field>
-                <Button type="submit">Upload</Button>
+                <SubmitButton pendingLabel="Uploading…">Upload</SubmitButton>
               </form>
             </Card>
           )}
