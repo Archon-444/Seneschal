@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { ContactKind, DocumentKind, PaymentStatus, ScopeType } from "@prisma/client";
+import type { ContactKind, DocumentKind, PaymentStatus, ScopeType, ServiceMethod } from "@prisma/client";
 import { requireCtx } from "@/server/auth/request";
 import { assertNotQuarantined } from "@/server/config/features";
 import * as clients from "@/server/services/clients";
@@ -15,7 +15,7 @@ import * as moveIn from "@/server/services/moveIn";
 import * as tenancies from "@/server/services/tenancies";
 import * as deadlines from "@/server/services/deadlines";
 import * as renewals from "@/server/services/renewals";
-import { serveRenewalNotice } from "@/server/services/notice";
+import { confirmNoticeService, serveRenewalNotice } from "@/server/services/notice";
 import * as consent from "@/server/services/consent";
 import * as payments from "@/server/services/payments";
 import * as documents from "@/server/services/documents";
@@ -222,9 +222,63 @@ export async function acceptOfferAction(formData: FormData) {
   revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
 }
 
+/** Upload an optional proof-of-service document scoped to the renewal case and
+ *  return its id, so the notice flow can attach real evidence. */
+async function uploadNoticeProof(
+  ctx: Awaited<ReturnType<typeof requireCtx>>,
+  formData: FormData,
+  renewalCaseId: string,
+): Promise<string | undefined> {
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return undefined;
+  const doc = await documents.uploadDocument(ctx, {
+    scopeType: "RENEWAL_CASE",
+    scopeId: renewalCaseId,
+    kind: "NOTICE",
+    fileName: file.name,
+    mime: file.type || "application/octet-stream",
+    data: Buffer.from(await file.arrayBuffer()),
+  });
+  return doc.id;
+}
+
 export async function serveNoticeAction(formData: FormData) {
   const ctx = await requireCtx();
-  await serveRenewalNotice(ctx, { renewalCaseId: s(formData, "renewalCaseId") });
+  const renewalCaseId = s(formData, "renewalCaseId");
+  const docId = await uploadNoticeProof(ctx, formData, renewalCaseId);
+  const attestedBy = opt(formData, "attestedBy");
+  const attestation =
+    s(formData, "attest") === "yes"
+      ? `Manually attested as served by ${attestedBy ?? "operator"}`
+      : undefined;
+  // No proof (no reference, no document, no attestation) → the service lands at
+  // SERVICE_RECORDED_PENDING_EVIDENCE rather than SERVED (enforced server-side).
+  await serveRenewalNotice(ctx, {
+    renewalCaseId,
+    serviceMethod: s(formData, "serviceMethod") as ServiceMethod,
+    serviceRef: opt(formData, "serviceRef"),
+    docId,
+    attestation,
+  });
+  revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
+}
+
+export async function confirmNoticeServiceAction(formData: FormData) {
+  const ctx = await requireCtx();
+  const renewalCaseId = s(formData, "renewalCaseId");
+  const docId = await uploadNoticeProof(ctx, formData, renewalCaseId);
+  const attestedBy = opt(formData, "attestedBy");
+  const attestation =
+    s(formData, "attest") === "yes"
+      ? `Manually attested as served by ${attestedBy ?? "operator"}`
+      : undefined;
+  await confirmNoticeService(ctx, {
+    noticeId: s(formData, "noticeId"),
+    serviceMethod: opt(formData, "serviceMethod") as ServiceMethod | undefined,
+    serviceRef: opt(formData, "serviceRef"),
+    docId,
+    attestation,
+  });
   revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
 }
 

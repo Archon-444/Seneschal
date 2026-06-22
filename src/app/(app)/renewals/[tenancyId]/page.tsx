@@ -7,6 +7,7 @@ import { Badge, Button, Card, Field, inputClass, Money, PageHeader, Table, Td } 
 import {
   acceptOfferAction,
   captureIndexAction,
+  confirmNoticeServiceAction,
   openRenewalCaseAction,
   proposeOfferAction,
   sendOfferToTenantAction,
@@ -165,18 +166,20 @@ export default async function RenewalReportPage({
         </form>
       </Card>
 
+      {/* Notice service */}
+      {risk!.renewalCase && (
+        <NoticeServiceCard
+          renewalCaseId={risk!.renewalCase.id}
+          tenancyId={tenancyId}
+          notice={risk!.currentNotice}
+        />
+      )}
+
       {/* Negotiation workspace */}
       {risk!.renewalCase && (
         <Card className="mb-6">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-lg text-navy-900">Renewal terms</h2>
-            {risk!.renewalCase.status !== "AGREED" && risk!.renewalCase.status !== "NOTICE_SERVED" && (
-              <form action={serveNoticeAction}>
-                <input type="hidden" name="renewalCaseId" value={risk!.renewalCase.id} />
-                <input type="hidden" name="tenancyId" value={tenancyId} />
-                <Button type="submit" variant="secondary">Mark notice served</Button>
-              </form>
-            )}
           </div>
 
           {risk!.offers.length === 0 ? (
@@ -286,6 +289,84 @@ export default async function RenewalReportPage({
         software and a record — it is not a broker or legal adviser. Review official sources before acting.
       </p>
     </>
+  );
+}
+
+const SERVICE_METHODS = ["EMAIL", "COURIER", "IN_PERSON", "REGISTERED_POST", "OTHER"] as const;
+
+/** Serve / confirm a change notice. A notice reaches SERVED only with proof of
+ *  service; without it the record rests at pending-evidence and the timeline does
+ *  not advance (enforced server-side in serveNoticeFormal / confirmNoticeService). */
+function NoticeServiceCard({
+  renewalCaseId,
+  tenancyId,
+  notice,
+}: {
+  renewalCaseId: string;
+  tenancyId: string;
+  notice: { id: string; status: string; serviceMethod: string | null } | null;
+}) {
+  const served = notice?.status === "SERVED";
+  const pending = notice?.status === "SERVICE_RECORDED_PENDING_EVIDENCE";
+  const label = (m: string) => m.replace(/_/g, " ").toLowerCase();
+  return (
+    <Card className="mb-6 max-w-2xl">
+      <h2 className="font-display mb-1 text-lg text-navy-900">Serve change notice</h2>
+      <p className="mb-3 text-xs text-muted">
+        A notice is recorded as <b>served</b> only with proof of service — a delivery reference, an
+        uploaded service document, or a signed attestation. Without proof it is held as “service
+        recorded — awaiting evidence” and the renewal timeline does not advance.
+      </p>
+
+      {served ? (
+        <div className="flex items-center gap-2 rounded-lg border border-verde-100 bg-verde-100/40 p-3 text-sm text-verde-700">
+          <span aria-hidden>✓</span>
+          <span>
+            Notice served{notice?.serviceMethod ? ` via ${label(notice.serviceMethod)}` : ""}, with
+            evidence on file.
+          </span>
+        </div>
+      ) : (
+        <>
+          {pending && (
+            <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-100/50 p-3 text-sm text-amber-700">
+              Service was recorded but no proof is attached yet. Add a delivery reference, a document,
+              or a signed attestation below to mark it served.
+            </div>
+          )}
+          <form action={pending ? confirmNoticeServiceAction : serveNoticeAction} className="space-y-3">
+            <input type="hidden" name="renewalCaseId" value={renewalCaseId} />
+            <input type="hidden" name="tenancyId" value={tenancyId} />
+            {pending && <input type="hidden" name="noticeId" value={notice!.id} />}
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Service method">
+                <select name="serviceMethod" defaultValue={notice?.serviceMethod ?? "EMAIL"} className={inputClass}>
+                  {SERVICE_METHODS.map((m) => (
+                    <option key={m} value={m}>{label(m)}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Delivery reference">
+                <input name="serviceRef" className={inputClass} placeholder="courier / inbox ref" />
+              </Field>
+            </div>
+            <Field label="Proof of service document (optional)">
+              <input type="file" name="file" className="text-sm" />
+            </Field>
+            <label className="flex items-center gap-2 text-sm text-navy-700">
+              <input type="checkbox" name="attest" value="yes" />
+              I attest this notice was served as recorded
+            </label>
+            <Field label="Attested by (name)">
+              <input name="attestedBy" className={inputClass} placeholder="your name" />
+            </Field>
+            <Button type="submit" variant="secondary">
+              {pending ? "Confirm service with evidence" : "Record notice service"}
+            </Button>
+          </form>
+        </>
+      )}
+    </Card>
   );
 }
 

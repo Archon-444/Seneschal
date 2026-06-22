@@ -100,7 +100,7 @@ describe("Notice 3-state flow — one evidence event per transition, timeline mo
     await new Promise((r) => setTimeout(r, 10));
     await approveNotice(W.ctx, notice.id);
     await new Promise((r) => setTimeout(r, 10));
-    await serveNoticeFormal(W.ctx, { noticeId: notice.id, serviceMethod: "EMAIL" });
+    await serveNoticeFormal(W.ctx, { noticeId: notice.id, serviceMethod: "EMAIL", serviceRef: "inbox-ref" });
 
     const rows = await prisma.evidenceEvent.findMany({
       where: {
@@ -257,7 +257,7 @@ describe("renewal risk wiring — production paths raise flags", () => {
       }),
     ).toBeTruthy();
 
-    await serveRenewalNotice(W.ctx, { renewalCaseId: rc.id, serviceMethod: "EMAIL" });
+    await serveRenewalNotice(W.ctx, { renewalCaseId: rc.id, serviceMethod: "EMAIL", serviceRef: "inbox-ref" });
     expect(
       await prisma.riskFlag.findFirst({
         where: {

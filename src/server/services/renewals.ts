@@ -1,4 +1,4 @@
-import { Prisma, type ActorType, type OfferParty, type RenewalStatus, type SecureLink, type TenancyStatus } from "@prisma/client";
+import { Prisma, type ActorType, type NoticeStatus, type OfferParty, type RenewalStatus, type SecureLink, type ServiceMethod, type TenancyStatus } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
@@ -214,6 +214,10 @@ export interface RenewalRisk {
   latestIndex: { marketRentAvg: number; capturedAt: Date; source: string; isBenchmark: boolean } | null;
   position: RentPositionResult | null;
   renewalCase: { id: string; status: RenewalStatus; decidedOfferId: string | null } | null;
+  /** The most recent notice on the case — drives the serve/confirm UI. A
+   *  SERVICE_RECORDED_PENDING_EVIDENCE status means service was logged without
+   *  proof and the case did NOT advance. */
+  currentNotice: { id: string; status: NoticeStatus; serviceMethod: ServiceMethod | null } | null;
   offers: OfferView[];
 }
 
@@ -362,6 +366,13 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
       })
     : [];
 
+  const currentNotice = renewalCase
+    ? await prisma.notice.findFirst({
+        where: { renewalCaseId: renewalCase.id },
+        orderBy: { createdAt: "desc" },
+      })
+    : null;
+
   const gate = noticeGate(tenancy!.endDate, tenancy!.noticePeriodDays);
   const today = todayInDubai();
   const daysToGate = daysBetween(today, gate.date);
@@ -383,6 +394,9 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
     position,
     renewalCase: renewalCase
       ? { id: renewalCase.id, status: renewalCase.status, decidedOfferId: renewalCase.decidedOfferId }
+      : null,
+    currentNotice: currentNotice
+      ? { id: currentNotice.id, status: currentNotice.status, serviceMethod: currentNotice.serviceMethod }
       : null,
     offers: offers.map((o) => ({
       id: o.id,

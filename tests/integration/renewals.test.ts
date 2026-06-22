@@ -195,7 +195,7 @@ describe("renewal negotiation", () => {
 
   it("serving notice records evidence and moves the case + tenancy", async () => {
     const rc = await openRenewalCase(W.ctx, tenancyId);
-    await serveRenewalNotice(W.ctx, { renewalCaseId: rc.id });
+    await serveRenewalNotice(W.ctx, { renewalCaseId: rc.id, serviceMethod: "EMAIL", serviceRef: "inbox-2026-0612" });
     const after = await prisma.renewalCase.findUnique({ where: { id: rc.id } });
     expect(after!.status).toBe("NOTICE_SERVED");
     expect(after!.noticeServedAt).toBeTruthy();
