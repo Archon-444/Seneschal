@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { listMembers } from "@/server/services/members";
-import { Badge, Card, LinkButton, PageHeader, Table, Td } from "@/components/ui";
-import { formatDubaiDate } from "@/server/calculators/dates";
+import { Badge, DubaiDate, FormSection, LinkButton, PageHeader, Table, Td } from "@/components/ui";
 import { InviteForm } from "./InviteForm";
 import {
   grantOrgAdminAction,
@@ -35,26 +34,27 @@ export default async function MembersPage() {
         }
       />
 
-      <Card className="mb-6">
-        <h2 className="font-display mb-3 text-lg text-navy-900">Invite an org-admin</h2>
+      <FormSection title="Invite an org-admin" className="mb-6">
         <p className="mb-3 text-sm text-muted">
           People-power only: an org-admin manages members and assignments but cannot open a tenancy.
         </p>
         <InviteForm />
-      </Card>
+      </FormSection>
 
-      <Table headers={["Name", "Email", "Role", "Bundles", ""]}>
+      <Table stack headers={["Name", "Email", "Role", "Bundles", ""]}>
         {data.members.map((m) => (
           <tr key={m.membershipId}>
-            <Td>
+            <Td label="Name">
               {m.name}
               {m.isSelf && <span className="ml-2 text-xs text-muted">(you)</span>}
             </Td>
-            <Td className="text-xs">{m.email}</Td>
-            <Td>
+            <Td label="Email" className="text-xs">
+              {m.email}
+            </Td>
+            <Td label="Role">
               <Badge value={m.role} />
             </Td>
-            <Td>
+            <Td label="Bundles">
               {m.bundles.length ? (
                 m.bundles.map((b) => <Badge key={b} value={b} />)
               ) : (
@@ -63,7 +63,7 @@ export default async function MembersPage() {
             </Td>
             <Td>
               {!m.isSelf && (
-                <div className="flex gap-1.5 text-xs">
+                <div className="flex flex-wrap justify-end gap-1.5 text-xs">
                   {m.role !== "ORG_ADMIN" && !m.bundles.includes("ORG_ADMIN") && (
                     <form action={grantOrgAdminAction}>
                       <input type="hidden" name="membershipId" value={m.membershipId} />
@@ -96,16 +96,20 @@ export default async function MembersPage() {
       {data.invites.length > 0 && (
         <>
           <h2 className="font-display mt-8 mb-3 text-lg text-navy-900">Pending invites</h2>
-          <Table headers={["Email", "Bundles", "Expires", ""]}>
+          <Table stack headers={["Email", "Bundles", "Expires", ""]}>
             {data.invites.map((inv) => (
               <tr key={inv.id}>
-                <Td className="text-xs">{inv.email}</Td>
-                <Td>
+                <Td label="Email" className="text-xs">
+                  {inv.email}
+                </Td>
+                <Td label="Bundles">
                   {inv.intendedBundles.map((b) => (
                     <Badge key={b} value={b} />
                   ))}
                 </Td>
-                <Td className="figure text-xs">{formatDubaiDate(inv.expiresAt)}</Td>
+                <Td label="Expires">
+                  <DubaiDate value={inv.expiresAt} className="text-xs" />
+                </Td>
                 <Td>
                   <form action={revokeInviteAction}>
                     <input type="hidden" name="inviteId" value={inv.id} />

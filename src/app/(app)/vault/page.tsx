@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { listDocuments } from "@/server/services/documents";
-import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, EmptyState, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, DubaiDate, EmptyState, PageHeader, Table, Td } from "@/components/ui";
 import { UploadForm } from "../properties/[id]/UploadForm";
 import { archiveDocumentAction } from "../actions";
 
@@ -28,26 +27,41 @@ export default async function VaultPage({
         <UploadForm scopeType="WORKSPACE" scopeId={ctx.workspaceId} back="/vault" />
       </div>
       <div className="mb-3 text-sm">
-        <Link href="/vault" className={!archived ? "font-medium text-navy-900" : "text-navy-500"}>Active</Link>
+        <Link href="/vault" className={!archived ? "font-medium text-navy-900" : "text-navy-500"}>
+          Active
+        </Link>
         <span className="mx-2 text-navy-300">·</span>
-        <Link href="/vault?archived=1" className={archived ? "font-medium text-navy-900" : "text-navy-500"}>Include archived</Link>
+        <Link href="/vault?archived=1" className={archived ? "font-medium text-navy-900" : "text-navy-500"}>
+          Include archived
+        </Link>
       </div>
       {docs.length === 0 ? (
-        <EmptyState message="The vault is empty." />
+        <EmptyState
+          title="The vault is empty"
+          message="Upload a document above — every file is SHA-256 verified and every access logged."
+        />
       ) : (
-        <Table headers={["File", "Kind", "Scope", "Uploaded", "Size", ""]}>
+        <Table stack headers={["File", "Kind", "Scope", "Uploaded", "Size", ""]}>
           {docs.map((d) => (
             <tr key={d.id} className={d.archivedAt ? "opacity-50" : ""}>
-              <Td>
+              <Td label="File">
                 <Link href={`/vault/${d.id}`} className="font-medium text-navy-900 hover:underline">
                   {d.fileName}
                 </Link>
                 <div className="figure text-xs text-navy-300">{d.sha256.slice(0, 16)}…</div>
               </Td>
-              <Td><Badge value={d.kind} /></Td>
-              <Td className="text-xs">{d.scopeType}</Td>
-              <Td className="figure whitespace-nowrap">{formatDubaiDate(d.createdAt)}</Td>
-              <Td className="figure">{(d.sizeBytes / 1024).toFixed(1)} KB</Td>
+              <Td label="Kind">
+                <Badge value={d.kind} />
+              </Td>
+              <Td label="Scope" className="text-xs">
+                {d.scopeType}
+              </Td>
+              <Td label="Uploaded" className="whitespace-nowrap">
+                <DubaiDate value={d.createdAt} />
+              </Td>
+              <Td label="Size" className="figure">
+                {(d.sizeBytes / 1024).toFixed(1)} KB
+              </Td>
               <Td>
                 {!d.archivedAt && (
                   <form action={archiveDocumentAction}>
