@@ -164,7 +164,18 @@ export default async function ExternalLinkPage({ params }: { params: Promise<{ t
           {offer.termMonths != null && <Row label="Term" value={`${offer.termMonths} months`} />}
           <Row label="Your current rent" value={fmt(offer.currentRent)} />
           {offer.marketRentAvg != null && (
-            <Row label="Index average (for comparison)" value={fmt(offer.marketRentAvg)} />
+            <Row
+              label={[
+                "Index average for comparison",
+                offer.indexSourceLabel,
+                offer.indexCapturedAt
+                  ? `captured ${offer.indexCapturedAt.toISOString().slice(0, 10)}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              value={fmt(offer.marketRentAvg)}
+            />
           )}
         </dl>
         {offer.note && <p className="mt-3 text-sm text-navy-700">“{offer.note}”</p>}

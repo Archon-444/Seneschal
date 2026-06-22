@@ -548,17 +548,41 @@ async function tryMoveTenancy(ctx: AuthzContext, tenancyId: string, target: Tena
 }
 
 
-async function renewalPermittedMaxSnapshot(renewalCase: { indexCaptureId: string | null; tenancyId: string }) {
+/** Resolve the index capture an offer should be measured against: a capture
+ *  explicitly linked to the case (RenewalCase.indexCaptureId), else the latest
+ *  capture against the tenancy with a computed ceiling. Returns the full row so a
+ *  caller can both snapshot the ceiling AND freeze a self-contained citation. */
+async function resolveRenewalIndexCapture(renewalCase: { indexCaptureId: string | null; tenancyId: string }) {
   const linkedCapture = renewalCase.indexCaptureId
     ? await prisma.rentIndexCapture.findUnique({ where: { id: renewalCase.indexCaptureId } })
     : null;
-  const latestCapture =
+  return (
     linkedCapture ??
     (await prisma.rentIndexCapture.findFirst({
       where: { tenancyId: renewalCase.tenancyId, permittedNewRentMax: { not: null } },
       orderBy: { capturedAt: "desc" },
-    }));
-  return latestCapture?.permittedNewRentMax ?? null;
+    }))
+  );
+}
+
+type RentIndexCaptureRow = NonNullable<Awaited<ReturnType<typeof resolveRenewalIndexCapture>>>;
+
+/** A self-contained, offer-time citation for the index figure an offer was
+ *  measured against — frozen onto the Offer so the tenant-facing comparison is
+ *  reproducible from the row alone, never re-derived from the latest live capture.
+ *  provisional flags a manual concierge estimate (not an official, verified source). */
+function indexCitationFrom(capture: RentIndexCaptureRow): Prisma.InputJsonObject {
+  return {
+    captureId: capture.id,
+    source: capture.source,
+    indexSource: capture.indexSource,
+    capturedAt: capture.capturedAt.toISOString(),
+    calculatorVersion: capture.calculatorVersion,
+    comparableBasis: (capture.comparableBasis ?? null) as Prisma.InputJsonValue,
+    marketRentAvg: Number(capture.marketRentAvg),
+    permittedNewRentMax: capture.permittedNewRentMax != null ? Number(capture.permittedNewRentMax) : null,
+    provisional: capture.indexSource === "MANUAL_CONCIERGE",
+  };
 }
 
 export interface OfferInput {
@@ -592,13 +616,16 @@ export async function proposeOffer(ctx: AuthzContext, input: OfferInput) {
   });
   const version = (last?.version ?? 0) + 1;
 
-  // PR6: snapshot the index-indicated ceiling AT THE MOMENT THE OFFER IS PROPOSED.
-  // The field is intentionally NOT recomputed if a later capture changes the
-  // figure — an offer's compliance posture has to be reproducible from the row
-  // alone. Source preference: a capture explicitly linked to the case
+  // PR6/PR-pilot: snapshot the index-indicated ceiling AND a self-contained
+  // citation AT THE MOMENT THE OFFER IS PROPOSED. Neither is recomputed if a later
+  // capture changes the figure — an offer's compliance posture and the
+  // tenant-facing comparison both have to be reproducible from the row alone.
+  // Source preference: a capture explicitly linked to the case
   // (RenewalCase.indexCaptureId), else the latest capture against the tenancy.
   // Backfilled rows (NULL permittedNewRentMax) contribute no snapshot.
-  const permittedMaxSnapshot = await renewalPermittedMaxSnapshot(renewalCase!);
+  const capture = await resolveRenewalIndexCapture(renewalCase!);
+  const permittedMaxSnapshot = capture?.permittedNewRentMax ?? null;
+  const indexCitation = capture ? indexCitationFrom(capture) : undefined;
 
   const offer = await prisma.offer.create({
     data: {
@@ -617,6 +644,8 @@ export async function proposeOffer(ctx: AuthzContext, input: OfferInput) {
       createdById: ctx.userId,
       viaSecureLinkId: input.viaSecureLinkId ?? null,
       permittedMaxSnapshot,
+      indexCaptureId: capture?.id ?? null,
+      indexCitation,
     },
   });
   await prisma.renewalCase.update({ where: { id: renewalCase!.id }, data: { status: "NEGOTIATING", currentOfferId: offer.id } });
@@ -763,6 +792,18 @@ export interface TenantOfferView {
   unit: string;
   currentRent: number;
   marketRentAvg: number | null;
+  /** When the cited index figure was captured (from the offer's frozen citation). */
+  indexCapturedAt: Date | null;
+  indexSourceLabel: string | null;
+  /** The cited figure is a manual concierge estimate, not an official source. */
+  indexProvisional: boolean;
+}
+
+interface OfferIndexCitation {
+  source?: string;
+  capturedAt?: string;
+  marketRentAvg?: number;
+  provisional?: boolean;
 }
 
 /** Public — render data for a tenant-offer secure link. No AuthzContext. */
@@ -775,10 +816,10 @@ export async function getOfferForLink(link: SecureLink): Promise<TenantOfferView
     include: { property: true },
   });
   if (!tenancy) return null;
-  const index = await prisma.rentIndexCapture.findFirst({
-    where: { tenancyId: offer.tenancyId },
-    orderBy: { capturedAt: "desc" },
-  });
+  // Render the index comparison from the offer's FROZEN citation — never the
+  // latest live capture — so what the tenant sees is exactly what the offer was
+  // assessed against, even if a newer capture has since changed the figure.
+  const citation = (offer.indexCitation ?? null) as unknown as OfferIndexCitation | null;
   return {
     offerId: offer.id,
     version: offer.version,
@@ -790,7 +831,10 @@ export async function getOfferForLink(link: SecureLink): Promise<TenantOfferView
     status: offer.status,
     unit: [tenancy.property.community, tenancy.property.building, tenancy.property.unitNo].filter(Boolean).join(" · "),
     currentRent: Number(tenancy.annualRent),
-    marketRentAvg: index ? Number(index.marketRentAvg) : null,
+    marketRentAvg: citation?.marketRentAvg ?? null,
+    indexCapturedAt: citation?.capturedAt ? new Date(citation.capturedAt) : null,
+    indexSourceLabel: citation?.source ?? null,
+    indexProvisional: citation?.provisional ?? false,
   };
 }
 
@@ -835,7 +879,9 @@ async function applyTenantOfferResponse(
     // scope-audit: offer pre-validated by callers — respondToOfferViaLink (secure-link
     // token) and respondToOfferAsTenant (getTenancy contact-scope gate).
     const last = await prisma.offer.findFirst({ where: { renewalCaseId }, orderBy: { version: "desc" } });
-    const permittedMaxSnapshot = renewalCase ? await renewalPermittedMaxSnapshot(renewalCase) : null;
+    const capture = renewalCase ? await resolveRenewalIndexCapture(renewalCase) : null;
+    const permittedMaxSnapshot = capture?.permittedNewRentMax ?? null;
+    const indexCitation = capture ? indexCitationFrom(capture) : undefined;
     const created = await prisma.offer.create({
       data: {
         workspaceId,
@@ -850,6 +896,8 @@ async function applyTenantOfferResponse(
         status: "COUNTERED",
         viaSecureLinkId: source.viaSecureLinkId ?? null,
         permittedMaxSnapshot,
+        indexCaptureId: capture?.id ?? null,
+        indexCitation,
       },
     });
     await prisma.renewalCase.update({ where: { id: renewalCaseId }, data: { status: "NEGOTIATING", currentOfferId: created.id } });
