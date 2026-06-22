@@ -26,6 +26,8 @@ const PROHIBITED_PHRASES: readonly string[] = [
   "lawful ceiling",
   "legal maximum",
   "legally entitled",
+  "legal band",
+  "entitled to",
   "by law",
   "enforceable",
   "lawful increase",
@@ -36,6 +38,24 @@ const APPROVED_FRAMINGS: readonly string[] = [
   "Decree 43 band",
   "index-indicated maximum",
   "RERA calculator figure",
+];
+
+// Required framing cues (spec §0): renewal copy that cites a figure must make four
+// things explicit so it can never read as a binding-law claim — the rule-based
+// basis (an approved framing), that the figure rests on SUPPLIED data, the
+// source-CAPTURE reference, and a REVIEW / not-legal-advice note. Each group is
+// satisfied by any one of its phrases.
+const REQUIRED_CUES: readonly { readonly label: string; readonly any: readonly string[] }[] = [
+  { label: "an approved rule-based framing", any: APPROVED_FRAMINGS },
+  {
+    label: "the supplied-data basis",
+    any: ["landlord-provided data", "owner's behalf", "based on supplied data", "landlord-supplied"],
+  },
+  { label: "the source-capture reference", any: ["captured", "capture date", "index capture"] },
+  {
+    label: "the review / not-legal-advice note",
+    any: ["not legal advice", "for reference only", "seek independent advice", "review official sources", "not a broker or legal adviser"],
+  },
 ];
 
 export class RenewalCopyComplianceError extends Error {
@@ -70,15 +90,17 @@ export function assertRenewalCopyCompliant(text: string): void {
       );
     }
   }
-  const hasFraming = APPROVED_FRAMINGS.some((f) => wordBoundaryHit(text, f));
-  if (!hasFraming) {
-    throw new RenewalCopyComplianceError(
-      `Renewal copy must include at least one approved framing: ${APPROVED_FRAMINGS.join(", ")}.`,
-    );
+  for (const cue of REQUIRED_CUES) {
+    if (!cue.any.some((c) => wordBoundaryHit(text, c))) {
+      throw new RenewalCopyComplianceError(
+        `Renewal copy must include ${cue.label} (one of: ${cue.any.join(", ")}).`,
+      );
+    }
   }
 }
 
 export const RENEWAL_COPY_TEST_FIXTURES = {
   PROHIBITED_PHRASES,
   APPROVED_FRAMINGS,
+  REQUIRED_CUES,
 } as const;

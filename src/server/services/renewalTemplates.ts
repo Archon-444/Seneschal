@@ -11,6 +11,7 @@ export interface NoticeTemplateInput {
   proposedRent: number;
   indexIndicatedMaximum: number;
   effectiveFrom: string; // ISO date-only
+  capturedOn?: string; // ISO date-only the index figure was captured on
 }
 
 function aed(n: number): string {
@@ -29,7 +30,9 @@ export function renderRenewalChangeNotice(input: NoticeTemplateInput): string {
     `Current annual rent: ${aed(input.currentRent)}.\n` +
     `Proposed annual rent from ${input.effectiveFrom}: ${aed(input.proposedRent)}.\n` +
     `For reference, the index-indicated maximum derived from the Decree 43 band ` +
-    `against the current capture is ${aed(input.indexIndicatedMaximum)}.\n\n` +
+    `against the current capture is ${aed(input.indexIndicatedMaximum)}.\n` +
+    `This notice is based on landlord-provided data and an index figure captured on ` +
+    `${input.capturedOn ?? "the recorded capture date"}.\n\n` +
     `Seneschal is a technology platform, not a broker or legal adviser. ` +
     `Any figure above is for reference only.`;
   assertRenewalCopyCompliant(body);
@@ -40,6 +43,7 @@ export interface OfferLinkSummaryInput {
   unit: string;
   proposedRent: number;
   indexIndicatedMaximum: number | null;
+  capturedOn?: string; // ISO date-only the index figure was captured on
 }
 
 /**
@@ -49,7 +53,8 @@ export interface OfferLinkSummaryInput {
 export function renderTenantOfferSummary(input: OfferLinkSummaryInput): string {
   const ref =
     input.indexIndicatedMaximum != null
-      ? `For reference, the index-indicated maximum derived from the Decree 43 band ` +
+      ? `For reference, the index-indicated maximum derived from the Decree 43 band, ` +
+        `from an index captured on ${input.capturedOn ?? "the recorded date"}, ` +
         `is ${aed(input.indexIndicatedMaximum)}.`
       : `The Decree 43 band reference figure is not currently captured against this unit.`;
   const body =
@@ -73,6 +78,7 @@ export const RENEWAL_TEMPLATE_RENDERERS = [
         proposedRent: 84_000,
         indexIndicatedMaximum: 84_000,
         effectiveFrom: "2026-09-01",
+        capturedOn: "2026-06-01",
       }),
   },
   {
@@ -82,6 +88,7 @@ export const RENEWAL_TEMPLATE_RENDERERS = [
         unit: "Marina Heights · Unit 1204",
         proposedRent: 84_000,
         indexIndicatedMaximum: 84_000,
+        capturedOn: "2026-06-01",
       }),
   },
 ] as const;

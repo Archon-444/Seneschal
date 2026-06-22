@@ -28,9 +28,13 @@ describe("assertRenewalCopyCompliant — prohibited phrases", () => {
 
   it("does NOT reject the framing 'lawful' inside an unrelated word boundary", () => {
     // Word-boundary check: a phrase like "unlawfulness" must not trigger
-    // "by law" or similar; substring matching here would be wrong.
+    // "by law" or similar; substring matching here would be wrong. The body also
+    // carries the required framing cues so it fails only if "lawfulness" trips.
     expect(() =>
-      assertRenewalCopyCompliant("This is a Decree 43 band note about lawfulness historically."),
+      assertRenewalCopyCompliant(
+        "This is a Decree 43 band note, based on landlord-provided data and an index captured on " +
+          "2026-06-01, about lawfulness historically. For reference only; not legal advice.",
+      ),
     ).not.toThrow();
   });
 });
@@ -42,10 +46,19 @@ describe("assertRenewalCopyCompliant — required framing", () => {
     ).toThrow(RenewalCopyComplianceError);
   });
 
+  it("rejects copy that has a framing but omits the supplied-data / capture / review cues", () => {
+    expect(() => assertRenewalCopyCompliant("Reference: Decree 43 band of AED 84,000.")).toThrow(
+      RenewalCopyComplianceError,
+    );
+  });
+
   for (const framing of RENEWAL_COPY_TEST_FIXTURES.APPROVED_FRAMINGS) {
     it(`accepts copy that uses the framing "${framing}"`, () => {
       expect(() =>
-        assertRenewalCopyCompliant(`Reference: ${framing} of AED 84,000. Proposed: AED 82,000.`),
+        assertRenewalCopyCompliant(
+          `Reference: ${framing} of AED 84,000, based on landlord-provided data and an index ` +
+            `captured on 2026-06-01. Proposed: AED 82,000. For reference only; not legal advice.`,
+        ),
       ).not.toThrow();
     });
   }
