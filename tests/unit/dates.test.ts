@@ -4,6 +4,7 @@ import {
   contractExpiry,
   daysBetween,
   formatDubaiDate,
+  formatDubaiDateTime,
   isoDate,
   noticeGate,
   renewalDate,
@@ -99,5 +100,13 @@ describe("date helpers", () => {
   });
   it("formats Dubai-local display", () => {
     expect(formatDubaiDate(new Date("2026-09-15"))).toBe("15 Sept 2026");
+  });
+  it("formats a Dubai-local timestamp with wall-clock time (+4h)", () => {
+    expect(formatDubaiDateTime(new Date("2026-09-15T10:30:00Z"))).toBe("15 Sept 2026, 14:30");
+  });
+  it("rolls the date when the +4h shift crosses Dubai midnight", () => {
+    // 21:00Z → 01:00 next day in Dubai; 20:00Z → 00:00 next day in Dubai
+    expect(formatDubaiDateTime(new Date("2026-09-15T21:00:00Z"))).toBe("16 Sept 2026, 01:00");
+    expect(formatDubaiDateTime(new Date("2026-09-15T20:00:00Z"))).toBe("16 Sept 2026, 00:00");
   });
 });
