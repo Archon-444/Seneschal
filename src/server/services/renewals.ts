@@ -44,19 +44,34 @@ export async function openRenewalCase(ctx: AuthzContext, tenancyId: string) {
 
   const gate = noticeGate(tenancy!.endDate, tenancy!.noticePeriodDays);
   const renewal = renewalDate(tenancy!.endDate);
-  const created = await prisma.renewalCase.create({
-    data: {
-      workspaceId: ctx.workspaceId,
-      tenancyId,
-      propertyId: tenancy!.propertyId,
-      status: "ASSESSING",
-      currentRentSnapshot: tenancy!.annualRent,
-      noticeGateAt: gate.date,
-      expiresAt: contractExpiry(tenancy!.endDate).date,
-      renewalDate: renewal.date,
-      createdById: ctx.userId,
-    },
-  });
+  let created: Awaited<ReturnType<typeof prisma.renewalCase.create>>;
+  try {
+    created = await prisma.renewalCase.create({
+      data: {
+        workspaceId: ctx.workspaceId,
+        tenancyId,
+        propertyId: tenancy!.propertyId,
+        status: "ASSESSING",
+        currentRentSnapshot: tenancy!.annualRent,
+        noticeGateAt: gate.date,
+        expiresAt: contractExpiry(tenancy!.endDate).date,
+        renewalDate: renewal.date,
+        createdById: ctx.userId,
+      },
+    });
+  } catch (e) {
+    // A concurrent open won the race; the RenewalCase_active_unique partial index
+    // rejected this duplicate. Return the winner's case so the "open or return
+    // existing" contract holds under concurrency, without emitting a second
+    // RENEWAL_ASSESSMENT_CREATED.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const winner = await prisma.renewalCase.findFirst({
+        where: { workspaceId: ctx.workspaceId, tenancyId, status: { notIn: TERMINAL } },
+      });
+      if (winner) return winner;
+    }
+    throw e;
+  }
   await recordEvidence({
     workspaceId: ctx.workspaceId,
     type: "RENEWAL_ASSESSMENT_CREATED",
@@ -627,15 +642,35 @@ export async function acceptOffer(ctx: AuthzContext, offerId: string) {
   if (!renewalCaseId || !tenancyId) throw new AuthzError("Not a renewal offer", 422);
   const tenancy = await getTenancy(ctx, tenancyId); // enforces client scope
 
-  await prisma.offer.updateMany({
-    where: { renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offerId } },
-    data: { status: "SUPERSEDED" },
-  });
-  await prisma.offer.update({ where: { id: offerId }, data: { status: "ACCEPTED" } });
-  await prisma.renewalCase.update({
-    where: { id: renewalCaseId },
-    data: { status: "AGREED", decidedOfferId: offerId, currentOfferId: offerId },
-  });
+  // Accept atomically. The guarded claim makes the app-level transition explicit
+  // (only a still-open offer can be accepted, and only once); the partial unique
+  // index Offer_one_accepted_per_case is the DB backstop against two offers being
+  // accepted on one case under concurrency — the loser's commit hits P2002, which
+  // we surface as a clean 409.
+  try {
+    await prisma.$transaction(async (tx) => {
+      const claim = await tx.offer.updateMany({
+        where: { id: offerId, status: { in: ["SENT", "COUNTERED"] } },
+        data: { status: "ACCEPTED" },
+      });
+      if (claim.count !== 1) {
+        throw new AuthzError("Offer is no longer open to accept", 409);
+      }
+      await tx.offer.updateMany({
+        where: { renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offerId } },
+        data: { status: "SUPERSEDED" },
+      });
+      await tx.renewalCase.update({
+        where: { id: renewalCaseId },
+        data: { status: "AGREED", decidedOfferId: offerId, currentOfferId: offerId },
+      });
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw new AuthzError("Another offer has already been accepted for this case", 409);
+    }
+    throw e;
+  }
   await tryMoveTenancy(ctx, tenancyId, "RENEWED");
   await recordEvidence({
     workspaceId: ctx.workspaceId,
@@ -941,30 +976,42 @@ export async function mintRenewedTenancy(ctx: AuthzContext, input: MintRenewedTe
   }
   const predecessor = await getTenancy(ctx, rc!.tenancyId); // client-scope gate
 
-  const successor = await prisma.tenancy.create({
-    data: {
-      workspaceId: ctx.workspaceId,
-      propertyId: rc!.propertyId,
-      landlordContactId: predecessor!.landlordContactId,
-      tenantContactId: predecessor!.tenantContactId,
-      startDate: toUtcDateOnly(input.startDate),
-      endDate: toUtcDateOnly(input.endDate),
-      annualRent: new Prisma.Decimal(input.annualRent),
-      paymentTermsNote: input.paymentTermsNote ?? predecessor!.paymentTermsNote ?? null,
-      noticePeriodDays: input.noticePeriodDays ?? predecessor!.noticePeriodDays,
-      status: "ACTIVE",
-      source: "MANUAL",
-      contractDocId: input.contractDocId ?? null,
-      renewsFromTenancyId: predecessor!.id,
-    },
+  // Mint atomically. The findUnique checks above are a fast-fail for the common
+  // case; the load-bearing guard is the conditional claim INSIDE the transaction.
+  // updateMany only matches while the case is still AGREED and unminted, so two
+  // concurrent callers serialise on the row (READ COMMITTED) and the loser reads
+  // count 0 and aborts before any second successor is created. The successor is
+  // created in the same tx (a failed create rolls the claim back), and
+  // Tenancy.renewsFromTenancyId @unique is the final DB backstop.
+  const successor = await prisma.$transaction(async (tx) => {
+    const claim = await tx.renewalCase.updateMany({
+      where: { id: rc!.id, status: "AGREED", renewedTenancyId: null },
+      data: { status: "RENEWED" },
+    });
+    if (claim.count !== 1) {
+      throw new AuthzError("A successor tenancy has already been minted for this case", 409);
+    }
+    const created = await tx.tenancy.create({
+      data: {
+        workspaceId: ctx.workspaceId,
+        propertyId: rc!.propertyId,
+        landlordContactId: predecessor!.landlordContactId,
+        tenantContactId: predecessor!.tenantContactId,
+        startDate: toUtcDateOnly(input.startDate),
+        endDate: toUtcDateOnly(input.endDate),
+        annualRent: new Prisma.Decimal(input.annualRent),
+        paymentTermsNote: input.paymentTermsNote ?? predecessor!.paymentTermsNote ?? null,
+        noticePeriodDays: input.noticePeriodDays ?? predecessor!.noticePeriodDays,
+        status: "ACTIVE",
+        source: "MANUAL",
+        contractDocId: input.contractDocId ?? null,
+        renewsFromTenancyId: predecessor!.id,
+      },
+    });
+    await tx.tenancy.update({ where: { id: predecessor!.id }, data: { status: "RENEWED" } });
+    await tx.renewalCase.update({ where: { id: rc!.id }, data: { renewedTenancyId: created.id } });
+    return created;
   });
-  await prisma.$transaction([
-    prisma.tenancy.update({ where: { id: predecessor!.id }, data: { status: "RENEWED" } }),
-    prisma.renewalCase.update({
-      where: { id: rc!.id },
-      data: { status: "RENEWED", renewedTenancyId: successor.id },
-    }),
-  ]);
   await recordEvidence({
     workspaceId: ctx.workspaceId,
     type: "RENEWAL_COMPLETED",
