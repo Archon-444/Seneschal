@@ -5,8 +5,8 @@ import { getListing } from "@/server/services/listings";
 import { listListingOffers } from "@/server/services/offers";
 import { listContractPacks, getContractPackUrl } from "@/server/services/contractPack";
 import { listingReadiness } from "@/server/calculators/listingReadiness";
-import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, EmptyState, Field, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Card, DubaiDate, EmptyState, Field, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import {
   acceptOfferAction,
   archiveListingAction,
@@ -83,7 +83,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             {canPublish ? (
               <form action={publishListingAction}>
                 <input type="hidden" name="id" value={listing.id} />
-                <Button type="submit">Publish</Button>
+                <SubmitButton pendingLabel="Publishing…">Publish</SubmitButton>
               </form>
             ) : listing.status !== "PUBLISHED" ? (
               <span className="text-sm text-muted">Complete the required items to publish.</span>
@@ -91,7 +91,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             {listing.status !== "ARCHIVED" ? (
               <form action={archiveListingAction}>
                 <input type="hidden" name="id" value={listing.id} />
-                <Button type="submit" variant="secondary">Archive</Button>
+                <SubmitButton variant="secondary" pendingLabel="Archiving…">Archive</SubmitButton>
               </form>
             ) : null}
           </div>
@@ -140,13 +140,13 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                   <textarea name="description" rows={3} defaultValue={listing.description ?? ""} className={inputClass} placeholder="40+ characters describing the unit, view, parking, fit-out…" />
                 </Field>
               </div>
-              <div className="sm:col-span-2 flex items-center gap-3">
-                <Button type="submit">Save</Button>
+              <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+                <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
                 {listing.askingRent != null ? (
                   <span className="text-sm text-muted">Current asking <Money amount={String(listing.askingRent)} /></span>
                 ) : null}
                 {listing.availableFrom ? (
-                  <span className="text-sm text-muted">· available {formatDubaiDate(listing.availableFrom)}</span>
+                  <span className="text-sm text-muted">· available <DubaiDate value={listing.availableFrom} /></span>
                 ) : null}
               </div>
             </form>
@@ -155,22 +155,22 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           <Card className="mt-6">
             <h2 className="font-display mb-3 text-lg text-navy-900">Offers</h2>
             {offers.length === 0 ? (
-              <EmptyState message="No offers yet. Record a prospect's offer or propose your terms." />
+              <EmptyState title="No offers yet" message="Record a prospect's offer or propose your terms." />
             ) : (
-              <Table headers={["v", "Party", "Annual rent", "Payment", "Status", ""]}>
+              <Table stack headers={["v", "Party", "Annual rent", "Payment", "Status", ""]}>
                 {offers.map((o) => (
                   <tr key={o.id}>
-                    <Td className="figure">{o.version}</Td>
-                    <Td>{o.party}</Td>
-                    <Td><Money amount={String(o.annualRent)} /></Td>
-                    <Td>{o.paymentSchedule}</Td>
-                    <Td><Badge value={o.status} /></Td>
+                    <Td label="v" className="figure">{o.version}</Td>
+                    <Td label="Party">{o.party}</Td>
+                    <Td label="Annual rent"><Money amount={String(o.annualRent)} /></Td>
+                    <Td label="Payment">{o.paymentSchedule}</Td>
+                    <Td label="Status"><Badge value={o.status} /></Td>
                     <Td>
                       {!decided && (o.status === "SENT" || o.status === "COUNTERED") ? (
                         <form action={acceptOfferAction}>
                           <input type="hidden" name="offerId" value={o.id} />
                           <input type="hidden" name="listingId" value={listing.id} />
-                          <Button type="submit" variant="secondary">Accept</Button>
+                          <SubmitButton variant="secondary" pendingLabel="Accepting…">Accept</SubmitButton>
                         </form>
                       ) : null}
                     </Td>
@@ -198,7 +198,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                   <input name="note" className={inputClass} />
                 </Field>
                 <div className="sm:col-span-2">
-                  <Button type="submit">Record offer</Button>
+                  <SubmitButton pendingLabel="Recording…">Record offer</SubmitButton>
                 </div>
               </form>
             )}
@@ -214,7 +214,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                   {packLinks.map(({ pack, url }) => (
                     <div key={pack.id} className="rounded-md border border-line p-3 text-sm">
                       <div className="flex items-center justify-between">
-                        <span>Pack · {formatDubaiDate(pack.createdAt)} · <Badge value={pack.status} /></span>
+                        <span>Pack · <DubaiDate value={pack.createdAt} /> · <Badge value={pack.status} /></span>
                         <a href={url} target="_blank" rel="noreferrer" className="text-gold-700 hover:underline">View PDF</a>
                       </div>
                       {pack.eSignRef ? <div className="mt-1 text-xs text-muted figure">e-sign ref: {pack.eSignRef}</div> : null}
@@ -225,13 +225,13 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                             <form id={`esign-${pack.id}`} action={sendContractPackAction}>
                               <input type="hidden" name="packId" value={pack.id} />
                               <input type="hidden" name="listingId" value={listing.id} />
-                              <Button type="submit" variant="secondary">Mark sent for signature</Button>
+                              <SubmitButton variant="secondary" pendingLabel="Saving…">Mark sent for signature</SubmitButton>
                             </form>
                           )}
                           <form action={signContractPackAction}>
                             <input type="hidden" name="packId" value={pack.id} />
                             <input type="hidden" name="listingId" value={listing.id} />
-                            <Button type="submit" variant="secondary">Mark signed</Button>
+                            <SubmitButton variant="secondary" pendingLabel="Saving…">Mark signed</SubmitButton>
                           </form>
                         </div>
                       )}
@@ -242,7 +242,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               <form action={generateContractPackAction}>
                 <input type="hidden" name="offerId" value={acceptedOffer!.id} />
                 <input type="hidden" name="listingId" value={listing.id} />
-                <Button type="submit" variant="secondary">Generate contract pack</Button>
+                <SubmitButton variant="secondary" pendingLabel="Generating…">Generate contract pack</SubmitButton>
               </form>
             </Card>
           )}
