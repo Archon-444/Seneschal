@@ -91,8 +91,8 @@ async function demoUser(email: string) {
  *  returns null if a live link for the same (purpose, scope) already exists. */
 async function mintLink(args: {
   workspaceId: string;
-  purpose: "TENANT_OFFER" | "PROOF_UPLOAD" | "APPROVAL";
-  scopeType: "TENANCY" | "PROOF_REQUEST";
+  purpose: "TENANT_OFFER" | "PROOF_UPLOAD";
+  scopeType: "PROOF_REQUEST" | "OFFER";
   scopeId: string;
   contactId: string;
   createdById: string;
@@ -584,11 +584,33 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
   // Seating him as a USER would rebuild the (dead) Tenant Passport and add account friction for a
   // one-shot counterparty; uploading his docs AS the landlord would collapse to self-attestation.
   const tenantLinks: { label: string; url: string }[] = [];
+  // A real renewal Offer backs the TENANT_OFFER link: getOfferForLink resolves link.scopeId as an
+  // Offer.id, so the tenant can actually open the proposal and accept terms (the self-provenanced
+  // evidence). A landlord-party SENT offer on the Marina tenancy, proposing a modest uplift.
+  const renewalOffer = await findOrCreate(
+    () => prisma.offer.findFirst({ where: { workspaceId: workspace.id, tenancyId: marinaTenancy.id } }),
+    () =>
+      prisma.offer.create({
+        data: {
+          workspaceId: workspace.id,
+          tenancyId: marinaTenancy.id,
+          version: 1,
+          party: "LANDLORD",
+          annualRent: new Prisma.Decimal(78000), // proposed renewal (current 72,000)
+          paymentSchedule: "4 cheques",
+          paymentMethod: "Cheque",
+          termMonths: 12,
+          note: "Proposed renewal in line with the Dubai rental index.",
+          status: "SENT",
+          createdById: operator.id,
+        },
+      }),
+  );
   const offerUrl = await mintLink({
     workspaceId: workspace.id,
     purpose: "TENANT_OFFER",
-    scopeType: "TENANCY",
-    scopeId: marinaTenancy.id,
+    scopeType: "OFFER",
+    scopeId: renewalOffer.id,
     contactId: fernandes.id,
     createdById: operator.id,
   });
@@ -761,28 +783,12 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
   memberLogins.push({ email: "farina@example.com", role: "FIDUCIARY", home: homeFor("FIDUCIARY") });
 
   // Absentee landlord (managed by Farina): NOT a self-managing member — a passive CLIENT_VIEWER on
-  // the Al Noor portfolio PLUS an episodic APPROVAL link for occasional sign-offs. Two planes, one
-  // party (the dual-plane carve-out): the recurring passive view is a membership; the one-shot
-  // approval is a link.
-  const absenteeContact = await findOrCreate(
-    () => prisma.contact.findFirst({ where: { workspaceId: workspace.id, name: "Al Noor Principal" } }),
-    () =>
-      prisma.contact.create({
-        data: { workspaceId: workspace.id, kind: "OWNER", name: "Al Noor Principal", email: "absentee-owner@example.com" },
-      }),
-  );
+  // the Al Noor portfolio. The episodic APPROVAL sign-off link is the other half of the dual-plane
+  // model (see the reconciliation doc), but the public /link APPROVAL handler isn't built yet, so we
+  // do not seed a dead link for it here — the member plane is the live demonstration.
   const absenteeUser = await demoUser("absentee-owner@example.com");
   await seatSoleMembership(workspace.id, absenteeUser.id, "CLIENT_VIEWER", { clientPrincipalId: alNoor.id });
   memberLogins.push({ email: "absentee-owner@example.com", role: "CLIENT_VIEWER", home: homeFor("CLIENT_VIEWER") });
-  const approvalUrl = await mintLink({
-    workspaceId: workspace.id,
-    purpose: "APPROVAL",
-    scopeType: "TENANCY",
-    scopeId: marinaTenancy.id,
-    contactId: absenteeContact.id,
-    createdById: operator.id,
-  });
-  if (approvalUrl) linkUrls.push({ label: "Absentee landlord approval (Al Noor — sign-off)", url: approvalUrl });
 
   // Orchestrator member gallery: one demo login per RECURRING role, iterating the capability matrix
   // (the runtime role list) so adding a Role can't silently omit it. TENANT is never a member (it

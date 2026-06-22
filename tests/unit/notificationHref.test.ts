@@ -14,7 +14,12 @@ describe("notificationHref", () => {
     // A cheque alert is relatedType TENANCY but belongs on /payments, not a renewal page.
     expect(notificationHref({ relatedType: "TENANCY", relatedId: "t1", category: "PAYMENTS" })).toBe("/payments");
     expect(notificationHref({ relatedType: "OFFER", relatedId: "o1", category: "RENEWALS" })).toBe("/renewals");
-    expect(notificationHref({ relatedType: "LISTING", relatedId: "l1", category: "ENQUIRIES" })).toBe("/enquiries");
+  });
+
+  it("does not deep-link an ENQUIRIES notification while the marketplace loop is quarantined", () => {
+    // /enquiries is gated server-side (listings quarantine), so the resolver must not route there —
+    // an enquiry notification stays non-clickable rather than becoming a dead 404 link.
+    expect(notificationHref({ relatedType: "LISTING", relatedId: "l1", category: "ENQUIRIES" })).toBeNull();
   });
 
   it("routes by category alone when there is no related entity", () => {
