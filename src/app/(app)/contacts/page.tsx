@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { listContacts } from "@/server/services/contacts";
-import { Badge, Button, Card, EmptyState, Field, inputClass, PageHeader, SearchForm, Table, Td } from "@/components/ui";
+import { Badge, EmptyState, Field, FormSection, inputClass, PageHeader, SearchForm, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { createContactAction } from "../actions";
 
 const KINDS = ["TENANT", "OWNER", "AGENT", "VENDOR", "CONTRACTOR", "CLIENT", "PARTNER", "BUILDING_MANAGEMENT", "ACCOUNTANT", "LAWYER", "OTHER"];
@@ -18,36 +19,46 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
         <div className="lg:col-span-2">
           <SearchForm q={q} placeholder="Search name, email, phone, Emirates ID…" />
           {contacts.length === 0 ? (
-            <EmptyState message={q ? `No contacts match “${q}”.` : "No contacts yet."} />
+            <EmptyState
+              title={q ? "No matches" : "No contacts yet"}
+              message={q ? `No contacts match “${q}”.` : "Add your first contact with the form."}
+            />
           ) : (
-            <Table headers={["Name", "Kind", "Emirates ID", "Email", "Phone"]}>
+            <Table stack headers={["Name", "Kind", "Emirates ID", "Email", "Phone"]}>
               {contacts.map((c) => (
-                <tr key={c.id} className="hover:bg-ivory-50">
-                  <Td>
+                <tr key={c.id}>
+                  <Td label="Name">
                     <Link href={`/contacts/${c.id}`} className="font-medium text-navy-900 hover:underline">
                       {c.name}
                     </Link>
                     {c.company && <div className="text-xs text-navy-300">{c.company}</div>}
                   </Td>
-                  <Td><Badge value={c.kind} /></Td>
-                  <Td className="figure text-xs">{c.emiratesId ?? "—"}</Td>
-                  <Td>{c.email ?? "—"}</Td>
-                  <Td className="figure">{c.phone ?? "—"}</Td>
+                  <Td label="Kind">
+                    <Badge value={c.kind} />
+                  </Td>
+                  <Td label="Emirates ID" className="figure text-xs">
+                    {c.emiratesId ?? "—"}
+                  </Td>
+                  <Td label="Email">{c.email ?? "—"}</Td>
+                  <Td label="Phone" className="figure">
+                    {c.phone ?? "—"}
+                  </Td>
                 </tr>
               ))}
             </Table>
           )}
         </div>
-        <Card>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Add contact</h2>
+        <FormSection title="Add contact">
           <form action={createContactAction} className="space-y-3">
-            <Field label="Name">
+            <Field label="Name" required>
               <input name="name" required className={inputClass} />
             </Field>
             <Field label="Kind">
               <select name="kind" className={inputClass}>
                 {KINDS.map((k) => (
-                  <option key={k} value={k}>{k.replace(/_/g, " ")}</option>
+                  <option key={k} value={k}>
+                    {k.replace(/_/g, " ")}
+                  </option>
                 ))}
               </select>
             </Field>
@@ -60,9 +71,9 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
             <Field label="Company">
               <input name="company" className={inputClass} />
             </Field>
-            <Button type="submit">Add</Button>
+            <SubmitButton pendingLabel="Adding…">Add</SubmitButton>
           </form>
-        </Card>
+        </FormSection>
       </div>
     </>
   );

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { listClients } from "@/server/services/clients";
 import { listProperties } from "@/server/services/properties";
-import { Button, Card, EmptyState, Field, inputClass, PageHeader, SearchForm, Table, Td } from "@/components/ui";
+import { EmptyState, Field, FormSection, inputClass, PageHeader, SearchForm, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { createClientAction, generateReportAction } from "../actions";
 
 export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
@@ -17,20 +18,23 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
         <div className="lg:col-span-2">
           <SearchForm q={q} placeholder="Search clients…" />
           {clients.length === 0 ? (
-            <EmptyState message={q ? `No clients match “${q}”.` : "No clients yet."} />
+            <EmptyState
+              title={q ? "No matches" : "No clients yet"}
+              message={q ? `No clients match “${q}”.` : "Add your first client with the form."}
+            />
           ) : (
-            <Table headers={["Client", "Properties", "Monthly report"]}>
+            <Table stack headers={["Client", "Properties", "Monthly report"]}>
               {clients.map((c) => (
                 <tr key={c.id}>
-                  <Td>
+                  <Td label="Client">
                     <Link href={`/clients/${c.id}`} className="font-medium text-navy-900 hover:underline">
                       {c.displayName}
                     </Link>
                   </Td>
-                  <Td className="figure">
+                  <Td label="Properties" className="figure">
                     {properties.filter((p) => p.clientPrincipalId === c.id).length}
                   </Td>
-                  <Td>
+                  <Td label="Monthly report">
                     <form action={generateReportAction}>
                       <input type="hidden" name="clientPrincipalId" value={c.id} />
                       <button className="text-sm text-navy-500 underline-offset-2 hover:text-navy-900 hover:underline">
@@ -43,18 +47,17 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
             </Table>
           )}
         </div>
-        <Card>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Add client</h2>
+        <FormSection title="Add client">
           <form action={createClientAction} className="space-y-3">
-            <Field label="Display name">
+            <Field label="Display name" required>
               <input name="displayName" required className={inputClass} />
             </Field>
             <Field label="Notes">
               <textarea name="notes" rows={2} className={inputClass} />
             </Field>
-            <Button type="submit">Add</Button>
+            <SubmitButton pendingLabel="Adding…">Add</SubmitButton>
           </form>
-        </Card>
+        </FormSection>
       </div>
     </>
   );
