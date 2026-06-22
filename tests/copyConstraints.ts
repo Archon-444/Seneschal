@@ -8,7 +8,7 @@
 // "legal adviser", "not legal advice", and "by lawyer" must all pass. Use the
 // constraint-safe phrasing instead: "estimated permissible increase",
 // "index-based ceiling estimate", "based on supplied data", "review before action".
-export const BANNED_COPY: RegExp[] = [/\blawful\b/i, /\bby law\b/i, /\benforceable\b/i, /legal band/i];
+export const BANNED_COPY: RegExp[] = [/\blawful\b/i, /\bby law\b/i, /\benforceable\b/i, /legal band/i, /\bentitled to\b/i];
 
 /** The first banned legal term found in `text`, or null when clean. */
 export function findBannedCopy(text: string): string | null {

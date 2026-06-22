@@ -195,7 +195,7 @@ describe("renewal negotiation", () => {
 
   it("serving notice records evidence and moves the case + tenancy", async () => {
     const rc = await openRenewalCase(W.ctx, tenancyId);
-    await serveRenewalNotice(W.ctx, { renewalCaseId: rc.id });
+    await serveRenewalNotice(W.ctx, { renewalCaseId: rc.id, serviceMethod: "EMAIL", serviceRef: "inbox-2026-0612" });
     const after = await prisma.renewalCase.findUnique({ where: { id: rc.id } });
     expect(after!.status).toBe("NOTICE_SERVED");
     expect(after!.noticeServedAt).toBeTruthy();
@@ -227,6 +227,24 @@ describe("tenant secure-response link", () => {
     });
     return { rc, offer };
   }
+
+  it("freezes the offer-time index citation — a later capture does not change the tenant view", async () => {
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 96_000 });
+    const { offer } = await landlordOffer();
+    const { linkId } = await createSecureLink(W.ctx, { purpose: "TENANT_OFFER", scopeType: "OFFER", scopeId: offer.id });
+    const link = await prisma.secureLink.findUnique({ where: { id: linkId } });
+
+    const before = await getOfferForLink(link!);
+    expect(before?.marketRentAvg).toBe(96_000);
+    const citedAt = before?.indexCapturedAt?.getTime();
+    expect(citedAt).toBeTruthy();
+
+    // A later, higher capture moves the live figure — the tenant view must NOT follow it.
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 130_000 });
+    const after = await getOfferForLink(link!);
+    expect(after?.marketRentAvg).toBe(96_000); // still the offer-time figure
+    expect(after?.indexCapturedAt?.getTime()).toBe(citedAt); // same captured date
+  });
 
   it("lets a tenant counter via the link — a real versioned TENANT offer", async () => {
     const { rc, offer } = await landlordOffer();

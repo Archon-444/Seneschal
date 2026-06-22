@@ -253,17 +253,19 @@ model Tenancy {
   createdAt        DateTime      @default(now())
   archivedAt       DateTime?
   /** PR6: lineage to the predecessor tenancy when this row was minted by
-   *  mintRenewedTenancy. NULL on original (non-renewal) tenancies. */
-  renewsFromTenancyId String?
+   *  mintRenewedTenancy. NULL on original (non-renewal) tenancies. @unique so a
+   *  predecessor can have at most one successor — the DB backstop against a
+   *  concurrent double-mint (see mintRenewedTenancy). Postgres allows many NULLs
+   *  under a unique index, so original tenancies are unaffected. */
+  renewsFromTenancyId String?       @unique
   renewsFrom       Tenancy?      @relation("TenancyRenewal", fields: [renewsFromTenancyId], references: [id])
-  successors       Tenancy[]     @relation("TenancyRenewal")
+  successor        Tenancy?      @relation("TenancyRenewal")
   property         Property      @relation(fields: [propertyId], references: [id])
   contractDoc      Document?     @relation("TenancyContract", fields: [contractDocId], references: [id])
   paymentItems     PaymentItem[]
   deadlines        Deadline[]
   @@index([workspaceId, propertyId])
   @@index([workspaceId, endDate])
-  @@index([renewsFromTenancyId])
 }
 
 enum TenancyStatus {
@@ -284,6 +286,13 @@ enum RecordSource {
 
 // ───────────────────────────── Listings [1B] — landlord supply side
 
+// ───────────────────────────────────────────────────────────────────────────
+// ARCHIVED — out of product scope (see QUARANTINE.md). The marketplace/passport
+// models below (Listing, TenantPassport, Enquiry, Viewing, ContractPack) back
+// killed concepts, not roadmap. They are kept fail-closed and unreachable, not
+// maintained; core renewal/evidence code must not depend on them.
+// ───────────────────────────────────────────────────────────────────────────
+//
 // A landlord's marketing record for a (typically vacant) owned unit. Scoped to
 // the owning Property, so the LANDLORD persona reaches it through the same
 // owned-property id-set as everything else (services/contactScope.ts). The
@@ -1004,6 +1013,9 @@ enum EvidenceType {
   INDEX_CAPTURED
   NOTICE_GENERATED
   NOTICE_APPROVED
+  // Service intent logged without proof yet (pending-evidence state). The honest
+  // counterpart to NOTICE_SERVED — never assert service that has no evidence.
+  NOTICE_SERVICE_RECORDED
   NOTICE_SERVED
   OFFER_PROPOSED
   OFFER_COUNTERED
@@ -1345,6 +1357,14 @@ model Offer {
   // later capture changes the ceiling. That's the whole point: an offer's
   // compliance posture has to be reproducible from the row alone.
   permittedMaxSnapshot  Decimal?  @db.Decimal(12, 2)
+  // PR-pilot: the index capture this offer was assessed against, frozen at send
+  // time. indexCitation is a self-contained snapshot bundle (captureId, source,
+  // indexSource, capturedAt, calculatorVersion, comparableBasis, marketRentAvg,
+  // permittedNewRentMax, provisional) so the tenant-facing comparison is
+  // reproducible from the offer row alone — never re-derived from the latest live
+  // capture. See proposeOffer / getOfferForLink.
+  indexCaptureId        String?
+  indexCitation         Json?
   responseDueDeadlineId String?
   proposedStartDate     DateTime?
   proposedEndDate       DateTime?
@@ -1385,6 +1405,13 @@ model Notice {
   serviceMethod   ServiceMethod?
   serviceRef      String?                            // e.g. courier tracking id / inbox ref
   docId           String?                            // the served Notice document
+  // PR-pilot: an explicit manual-attestation record is one of the three accepted
+  // proofs of service (alongside serviceRef and docId). A notice may only reach
+  // SERVED with at least one of them; without any it rests at
+  // SERVICE_RECORDED_PENDING_EVIDENCE (see serveNoticeFormal / confirmNoticeService).
+  attestation     String?                            // signed manual attestation text
+  attestedById    String?
+  attestedAt      DateTime?
   templateCode    String?                            // for compliance-copy audit (PR6c)
   templateVersion String?
   archivedAt      DateTime?
@@ -1402,6 +1429,10 @@ enum NoticeKind {
 enum NoticeStatus {
   GENERATED
   APPROVED
+  // Service intent has been recorded but no proof (delivery reference, uploaded
+  // document, or signed attestation) is attached yet. NOT a served notice — the
+  // case/tenancy do not advance and no NOTICE_SERVED evidence is emitted.
+  SERVICE_RECORDED_PENDING_EVIDENCE
   SERVED
   WITHDRAWN
 }

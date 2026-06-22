@@ -103,7 +103,7 @@ describe("end-to-end Stage-2 renewal walkthrough", () => {
     await new Promise((r) => setTimeout(r, 5));
     await approveNotice(W.ctx, notice.id);
     await new Promise((r) => setTimeout(r, 5));
-    await serveNoticeFormal(W.ctx, { noticeId: notice.id, serviceMethod: "EMAIL" });
+    await serveNoticeFormal(W.ctx, { noticeId: notice.id, serviceMethod: "EMAIL", serviceRef: "inbox-ref" });
     await new Promise((r) => setTimeout(r, 5));
 
     // --- 4. Landlord proposes an offer. Snapshot = 84_000 (the live ceiling).
