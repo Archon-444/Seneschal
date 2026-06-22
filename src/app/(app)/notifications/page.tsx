@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { listMyNotifications } from "@/server/services/notifications";
-import { Button, EmptyState, PageHeader } from "@/components/ui";
+import { Button, DubaiDate, EmptyState, PageHeader } from "@/components/ui";
 import { ChevronDownIcon } from "@/components/icons";
 import { notificationHref } from "@/components/shell/notificationHref";
-import { formatDubaiDate } from "@/server/calculators/dates";
 import { markAllReadAction } from "./actions";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -39,7 +38,7 @@ export default async function NotificationsPage() {
       />
 
       {items.length === 0 ? (
-        <EmptyState message="You're all caught up — no notifications yet." />
+        <EmptyState title="All caught up" message="No notifications yet — Seneschal will flag things here as they need you." />
       ) : (
         <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white shadow-sm">
           {items.map((it) => {
@@ -63,7 +62,7 @@ export default async function NotificationsPage() {
                   <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-gold-700">
                     {CATEGORY_LABEL[it.category ?? ""] ?? ""}
                   </div>
-                  <div className="figure mt-0.5 text-[11px] text-muted">{formatDubaiDate(it.createdAt)}</div>
+                  <div className="mt-0.5 text-[11px] text-muted"><DubaiDate value={it.createdAt} /></div>
                 </div>
                 {href && (
                   <ChevronDownIcon

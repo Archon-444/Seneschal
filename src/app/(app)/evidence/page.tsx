@@ -32,7 +32,7 @@ export default async function EvidencePage({
         ))}
       </div>
       {events.length === 0 ? (
-        <EmptyState message="No evidence recorded yet." />
+        <EmptyState title="No evidence yet" message="Evidence events appear here as actions are recorded — append-only." />
       ) : (
         <ol className="relative ml-3 max-w-3xl space-y-5 border-l border-ivory-300 pl-6">
           {events.map((e) => (
@@ -44,7 +44,7 @@ export default async function EvidencePage({
                 {e.onBehalfOfId ? " (on behalf of)" : ""} · scope {e.scopeType}
               </div>
               {e.payload != null && (
-                <pre className="mt-1 max-w-xl overflow-x-auto rounded bg-ivory-100 p-2 text-[11px] text-navy-500">
+                <pre className="mt-1 max-w-xl overflow-x-auto rounded-md border border-line bg-ivory-100 p-2.5 text-[11px] text-navy-700">
                   {JSON.stringify(e.payload, null, 1)}
                 </pre>
               )}
