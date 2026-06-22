@@ -2,7 +2,8 @@ import { requireCtx } from "@/server/auth/request";
 import { listContacts } from "@/server/services/contacts";
 import { listClients } from "@/server/services/clients";
 import { listProperties } from "@/server/services/properties";
-import { Button, Card, Eyebrow, Field, inputClass, PageHeader } from "@/components/ui";
+import { Field, FormGrid, FormSection, inputClass, PageHeader } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { onboardTenancyAction } from "../../actions";
 
 // Combined onboarding (Ejari-shaped): one screen creates landlord + tenant +
@@ -27,9 +28,7 @@ export default async function OnboardingPage() {
         subtitle="Capture the landlord, tenant, asset and contract in one pass. Reuse an existing record from a dropdown, or fill the fields to create a new one. Only the contract dates and rent are required."
       />
       <form action={onboardTenancyAction} className="max-w-3xl space-y-6">
-        {/* ── Landlord ───────────────────────────── */}
-        <Card>
-          <Eyebrow>Landlord · owner / lessor</Eyebrow>
+        <FormSection eyebrow="Landlord · owner / lessor">
           <Field label="Use existing contact">
             <select name="landlordContactId" className={inputClass}>
               <option value="">— create new below —</option>
@@ -38,7 +37,7 @@ export default async function OnboardingPage() {
               ))}
             </select>
           </Field>
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <FormGrid className="mt-4">
             <Field label="Owner name"><input name="ll_name" className={inputClass} placeholder="Bassam Rizk" /></Field>
             <Field label="Emirates ID"><input name="ll_emiratesId" className={inputClass} placeholder="784-…" /></Field>
             <Field label="Email"><input name="ll_email" type="email" className={inputClass} /></Field>
@@ -47,12 +46,10 @@ export default async function OnboardingPage() {
             <Field label="Company (if any)"><input name="ll_company" className={inputClass} /></Field>
             <Field label="License no (company)"><input name="ll_licenseNo" className={inputClass} /></Field>
             <Field label="Licensing authority"><input name="ll_licensingAuthority" className={inputClass} /></Field>
-          </div>
-        </Card>
+          </FormGrid>
+        </FormSection>
 
-        {/* ── Tenant ───────────────────────────── */}
-        <Card>
-          <Eyebrow>Tenant</Eyebrow>
+        <FormSection eyebrow="Tenant">
           <Field label="Use existing contact">
             <select name="tenantContactId" className={inputClass}>
               <option value="">— create new below —</option>
@@ -61,7 +58,7 @@ export default async function OnboardingPage() {
               ))}
             </select>
           </Field>
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <FormGrid className="mt-4">
             <Field label="Tenant name"><input name="tn_name" className={inputClass} /></Field>
             <Field label="Emirates ID"><input name="tn_emiratesId" className={inputClass} placeholder="784-…" /></Field>
             <Field label="Email"><input name="tn_email" type="email" className={inputClass} /></Field>
@@ -70,12 +67,10 @@ export default async function OnboardingPage() {
             <Field label="Company (if any)"><input name="tn_company" className={inputClass} /></Field>
             <Field label="License no (company)"><input name="tn_licenseNo" className={inputClass} /></Field>
             <Field label="Licensing authority"><input name="tn_licensingAuthority" className={inputClass} /></Field>
-          </div>
-        </Card>
+          </FormGrid>
+        </FormSection>
 
-        {/* ── Asset ───────────────────────────── */}
-        <Card>
-          <Eyebrow>Asset · property</Eyebrow>
+        <FormSection eyebrow="Asset · property">
           <Field label="Use existing property">
             <select name="propertyId" className={inputClass}>
               <option value="">— create new below —</option>
@@ -86,7 +81,7 @@ export default async function OnboardingPage() {
               ))}
             </select>
           </Field>
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <FormGrid className="mt-4">
             <Field label="Client">
               <select name="pr_clientPrincipalId" className={inputClass}>
                 <option value="">—</option>
@@ -112,29 +107,27 @@ export default async function OnboardingPage() {
             <Field label="Plot no"><input name="pr_plotNo" className={inputClass} /></Field>
             <Field label="Makani no"><input name="pr_makaniNo" className={inputClass} /></Field>
             <Field label="DEWA premises no"><input name="pr_dewaPremiseNo" className={inputClass} placeholder="684-00541-7" /></Field>
-          </div>
-        </Card>
+          </FormGrid>
+        </FormSection>
 
-        {/* ── Contract ───────────────────────────── */}
-        <Card>
-          <Eyebrow>Contract</Eyebrow>
-          <div className="grid grid-cols-2 gap-4">
+        <FormSection eyebrow="Contract">
+          <FormGrid>
             <Field label="Ejari no"><input name="ejariNo" className={inputClass} /></Field>
             <Field label="Notice period (days)"><input name="noticePeriodDays" type="number" min="1" defaultValue="90" className={inputClass} /></Field>
-            <Field label="Start date"><input name="startDate" type="date" required className={inputClass} /></Field>
-            <Field label="End date"><input name="endDate" type="date" required className={inputClass} /></Field>
-            <Field label="Annual rent (AED)"><input name="annualRent" type="number" min="0" step="0.01" required className={inputClass} /></Field>
+            <Field label="Start date" required><input name="startDate" type="date" required className={inputClass} /></Field>
+            <Field label="End date" required><input name="endDate" type="date" required className={inputClass} /></Field>
+            <Field label="Annual rent (AED)" required><input name="annualRent" type="number" min="0" step="0.01" required className={inputClass} /></Field>
             <Field label="Security deposit (AED)"><input name="depositAmount" type="number" min="0" step="0.01" className={inputClass} /></Field>
             <Field label="Mode of payment"><input name="paymentTermsNote" className={inputClass} placeholder="Six (6) cheques in advance" /></Field>
             <Field label="Generate cheques (count)"><input name="chequeCount" type="number" min="0" max="12" className={inputClass} placeholder="6" /></Field>
-          </div>
+          </FormGrid>
           <p className="mt-3 text-xs text-muted">
             Cheques are split evenly across the term and sum to the annual rent. Notice
             gate, expiry and renewal deadlines are rule-based — review before action.
           </p>
-        </Card>
+        </FormSection>
 
-        <Button type="submit">Create tenancy &amp; records</Button>
+        <SubmitButton pendingLabel="Creating…">Create tenancy &amp; records</SubmitButton>
       </form>
     </>
   );
