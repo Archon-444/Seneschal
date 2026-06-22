@@ -1,16 +1,15 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { formatDubaiDate, formatDubaiDateTime } from "@/server/calculators/dates";
+import { badgeTone, BADGE_LABELS } from "./badgeTones";
 
 // Shared UI primitives — Seneschal design language: ivory surfaces, navy ink,
 // gold accents, Fraunces display, Public Sans body, mono figures. Restyling
-// here propagates to every screen.
+// here propagates to every screen. Type treatments use the .t-* scale and
+// money/dates always render mono via .figure (see globals.css).
 
 export function Eyebrow({ children }: { children: ReactNode }) {
-  return (
-    <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-gold-700">
-      {children}
-    </p>
-  );
+  return <p className="t-eyebrow mb-2 text-gold-700">{children}</p>;
 }
 
 export function PageHeader({
@@ -28,7 +27,7 @@ export function PageHeader({
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
       <div>
         {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-        <h1 className="font-display text-[30px] font-semibold text-navy-900">{title}</h1>
+        <h1 className="font-display t-title text-navy-900">{title}</h1>
         {subtitle && <p className="mt-1 max-w-2xl text-sm text-muted">{subtitle}</p>}
       </div>
       {actions && <div className="flex gap-2">{actions}</div>}
@@ -87,14 +86,14 @@ export function KpiCard({
         className={`rounded-xl border border-navy-900 bg-navy-900 p-5 text-white shadow-sm ${href ? "transition hover:brightness-110" : ""}`}
       >
         <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-gold-500">{label}</div>
-        <div className="figure mt-2 text-[2rem] font-semibold leading-none">{value}</div>
+        <div className="figure t-kpi mt-2">{value}</div>
         <div className="mt-3 h-px w-7 bg-gold-500/60" />
         {sub && <div className="mt-2 text-[11px] text-white/55">{sub}</div>}
       </div>
     ) : (
       <Card hover={!!href}>
         <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">{label}</div>
-        <div className={`figure mt-2 text-[2rem] font-semibold leading-none ${toneClass}`}>{value}</div>
+        <div className={`figure t-kpi mt-2 ${toneClass}`}>{value}</div>
         <div className="mt-3 h-px w-7 bg-gold-500/40" />
         {sub && <div className="mt-2 text-[11px] text-muted">{sub}</div>}
       </Card>
@@ -106,70 +105,65 @@ export function KpiCard({
   );
 }
 
-const BADGE_TONES: Record<string, string> = {
-  // payment + generic statuses
-  SCHEDULED: "bg-navy-50 text-navy-500",
-  REQUESTED: "bg-amber-100 text-amber-700",
-  RECEIVED: "bg-verde-100 text-verde-700",
-  DEPOSITED: "bg-verde-100 text-verde-700",
-  CLEARED: "bg-verde-100 text-verde-700",
-  LATE: "bg-claret-100 text-claret-700",
-  BOUNCED: "bg-claret-100 text-claret-700",
-  CANCELLED: "bg-ivory-200 text-muted",
-  OPEN: "bg-navy-50 text-navy-500",
-  SENT: "bg-amber-100 text-amber-700",
-  SUBMITTED: "bg-amber-100 text-amber-700",
-  WAITING_PROOF: "bg-amber-100 text-amber-700",
-  APPROVED: "bg-verde-100 text-verde-700",
-  REJECTED: "bg-claret-100 text-claret-700",
-  OVERDUE: "bg-claret-100 text-claret-700",
-  CLOSED: "bg-ivory-200 text-muted",
-  ACTIVE: "bg-verde-100 text-verde-700",
-  ARCHIVED: "bg-ivory-200 text-muted",
-  COMMITTED: "bg-verde-100 text-verde-700",
-  ROLLED_BACK: "bg-claret-100 text-claret-700",
-  PENDING: "bg-navy-50 text-navy-500",
-  EXTRACTED: "bg-amber-100 text-amber-700",
-  CONFLICT: "bg-claret-100 text-claret-700",
-  ACCEPTED: "bg-verde-100 text-verde-700",
-  // severities
-  INFO: "bg-navy-50 text-navy-500",
-  WARN: "bg-amber-100 text-amber-700",
-  CRITICAL: "bg-claret-100 text-claret-700",
-  ACKNOWLEDGED: "bg-navy-50 text-navy-500",
-};
-
-export function Badge({ value, dot = true }: { value: string; dot?: boolean }) {
-  const tone = BADGE_TONES[value] ?? "bg-navy-50 text-navy-500";
+export function Badge({
+  value,
+  dot = true,
+  label,
+}: {
+  value: string;
+  dot?: boolean;
+  label?: string;
+}) {
+  const tone = badgeTone(value);
+  const text = label ?? BADGE_LABELS[value] ?? value.replace(/_/g, " ");
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${tone}`}
     >
       {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
-      {value.replace(/_/g, " ")}
+      {text}
     </span>
   );
 }
 
-export function EmptyState({ message }: { message: string }) {
+/** Zero-state. `message` describes the empty; optional `title` + `action` turn
+ *  it into an invitation to act. */
+export function EmptyState({
+  message,
+  title,
+  action,
+}: {
+  message: string;
+  title?: string;
+  action?: ReactNode;
+}) {
   return (
-    <div className="rounded-xl border border-dashed border-line bg-ivory-100 p-10 text-center text-sm text-muted">
-      {message}
+    <div className="rounded-xl border border-dashed border-line bg-ivory-100 p-10 text-center">
+      {title && <p className="mb-1 text-sm font-semibold text-navy-900">{title}</p>}
+      <p className="text-sm text-muted">{message}</p>
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>
   );
 }
 
-export function Table({ headers, children }: { headers: string[]; children: ReactNode }) {
+/** Shared table. `stack` opts each row into a labeled card below `sm` — pass a
+ *  `label` to each <Td> for the mobile row label. Row hover comes from .ui-table. */
+export function Table({
+  headers,
+  children,
+  stack = false,
+}: {
+  headers: string[];
+  children: ReactNode;
+  stack?: boolean;
+}) {
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
-      <table className="w-full text-sm">
+      <table className={`ui-table w-full text-sm ${stack ? "table-stack" : ""}`}>
         <thead>
           <tr className="border-b border-line bg-ivory-100 text-left">
             {headers.map((h) => (
-              <th
-                key={h}
-                className="px-4 py-2.5 text-[10.5px] font-bold uppercase tracking-wider text-muted"
-              >
+              <th key={h} className="t-th px-4 py-2.5 text-muted">
                 {h}
               </th>
             ))}
@@ -181,8 +175,21 @@ export function Table({ headers, children }: { headers: string[]; children: Reac
   );
 }
 
-export function Td({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <td className={`px-4 py-2.5 align-top text-navy-700 ${className}`}>{children}</td>;
+export function Td({
+  children,
+  className = "",
+  label,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** Mobile row label, surfaced by the `stack` table treatment. */
+  label?: string;
+}) {
+  return (
+    <td data-label={label} className={`px-4 py-2.5 align-top text-navy-700 ${className}`}>
+      {children}
+    </td>
+  );
 }
 
 /** Date-chipped reminder row (dashboard "Coming up"). `hot` = deadline at risk. */
@@ -243,11 +250,30 @@ export function LinkButton({ href, children, variant = "secondary" }: { href: st
   );
 }
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({
+  label,
+  children,
+  hint,
+  required,
+}: {
+  label: string;
+  children: ReactNode;
+  /** Short helper text under the control. */
+  hint?: string;
+  required?: boolean;
+}) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted">{label}</span>
+      <span className="t-label mb-1 block text-muted">
+        {label}
+        {required && (
+          <span className="ml-0.5 text-gold-700" aria-hidden="true">
+            *
+          </span>
+        )}
+      </span>
       {children}
+      {hint && <span className="t-caption mt-1 block text-muted">{hint}</span>}
     </label>
   );
 }
@@ -278,7 +304,7 @@ export function SearchForm({
         name="q"
         defaultValue={q ?? ""}
         placeholder={placeholder}
-        className="w-full max-w-sm rounded-lg border border-line bg-white px-3 py-2 text-sm text-navy-900 focus:border-gold-500 focus:outline-none"
+        className={`${inputClass} max-w-sm`}
       />
       <Button type="submit" variant="secondary">Search</Button>
       {q ? <LinkButton href="?">Clear</LinkButton> : null}
@@ -331,5 +357,112 @@ export function BackLink({ href, label }: { href: string; label: string }) {
     <Link href={href} className="mb-4 inline-block text-sm text-muted hover:text-navy-900">
       ← {label}
     </Link>
+  );
+}
+
+/** Calm, document-grade failure card. Used by route error boundaries
+ *  (see RouteError) and anywhere a section can't load. Errors don't apologize. */
+export function ErrorState({
+  title = "Something didn't load",
+  message = "Please try again.",
+  onRetry,
+  retryLabel = "Try again",
+}: {
+  title?: string;
+  message?: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-line bg-white p-10 text-center shadow-sm">
+      <p className="font-display text-lg font-semibold text-navy-900">{title}</p>
+      <p className="mx-auto mt-1 max-w-md text-sm text-muted">{message}</p>
+      {onRetry && (
+        <div className="mt-5 flex justify-center">
+          <Button onClick={onRetry}>{retryLabel}</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Right-aligned cluster for inline row / section actions. */
+export function Actions({ children }: { children: ReactNode }) {
+  return <div className="flex flex-wrap items-center justify-end gap-2">{children}</div>;
+}
+
+/** A date rendered in Dubai convention, mono per the design language. Reuse this
+ *  instead of hand-rolling a formatter or importing the calculator into a page. */
+export function DubaiDate({ value, className = "" }: { value: Date | string; className?: string }) {
+  const d = typeof value === "string" ? new Date(value) : value;
+  return <span className={`figure ${className}`}>{formatDubaiDate(d)}</span>;
+}
+
+/** A real timestamp (time slot, e.g. a viewing) rendered in Dubai-local time, mono. */
+export function DubaiDateTime({
+  value,
+  className = "",
+}: {
+  value: Date | string;
+  className?: string;
+}) {
+  const d = typeof value === "string" ? new Date(value) : value;
+  return <span className={`figure ${className}`}>{formatDubaiDateTime(d)}</span>;
+}
+
+/** A titled form section: Card + Eyebrow heading (generalizes onboarding/new). */
+export function FormSection({
+  eyebrow,
+  title,
+  children,
+  className = "",
+}: {
+  eyebrow?: string;
+  title?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+      {title && <h2 className="font-display mb-3 text-lg font-semibold text-navy-900">{title}</h2>}
+      {children}
+    </Card>
+  );
+}
+
+/** Responsive field grid: one column on mobile, `cols` from `sm` up. */
+export function FormGrid({
+  children,
+  cols = 2,
+  className = "",
+}: {
+  children: ReactNode;
+  cols?: 1 | 2 | 3;
+  className?: string;
+}) {
+  const colClass = cols === 1 ? "sm:grid-cols-1" : cols === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2";
+  return <div className={`grid grid-cols-1 gap-4 ${colClass} ${className}`}>{children}</div>;
+}
+
+/** Consistent submit row; pass a helper note alongside the button(s). */
+export function FormActions({ children, note }: { children: ReactNode; note?: ReactNode }) {
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-3">
+      {children}
+      {note && <span className="t-caption text-muted">{note}</span>}
+    </div>
+  );
+}
+
+/** Renders a server action's returned error/success. Wire ONLY to forms whose
+ *  action already returns a status (useActionState) — never add an error channel
+ *  to a void action just to surface this. */
+export function FormStatus({ error, success }: { error?: string | null; success?: string | null }) {
+  if (!error && !success) return null;
+  return error ? (
+    <p className="rounded-lg bg-claret-100 px-3 py-2 text-sm text-claret-700">{error}</p>
+  ) : (
+    <p className="rounded-lg bg-verde-100 px-3 py-2 text-sm text-verde-700">{success}</p>
   );
 }

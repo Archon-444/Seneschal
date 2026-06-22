@@ -64,3 +64,90 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Type scale ─────────────────────────────────────────────────────────────
+   Centralizes the recurring text treatments so screens stop hand-rolling
+   text-[NNpx]. Values mirror the existing kit exactly (value-preserving). */
+.t-title { font-size: 30px; font-weight: 600; }
+.t-kpi { font-size: 2rem; line-height: 1; font-weight: 600; }
+.t-eyebrow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; }
+.t-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; }
+.t-th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; }
+.t-caption { font-size: 11px; }
+
+/* ── Focus: a visible keyboard ring everywhere (quality floor) ─────────────── */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible,
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-gold-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Tables: consistent, calm row hover on the shared kit table ─────────────── */
+.ui-table tbody tr {
+  transition: background-color 0.12s ease;
+}
+.ui-table tbody tr:hover {
+  background-color: var(--color-ivory-100);
+}
+
+/* ── Responsive table: opt-in stack-to-cards below sm ───────────────────────
+   Add `table-stack` to <Table>; pass `label` to each <Td> for the row label. */
+@media (max-width: 640px) {
+  .table-stack thead { display: none; }
+  .table-stack tbody tr {
+    display: block;
+    border-bottom: 1px solid var(--color-line);
+    padding: 0.4rem 0;
+  }
+  .table-stack tbody td {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.3rem 1rem;
+    text-align: right;
+  }
+  .table-stack tbody td::before {
+    content: attr(data-label);
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    color: var(--color-muted);
+    text-align: left;
+  }
+}
+
+/* ── Skeleton shimmer (reduced-motion neutralizes the animation below) ─────── */
+@keyframes seneschal-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-ivory-100) 25%,
+    var(--color-ivory-200) 37%,
+    var(--color-ivory-100) 63%
+  );
+  background-size: 200% 100%;
+  animation: seneschal-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* ── Respect reduced-motion as a floor (without announcing it) ──────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
