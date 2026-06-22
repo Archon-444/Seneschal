@@ -38,10 +38,12 @@ describe("runSeed — access-model gallery", () => {
     expect(await prisma.user.findUnique({ where: { email: "r.fernandes@example.com" } })).toBeNull();
     expect(await prisma.membership.count({ where: { role: "TENANT" } })).toBe(0);
     // The tenant acts through minted links instead (accept terms + upload own ID).
-    const purposes = (
-      await prisma.secureLink.findMany({ where: { contactId: fernandes.id, revokedAt: null } })
-    ).map((l) => l.purpose).sort();
-    expect(purposes).toEqual(["PROOF_UPLOAD", "TENANT_OFFER"]);
+    const links = await prisma.secureLink.findMany({ where: { contactId: fernandes.id, revokedAt: null } });
+    expect(links.map((l) => l.purpose).sort()).toEqual(["PROOF_UPLOAD", "TENANT_OFFER"]);
+    // The TENANT_OFFER link must resolve to a real Offer (getOfferForLink reads scopeId as Offer.id),
+    // else the tenant just hits "this link is no longer available".
+    const offerLink = links.find((l) => l.purpose === "TENANT_OFFER")!;
+    expect(await prisma.offer.findUnique({ where: { id: offerLink.scopeId } })).toBeTruthy();
   });
 
   it("seats one member per RECURRING role and none for TENANT (enum-driven, so nothing is omitted)", async () => {
@@ -56,13 +58,15 @@ describe("runSeed — access-model gallery", () => {
     }
   });
 
-  it("the absentee landlord is a passive CLIENT_VIEWER PLUS an APPROVAL link — two planes, one party", async () => {
+  it("the absentee landlord is a passive CLIENT_VIEWER scoped to the managed client", async () => {
     await runSeed({ adminEmail: "pilot@example.com" });
     const viewer = await prisma.user.findUniqueOrThrow({ where: { email: "absentee-owner@example.com" } });
     const m = await prisma.membership.findFirstOrThrow({ where: { userId: viewer.id, revokedAt: null } });
     expect(m.role).toBe("CLIENT_VIEWER");
     expect(m.clientPrincipalId).toBeTruthy(); // scoped to the managed client
-    expect(await prisma.secureLink.count({ where: { purpose: "APPROVAL", revokedAt: null } })).toBeGreaterThan(0);
+    // No APPROVAL link is seeded: the public /link APPROVAL handler isn't built, so seeding one would
+    // only mint a dead 404. The member plane is the live demonstration.
+    expect(await prisma.secureLink.count({ where: { purpose: "APPROVAL", revokedAt: null } })).toBe(0);
   });
 
   it("the MANAGING_AGENT delegate is scoped through a live ClientAssignment row (the normalised join table)", async () => {

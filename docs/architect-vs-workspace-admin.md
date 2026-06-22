@@ -72,7 +72,10 @@ The **absentee landlord** is *both* a recurring **`CLIENT_VIEWER`** membership
 sign-offs); a **`VENDOR`** is member-or-link depending on the engagement. The
 planes **compose** — they are not mutually exclusive. Answer each question
 independently: *"recurring orchestration?"* → seat a member; *"episodic
-attestation whose worth is this party's signature?"* → mint a link.
+attestation whose worth is this party's signature?"* → mint a link. (The absentee
+landlord's `APPROVAL` link is the model's second plane; its public `/link`
+handler is not built yet, so the seed currently demonstrates only the
+`CLIENT_VIEWER` plane.)
 
 **Routing footnote.** `isPersonaRole` is exactly `TENANT | LANDLORD`
 (`authz.ts:53`), so `CLIENT_VIEWER` is **not** a persona and `homePathFor` routes
@@ -90,8 +93,9 @@ workspace and three further per-type shells (`OWNER` / `OPERATOR` / `INTERNAL`):
   silently omitted. The builder (`SEED_ADMIN_EMAIL`) is the gallery's sole
   `WORKSPACE_ADMIN`; Farina is the `FIDUCIARY` orchestrator.
 - **Self-managing landlord** — `LANDLORD` persona (`owner@example.com`, `/portal`).
-- **Absentee landlord** — `CLIENT_VIEWER` (`absentee-owner@example.com`) **plus**
-  an `APPROVAL` link.
+- **Absentee landlord** — `CLIENT_VIEWER` (`absentee-owner@example.com`). Its
+  episodic `APPROVAL` sign-off link is the model's other plane, but the public
+  `/link` `APPROVAL` handler is not built yet, so the seed mints no (dead) link.
 - **Tenant** — **no account**: a `Contact` plus `TENANT_OFFER` and `PROOF_UPLOAD`
   links. The demo "tenant view" is the `/link/[token]` surface.
 
@@ -103,7 +107,7 @@ log in dev.
 
 | Gap | Resolution |
 | --- | --- |
-| Seed seated the tenant as a persona member, contradicting the boundary | Tenant reseeded as a link-party; orchestrators seeded by enum-iteration; absentee landlord = `CLIENT_VIEWER` + `APPROVAL` link; builder = sole `WORKSPACE_ADMIN` (`seed.ts`, `tests/integration/seed.test.ts`) |
+| Seed seated the tenant as a persona member, contradicting the boundary | Tenant reseeded as a link-party; orchestrators seeded by enum-iteration; absentee landlord = `CLIENT_VIEWER` (its `APPROVAL` link awaits a public handler); builder = sole `WORKSPACE_ADMIN` (`seed.ts`, `tests/integration/seed.test.ts`) |
 | OTP code persisted readably (`NotificationMessage.bodyRef`, retained `Outbox.payload`) | Sensitive templates store a redacted placeholder; the live body rides the outbox payload to the adapter and is **stripped on the terminal flip**; delivery **fails closed** if the body is absent (`notify/*`, `outbox/index.ts`, `tests/integration/notifySensitive.test.ts`) |
 | Archive was one-way | `unarchiveWorkspace` + action + console button; round-trip re-opens authz and the daily sweep (`provisioning.ts`, `(staff)/admin/*`) |
 | Handler re-gate and member-power edges untested | `requirePlatformAdmin` 403 at the handler; data-only members rejected on `inviteOrgAdmin`/`grantBundle`; the data-blind leak-check extended to named customer rows (`tests/integration/platformAdminGate.test.ts`, `members.test.ts`, `platformPlane.test.ts`) |
