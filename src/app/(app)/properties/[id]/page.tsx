@@ -81,7 +81,7 @@ export default async function PropertyDetailPage({
       {approachingRenewal && (
         <Link
           href={`/renewals/${tenancyFull!.id}`}
-          className="mb-6 inline-flex items-center gap-1 rounded-md border border-gold-300 bg-gold-50/40 px-3 py-1.5 text-sm font-medium text-gold-700 hover:bg-gold-100"
+          className="mb-6 inline-flex items-center gap-1 rounded-md border border-gold-300 bg-gold-100/40 px-3 py-1.5 text-sm font-medium text-gold-700 hover:bg-gold-100"
         >
           Approaching renewal · {daysToEnd} days to expiry — view risk report →
         </Link>
@@ -182,7 +182,7 @@ export default async function PropertyDetailPage({
               </Detail>
             </div>
             {pos && (
-              <div className="mt-6 rounded-lg border border-gold-300 bg-gold-50/40 p-4">
+              <div className="mt-6 rounded-lg border border-gold-300 bg-gold-100/40 p-4">
                 <h3 className="font-display mb-2 text-lg text-navy-900">Market position</h3>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
                   <MarketFact label="Rent vs market" value={`${Math.abs(rentVsMarketPct)}% ${rentVsMarketPct >= 0 ? "below" : "above"}`} />

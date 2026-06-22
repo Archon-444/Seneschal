@@ -10,7 +10,7 @@ export function EnquiryForm({ token }: { token: string }) {
 
   if (state.status === "done") {
     return (
-      <p className="rounded-md bg-verde/10 px-4 py-3 text-sm text-verde">
+      <p className="rounded-md bg-verde-100 px-4 py-3 text-sm text-verde-700">
         Thanks — your enquiry has been sent to the managing office.
       </p>
     );
@@ -24,7 +24,7 @@ export function EnquiryForm({ token }: { token: string }) {
       <input name="email" type="email" placeholder="Email (optional)" className={field} />
       <input name="phone" placeholder="Phone (optional)" className={field} />
       <textarea name="message" rows={3} placeholder="Your message (optional)" className={field} />
-      {state.status === "error" && <p className="text-sm text-claret">{state.message}</p>}
+      {state.status === "error" && <p className="text-sm text-claret-700">{state.message}</p>}
       <button
         type="submit"
         disabled={pending}

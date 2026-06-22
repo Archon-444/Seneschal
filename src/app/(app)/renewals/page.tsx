@@ -114,7 +114,7 @@ export default async function RenewalsPage() {
         </Card>
       )}
 
-      <Card className="mt-6 border-gold-300 bg-gold-50/40">
+      <Card className="mt-6 border-gold-300 bg-gold-100/40">
         <p className="text-xs text-muted">
           Index-based position, estimated from a manually-captured DLD Smart Rental Index figure under
           Decree No. (43) of 2013. Seneschal is not a broker or legal adviser — review official

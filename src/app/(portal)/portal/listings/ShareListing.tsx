@@ -14,7 +14,7 @@ export function ShareListing({ listingId }: { listingId: string }) {
       <Button type="submit" variant="secondary" disabled={pending}>
         {pending ? "Creating…" : "Create public link"}
       </Button>
-      {state.error && <p className="text-sm text-claret">{state.error}</p>}
+      {state.error && <p className="text-sm text-claret-700">{state.error}</p>}
       {state.url && (
         <input
           readOnly

@@ -69,10 +69,10 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           <ul className="space-y-1.5 text-sm">
             {readiness.checks.map((c) => (
               <li key={c.key} className="flex items-center gap-2">
-                <span className={c.ok ? "text-verde" : "text-claret"}>{c.ok ? "✓" : "✗"}</span>
+                <span className={c.ok ? "text-verde-700" : "text-claret-700"}>{c.ok ? "✓" : "✗"}</span>
                 <span className={c.ok ? "text-navy-900" : "text-muted"}>
                   {c.label}
-                  {c.required ? <span className="text-claret"> *</span> : null}
+                  {c.required ? <span className="text-claret-700"> *</span> : null}
                 </span>
               </li>
             ))}

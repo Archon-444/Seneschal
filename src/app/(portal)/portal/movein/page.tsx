@@ -64,7 +64,7 @@ export default async function MoveInPage() {
                 )}
 
                 {acknowledged ? (
-                  <p className="text-sm text-verde">You have acknowledged this condition record.</p>
+                  <p className="text-sm text-verde-700">You have acknowledged this condition record.</p>
                 ) : (
                   <form action={acknowledgeMoveInAction}>
                     <input type="hidden" name="id" value={m.id} />
