@@ -1,20 +1,27 @@
-# Pilot quarantine
+# Archived: marketplace & passport (out of product scope)
 
-Two live, tested features are **out of scope for the renewal pilot** and have
-been made unreachable rather than deleted, so they can be revived later without
-re-implementing working code:
+The marketplace loop and the tenant passport are **killed concepts** under the
+current product brief — Seneschal is a Dubai real-estate portfolio-oversight and
+**tenancy-evidence / renewal** platform, not a marketplace. These features are
+**not on the roadmap**. They remain in the tree only because deleting working,
+tested code now would add churn during pilot-stability work; they are made
+**unreachable and fail-closed**, not maintained and not planned.
+
+Archived (fail-closed, out of scope):
 
 - **`passport`** — the tenant reusable rental profile (`src/server/services/tenantPassport.ts`).
-- **`listings`** — the whole deferred marketplace loop: the supply side
+- **`listings`** — the whole marketplace loop: the supply side
   (`src/server/services/listings.ts`), the enquiry path
-  (`src/server/services/enquiries.ts`), and viewings
-  (`src/server/services/viewings.ts`). This covers both the public link flow **and**
-  the operator surfaces (`/enquiries`, `/viewings`). Reviving `listings` revives all
-  three together; split into its own flag if any should revive independently.
+  (`src/server/services/enquiries.ts`), viewings
+  (`src/server/services/viewings.ts`), and the contract-pack
+  (`src/server/services/contractPack.ts`) / listing-readiness scoring. This covers
+  both the public link flow **and** the operator surfaces (`/enquiries`, `/viewings`).
 
-Both were the deferred Stage-1B/2 marketplace concept. Keeping the code +
-tests dormant preserves optionality (the marketplace loop is the next strategic
-step) while removing live, out-of-scope attack surface from the pilot.
+There is **no plan to revive** these. Any future reintroduction would be a
+deliberate, freshly-scoped and re-reviewed product decision — not the execution of
+a deferred roadmap. New core (renewal / evidence) code must not take on
+dependencies toward these modules; a guardrail test enforces this
+(`tests/unit/quarantine-boundary.test.ts`).
 
 ## Single source of truth
 
@@ -45,10 +52,14 @@ hardcoded `true` (not env: fail-closed, prod can't be misconfigured *on*).
 - **H4 (atomic secure-link consume) is deferred on these paths** — a branch that
   never consumes can't have a consume TOCTOU.
 
-## Revival (deliberate, per-module)
+## If these were ever reconsidered (not planned)
 
-1. Flip the relevant flag in `src/server/config/features.ts` to `false`.
-2. No test un-skipping needed (nothing was skipped).
-3. Apply the H4 consume-first fix to `getPassportForLink` / `getListingForLink`
-   (and the enquiry path) before re-exposing them to real data.
-4. Confirm nav, routes, and link branches return, then ship.
+Reintroduction is **out of scope and not on the roadmap**. Were it ever revisited
+as a new product decision, it would be re-scoped and re-reviewed from scratch — the
+notes below only record how the code was made dormant, not a green-light path:
+
+- The flags live in `src/server/config/features.ts` (hardcoded `true`,
+  fail-closed — not env-driven, so prod can't be switched on by config).
+- Nothing was skipped in the test suite; the dormant code keeps its own tests.
+- The H4 consume-first fix would have to be applied to `getPassportForLink` /
+  `getListingForLink` (and the enquiry path) before any real-data exposure.

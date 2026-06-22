@@ -286,6 +286,13 @@ enum RecordSource {
 
 // ───────────────────────────── Listings [1B] — landlord supply side
 
+// ───────────────────────────────────────────────────────────────────────────
+// ARCHIVED — out of product scope (see QUARANTINE.md). The marketplace/passport
+// models below (Listing, TenantPassport, Enquiry, Viewing, ContractPack) back
+// killed concepts, not roadmap. They are kept fail-closed and unreachable, not
+// maintained; core renewal/evidence code must not depend on them.
+// ───────────────────────────────────────────────────────────────────────────
+//
 // A landlord's marketing record for a (typically vacant) owned unit. Scoped to
 // the owning Property, so the LANDLORD persona reaches it through the same
 // owned-property id-set as everything else (services/contactScope.ts). The
