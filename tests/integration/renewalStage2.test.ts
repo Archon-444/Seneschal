@@ -86,6 +86,38 @@ describe("captureRentIndex — provenance is captured contemporaneously", () => 
     expect(reread!.calculatorVersion).toBeNull();
     expect(reread!.backfilledAt).not.toBeNull();
   });
+
+  it("rejects an official-source capture that cites no source artefact", async () => {
+    await expect(
+      captureRentIndex(W.ctx, {
+        tenancyId,
+        marketRentAvg: 100_000,
+        indexSource: "SMART_RENTAL_INDEX_2025",
+      }),
+    ).rejects.toThrow(/artefact|sourceRef/i);
+  });
+
+  it("a bare capture is recorded as a provisional concierge estimate, never DLD-sourced", async () => {
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 100_000 });
+    const cap = await prisma.rentIndexCapture.findFirst({ where: { tenancyId } });
+    expect(cap!.indexSource).toBe("MANUAL_CONCIERGE");
+    expect(cap!.source).toMatch(/awaiting verification/i);
+    expect(cap!.source).not.toMatch(/DLD/);
+    // The decree-43 figures are still computed contemporaneously.
+    expect(cap!.permittedPct).toBe(5);
+  });
+
+  it("an official capture with a source artefact keeps its official label", async () => {
+    await captureRentIndex(W.ctx, {
+      tenancyId,
+      marketRentAvg: 100_000,
+      indexSource: "SMART_RENTAL_INDEX_2025",
+      sourceRef: { url: "https://dld.example/index" },
+    });
+    const cap = await prisma.rentIndexCapture.findFirst({ where: { tenancyId } });
+    expect(cap!.indexSource).toBe("SMART_RENTAL_INDEX_2025");
+    expect(cap!.source).toBe("DLD Smart Rental Index");
+  });
 });
 
 describe("Notice 3-state flow — one evidence event per transition, timeline monotonic", () => {

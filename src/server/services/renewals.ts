@@ -133,6 +133,26 @@ export async function captureRentIndex(ctx: AuthzContext, input: CaptureIndexInp
   }
   const tenancy = await getTenancy(ctx, input.tenancyId); // enforces workspace + client scope
 
+  // PR-pilot provenance gate: an OFFICIAL index capture (DLD Smart Rental Index /
+  // legacy RERA) must cite a source artefact (sourceRef) — the URL, screenshot id,
+  // or reference that backs the figure. Without an official source + artefact this
+  // is a concierge estimate: force MANUAL_CONCIERGE and a visibly provisional
+  // label, never silently presenting it as DLD-sourced.
+  const officialSources = new Set(["SMART_RENTAL_INDEX_2025", "RERA_INDEX_LEGACY"]);
+  const claimedOfficial = input.indexSource != null && officialSources.has(input.indexSource);
+  const hasArtefact = !!input.sourceRef && Object.keys(input.sourceRef).length > 0;
+  if (claimedOfficial && !hasArtefact) {
+    throw new AuthzError(
+      "An official index capture must cite a source artefact (sourceRef) — e.g. the index URL, screenshot id, or reference",
+      422,
+    );
+  }
+  const isOfficial = claimedOfficial && hasArtefact;
+  const indexSource = isOfficial ? input.indexSource! : "MANUAL_CONCIERGE";
+  const source = isOfficial
+    ? input.source?.trim() || "DLD Smart Rental Index"
+    : "Manual concierge estimate (awaiting verification)";
+
   // PR6 provenance: compute permittedNewRentMax at capture time, against the
   // tenancy's annualRent AS IT STANDS NOW. This figure is the snapshot — it must
   // not be recomputed later from a changed rent, or the row would lie about what
@@ -145,12 +165,12 @@ export async function captureRentIndex(ctx: AuthzContext, input: CaptureIndexInp
       tenancyId: input.tenancyId,
       propertyId: tenancy!.propertyId,
       marketRentAvg: new Prisma.Decimal(input.marketRentAvg),
-      source: input.source?.trim() || "DLD Smart Rental Index",
+      source,
       capturedAt: input.capturedAt ?? new Date(),
       capturedById: ctx.userId,
       note: input.note ?? null,
       // PR6 fields
-      indexSource: input.indexSource ?? "SMART_RENTAL_INDEX_2025",
+      indexSource,
       gapPct: new Prisma.Decimal(position.gapPct),
       permittedPct: position.bandPct,
       permittedNewRentMax: new Prisma.Decimal(position.ceiling),
@@ -211,7 +231,7 @@ export interface RenewalRisk {
   renewalDate: Date;
   daysToGate: number;
   gatePassed: boolean;
-  latestIndex: { marketRentAvg: number; capturedAt: Date; source: string; isBenchmark: boolean } | null;
+  latestIndex: { marketRentAvg: number; capturedAt: Date; source: string; isBenchmark: boolean; provisional: boolean } | null;
   position: RentPositionResult | null;
   renewalCase: { id: string; status: RenewalStatus; decidedOfferId: string | null } | null;
   /** The most recent notice on the case — drives the serve/confirm UI. A
@@ -226,6 +246,8 @@ export interface EffectiveIndex {
   capturedAt: Date;
   source: string;
   isBenchmark: boolean;
+  /** A manual concierge estimate awaiting verification (not an official source). */
+  provisional: boolean;
 }
 
 /** Benchmark fallback precedence — the single source of truth for both the
@@ -272,6 +294,7 @@ export async function resolveEffectiveIndex(
       capturedAt: capture.capturedAt,
       source: capture.source,
       isBenchmark: false,
+      provisional: capture.indexSource === "MANUAL_CONCIERGE",
     };
   }
   if (property?.community) {
@@ -282,6 +305,7 @@ export async function resolveEffectiveIndex(
         capturedAt: benchmark.capturedAt,
         source: benchmark.source,
         isBenchmark: true,
+        provisional: false,
       };
     }
   }
@@ -377,7 +401,7 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
   const today = todayInDubai();
   const daysToGate = daysBetween(today, gate.date);
   const latestIndex = eff
-    ? { marketRentAvg: eff.marketRentAvg, capturedAt: eff.capturedAt, source: eff.source, isBenchmark: eff.isBenchmark }
+    ? { marketRentAvg: eff.marketRentAvg, capturedAt: eff.capturedAt, source: eff.source, isBenchmark: eff.isBenchmark, provisional: eff.provisional }
     : null;
   const position = latestIndex
     ? decree43(Number(tenancy!.annualRent), latestIndex.marketRentAvg)

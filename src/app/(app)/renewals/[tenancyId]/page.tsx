@@ -99,8 +99,15 @@ export default async function RenewalReportPage({
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-display text-xl text-navy-900">Index-based position · Decree 43</h2>
           {risk!.latestIndex && (
-            <span className="figure text-xs text-muted">
-              {risk!.latestIndex.source} · captured {formatDubaiDate(risk!.latestIndex.capturedAt)}
+            <span className="figure flex items-center gap-2 text-xs text-muted">
+              <span>
+                {risk!.latestIndex.source} · captured {formatDubaiDate(risk!.latestIndex.capturedAt)}
+              </span>
+              {risk!.latestIndex.provisional && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                  awaiting verification
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -151,8 +158,9 @@ export default async function RenewalReportPage({
       <Card className="mb-6 max-w-2xl">
         <h2 className="font-display mb-1 text-lg text-navy-900">Capture index figure</h2>
         <p className="mb-3 text-xs text-muted">
-          Current rent <Money amount={Number(t.annualRent)} />/yr. Enter the official index average; it is
-          saved to the evidence record with its capture date.
+          Current rent <Money amount={Number(t.annualRent)} />/yr. An official source (DLD Smart Rental
+          Index / RERA) requires a source reference; without one the figure is saved as a concierge
+          estimate marked “awaiting verification” — never as DLD-sourced.
         </p>
         <form action={captureIndexAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="tenancyId" value={tenancyId} />
@@ -161,6 +169,19 @@ export default async function RenewalReportPage({
           </Field>
           <Field label="Captured on">
             <input name="capturedAt" type="date" className={inputClass} />
+          </Field>
+          <Field label="Source">
+            <select name="indexSource" defaultValue="MANUAL_CONCIERGE" className={inputClass}>
+              <option value="MANUAL_CONCIERGE">Concierge estimate (provisional)</option>
+              <option value="SMART_RENTAL_INDEX_2025">DLD Smart Rental Index</option>
+              <option value="RERA_INDEX_LEGACY">RERA index (legacy)</option>
+            </select>
+          </Field>
+          <Field label="Source reference (URL / screenshot id)">
+            <input name="sourceRef" className={inputClass} placeholder="required for an official source" />
+          </Field>
+          <Field label="Comparable basis (optional)">
+            <input name="comparableBasis" className={inputClass} placeholder="e.g. 2BR, Marina Heights" />
           </Field>
           <Button type="submit">Save index figure</Button>
         </form>

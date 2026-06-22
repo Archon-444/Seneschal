@@ -191,10 +191,19 @@ export async function captureIndexAction(formData: FormData) {
   const ctx = await requireCtx();
   const tenancyId = s(formData, "tenancyId");
   const capturedAt = opt(formData, "capturedAt");
+  const sourceRefText = opt(formData, "sourceRef");
+  const comparableText = opt(formData, "comparableBasis");
   await renewals.captureRentIndex(ctx, {
     tenancyId,
     marketRentAvg: num(formData, "marketRentAvg") ?? 0,
     capturedAt: capturedAt ? new Date(capturedAt) : undefined,
+    indexSource: opt(formData, "indexSource") as
+      | "SMART_RENTAL_INDEX_2025"
+      | "RERA_INDEX_LEGACY"
+      | "MANUAL_CONCIERGE"
+      | undefined,
+    sourceRef: sourceRefText ? { reference: sourceRefText } : undefined,
+    comparableBasis: comparableText ? { note: comparableText } : undefined,
     source: opt(formData, "source"),
     note: opt(formData, "note"),
   });
