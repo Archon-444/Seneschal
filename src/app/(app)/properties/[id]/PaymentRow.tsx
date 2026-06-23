@@ -1,4 +1,4 @@
-import { Badge, Money, Td } from "@/components/ui";
+import { Badge, DubaiDate, Money, Td } from "@/components/ui";
 import { transitionPaymentAction } from "../../actions";
 
 const NEXT_ACTIONS: Record<string, { to: string; label: string }[]> = {
@@ -16,7 +16,7 @@ const NEXT_ACTIONS: Record<string, { to: string; label: string }[]> = {
 export interface PaymentRowData {
   id: string;
   seq: number;
-  dueDate: string;
+  dueDate: Date;
   amount: string;
   instrument: string;
   chequeNo: string | null;
@@ -28,14 +28,14 @@ export function PaymentRow({ item, propertyId }: { item: PaymentRowData; propert
   const actions = NEXT_ACTIONS[item.status] ?? [];
   return (
     <tr>
-      <Td className="figure">{item.seq}</Td>
-      <Td className="figure whitespace-nowrap">{item.dueDate}</Td>
-      <Td><Money amount={item.amount} /></Td>
-      <Td>{item.instrument}</Td>
-      <Td className="figure">{item.chequeNo ?? "—"}</Td>
-      <Td>{item.bank ?? "—"}</Td>
-      <Td><Badge value={item.status} /></Td>
-      <Td>
+      <Td label="#" className="figure">{item.seq}</Td>
+      <Td label="Due" className="whitespace-nowrap"><DubaiDate value={item.dueDate} /></Td>
+      <Td label="Amount"><Money amount={item.amount} /></Td>
+      <Td label="Instrument">{item.instrument}</Td>
+      <Td label="Cheque no" className="figure">{item.chequeNo ?? "—"}</Td>
+      <Td label="Bank">{item.bank ?? "—"}</Td>
+      <Td label="Status"><Badge value={item.status} /></Td>
+      <Td label="Actions">
         <div className="flex gap-2">
           {actions.map((a) => (
             <form key={a.to} action={transitionPaymentAction}>
