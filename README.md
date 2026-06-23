@@ -118,6 +118,55 @@ and `pnpm worker` running:
 10. **Security suite green** — `pnpm test:integration` (T1.4 cross-workspace
     suite + the rest) and `pnpm test` all green; CI runs the same.
 
+## Stage 2 renewal acceptance walkthrough
+
+Scripted pass proving the renewal loop end-to-end, on a seeded database with
+`pnpm dev` and `pnpm worker` running. It drives one tenancy from a verified
+landlord record to a minted successor; each step names the evidence it must
+emit. The automated form of this checklist is the renewal integration suite
+(`tests/integration/renewalWalkthrough.test.ts`, `renewalStage2.test.ts`,
+`renewalConcurrency.test.ts`), which runs in CI.
+
+1. **Open the renewal assessment** — `/renewals` lists units inside the renewal
+   window with their notice gate and estimated uplift. Open one (e.g. the seeded
+   Marina lease) → `/renewals/[tenancyId]` → **Open renewal case**. The case opens
+   in ASSESSING; evidence shows `RENEWAL_ASSESSMENT_CREATED`.
+2. **Capture the index figure** — in the Decree-43 position card, capture a
+   market-rent average (source = DLD Smart Rental Index, with a source reference).
+   The lawful ceiling and value-at-risk compute from `decree_43_v1`; evidence shows
+   `INDEX_CAPTURED`. A bare capture is labelled a provisional concierge estimate,
+   never DLD-sourced, and stays distinct from an official figure.
+3. **Serve the change notice (prepare → approve → serve)** — the notice card walks
+   three states: generate, approve, then serve with a method, delivery reference
+   and proof document. Each transition is a single evidence row, in order:
+   `NOTICE_GENERATED` → `NOTICE_APPROVED` → `NOTICE_SERVED`. Serving clears any
+   `RENEWAL_NOTICE_WINDOW_MISSED` flag; out-of-order transitions are rejected.
+4. **Propose terms** — in the negotiation workspace, add terms (party = landlord,
+   annual rent at or below the ceiling, payment schedule). The offer freezes
+   `permittedMaxSnapshot` and a self-contained index citation at send time;
+   evidence shows `OFFER_PROPOSED`. An offer above the ceiling raises
+   `PROPOSED_INCREASE_ABOVE_INDEX_BAND` (visible on `/risk`) from the frozen
+   snapshot — later index captures do not move it.
+5. **Send the offer to the tenant** — **Send to tenant** mints a single-use
+   `TENANT_OFFER` secure link (raw token shown once; only the hash is stored).
+6. **Tenant acknowledges via the secure link** — open `/link/<token>` in a private
+   window (no login). The tenant sees the proposed terms against the index average
+   and can Accept, Counter or Ask. Accept records consent and moves the case to
+   AGREED; evidence shows `TENANT_ACKNOWLEDGED` → `OFFER_ACCEPTED`. (A counter
+   writes `OFFER_COUNTERED` and keeps the case negotiating.)
+7. **Mint the successor tenancy** — with the case AGREED, `mintRenewedTenancy`
+   creates the successor in one transaction: it carries `renewsFromTenancyId`, the
+   predecessor flips to RENEWED, the case flips to RENEWED with `renewedTenancyId`
+   set, and exactly one `RENEWAL_COMPLETED` row is written — prior events are *not*
+   back-filled, so the timeline stays truthful. Concurrent mints collapse to one
+   successor and the loser gets a clean 409. *UI status: this final step is
+   currently a service-layer action with no button yet (driven by the seed/worker
+   and covered by `renewalWalkthrough.test.ts`).*
+8. **Evidence + risk timeline** — `/evidence` shows the full chronology with
+   strictly-monotonic timestamps (no batch-stamp at mint); `/risk` shows the
+   renewal flags raised and cleared by the nightly sweep (`evaluateWorkspaceRisk`,
+   invoked by the authenticated `/api/v1/jobs/run` cron).
+
 ## Deploy (Vercel)
 
 The repo is serverless-ready: `vercel-build` runs `prisma migrate deploy` before
@@ -148,11 +197,21 @@ same `StorageDriver` interface.
 
 ## Non-goals (1A)
 
-No marketplace/listings/brokerage flows, no payment processing or custody, no
-legal advice, no contractor dispatch, no renewal workflow (schema enums
-reserved), no live WhatsApp (see `docs/whatsapp-readiness.md`), no anomaly AI.
+No marketplace/listings/brokerage flows, no payment processing or custody (the
+payments/DDS rail is the future **Phase 2** — Seneschal stays record-keeping
+only), no legal advice, no contractor dispatch, no live WhatsApp (see
+`docs/whatsapp-readiness.md`), no anomaly AI. (The **Stage 2 renewal engine** is
+built and migrated — it is no longer a non-goal; see the renewal acceptance
+walkthrough above.)
 
-## Stage 1B / 2 hooks
+## Stage 1B hooks &amp; terminology
 
-`TODO` markers only: WhatsApp adapter swap, maintenance UI (schema live),
-renewal tables (deliberately not migrated — see end of `schema.prisma`).
+`TODO` markers only: WhatsApp adapter swap (Stage 1B), maintenance UI (schema
+live). The **Stage 2 renewal engine is built and migrated** — RenewalCase,
+RentIndexCapture, Offer and Notice ship across the renewal migrations, with the
+full service layer in `src/server/services/renewals.ts` and the loop proven by
+the integration suite (`tests/integration/renewal*.test.ts`).
+
+**Terminology:** "Stage 2 / S2" is the renewal engine (shipped). **"Phase 2" is
+reserved for the future payments/DDS rail** (still a non-goal — Seneschal never
+holds funds) and must not be read as the Stage-2 renewal work.

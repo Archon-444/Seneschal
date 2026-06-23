@@ -1456,9 +1456,11 @@ enum RenewalStatus {
   LAPSED
 }
 
-// ───────────────────────────── Stage 2 — DO NOT MIGRATE YET
-// Offer, Notice, PartnerOrg per spec v2 §6 (Offer arrives in the negotiation PR).
-// EvidenceType and LinkPurpose already reserve their values so Stage 2 adds tables without enum churn.
+// ───────────────────────────── Stage 2 — shipped (renewals)
+// RenewalCase, RentIndexCapture, Offer and Notice are migrated and live above
+// ("Renewals — decision support"). PartnerOrg (partner directory, spec v2 §6)
+// remains a future addition. Because the EvidenceType and LinkPurpose values these
+// tables use were reserved up front, shipping Stage 2 needed no enum churn.
 
 // ───────────────────────────── Auth [1A — ADDITION to schema v1.0]
 // Reason: handoff allows "Supabase Auth (or clean auth abstraction)". We implement the

@@ -12,7 +12,7 @@ import {
   proposeOffer,
 } from "@/server/services/renewals";
 import { approveNotice, prepareNotice, serveNoticeFormal, serveRenewalNotice } from "@/server/services/notice";
-import { evaluateWorkspaceRisk } from "@/server/services/risk";
+import { evaluateRenewalRisk, evaluateWorkspaceRisk } from "@/server/services/risk";
 
 // PR6b — Stage-2 services. Provenance, single-event-per-transition discipline,
 // successor lineage, and the two new risk evaluators.
@@ -300,6 +300,32 @@ describe("renewal risk wiring — production paths raise flags", () => {
       }),
     ).toBeNull();
   });
+
+  it("the daily sweep skips terminal cases — RENEWED/DECLINED/LAPSED never raise the missed-window flag", async () => {
+    const rc = await openRenewalCase(W.ctx, tenancyId);
+    // A setup that WOULD raise for a non-terminal case (the test above proves that
+    // exact shape raises from the sweep): the notice gate is in the past and no
+    // notice was ever served.
+    await prisma.renewalCase.update({
+      where: { id: rc.id },
+      data: { noticeGateAt: daysFromNow(-2), noticeServedAt: null },
+    });
+
+    // Drive the SAME case through each terminal status. The sweep
+    // (evaluateWorkspaceRisk) must exclude it via its `status notIn` filter, so the
+    // missed-window flag is never raised — even though the per-case evaluator has no
+    // terminal guard of its own. No hand-editing of the flag table; only the case
+    // status changes.
+    for (const status of ["RENEWED", "DECLINED", "LAPSED"] as const) {
+      await prisma.renewalCase.update({ where: { id: rc.id }, data: { status } });
+      await evaluateWorkspaceRisk(W.workspaceId);
+      expect(
+        await prisma.riskFlag.findFirst({
+          where: { scopeId: rc.id, code: "RENEWAL_NOTICE_WINDOW_MISSED" },
+        }),
+      ).toBeNull();
+    }
+  });
 });
 
 describe("proposeOffer — captures permittedMaxSnapshot at send time", () => {
@@ -319,5 +345,71 @@ describe("proposeOffer — captures permittedMaxSnapshot at send time", () => {
     await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 120_000 });
     const reread = await prisma.offer.findUnique({ where: { id: offer.id } });
     expect(Number(reread!.permittedMaxSnapshot)).toBe(84_000);
+  });
+});
+
+describe("renewal risk evaluator — reads the active offer's frozen figures, not mutable fields", () => {
+  // The discriminating cases the static "above-ceiling raises a flag" test does NOT
+  // exercise: a capture that MOVES after the offer is sent, and the legacy
+  // RenewalCase.proposedRent cache. Both are set up to FLIP the verdict if the
+  // evaluator read them — so a refactor that repoints at the mutable field fails loud.
+
+  it("reads the offer's frozen ceiling, not a capture that moved after the offer was sent", async () => {
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 100_000 }); // ceiling = 84_000
+    const rc = await openRenewalCase(W.ctx, tenancyId);
+    // Offer above the frozen ceiling → flag raised; permittedMaxSnapshot frozen at 84_000.
+    await proposeOffer(W.ctx, {
+      renewalCaseId: rc.id,
+      party: "LANDLORD",
+      annualRent: 90_000,
+      paymentSchedule: "4 cheques",
+    });
+    expect(
+      await prisma.riskFlag.findFirst({
+        where: { scopeId: rc.id, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", status: "OPEN" },
+      }),
+    ).toBeTruthy();
+
+    // A LATER capture lifts the LIVE ceiling to 92_000 (gap 33% → 15% band on 80k).
+    // If the evaluator re-read the latest capture, 90_000 ≤ 92_000 would CLEAR the
+    // flag. The offer's frozen 84_000 snapshot must still win → flag stays OPEN.
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 120_000 });
+    await evaluateRenewalRisk(rc.id);
+    expect(
+      await prisma.riskFlag.findFirst({
+        where: { scopeId: rc.id, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", status: "OPEN" },
+      }),
+    ).toBeTruthy();
+  });
+
+  it("ignores RenewalCase.proposedRent (legacy cache), reading the active offer's annualRent", async () => {
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 100_000 }); // ceiling = 84_000
+    const rc = await openRenewalCase(W.ctx, tenancyId);
+    await proposeOffer(W.ctx, {
+      renewalCaseId: rc.id,
+      party: "LANDLORD",
+      annualRent: 90_000, // above ceiling → flag raised
+      paymentSchedule: "4 cheques",
+    });
+    expect(
+      await prisma.riskFlag.findFirst({
+        where: { scopeId: rc.id, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", status: "OPEN" },
+      }),
+    ).toBeTruthy();
+
+    // Poison the legacy cache field with a value BELOW the ceiling. If a future
+    // refactor repointed the evaluator at RenewalCase.proposedRent, 50_000 ≤ 84_000
+    // would CLEAR the flag. The active offer's annualRent (90_000) must remain the
+    // source of truth → flag stays OPEN.
+    await prisma.renewalCase.update({
+      where: { id: rc.id },
+      data: { proposedRent: new Prisma.Decimal(50_000) },
+    });
+    await evaluateRenewalRisk(rc.id);
+    expect(
+      await prisma.riskFlag.findFirst({
+        where: { scopeId: rc.id, code: "PROPOSED_INCREASE_ABOVE_INDEX_BAND", status: "OPEN" },
+      }),
+    ).toBeTruthy();
   });
 });
