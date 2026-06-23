@@ -99,7 +99,7 @@ export default async function ExtractionReviewPage({
               <input type="hidden" name="paymentItems" value={JSON.stringify(paymentItems)} />
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs uppercase text-navy-500">
+                  <tr className="t-th text-left text-muted">
                     <th className="py-1">#</th><th>Due</th><th>Amount</th><th>Cheque</th><th>Bank</th>
                   </tr>
                 </thead>
