@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { inputClass } from "@/components/ui";
 import { submitProofAction, type SubmitState } from "./actions";
 
 export function UploadProofForm({ token }: { token: string }) {
@@ -34,11 +35,7 @@ export function UploadProofForm({ token }: { token: string }) {
         <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
           Note (optional)
         </label>
-        <textarea
-          name="note"
-          rows={2}
-          className="w-full rounded-md border border-ivory-300 px-3 py-2 text-sm focus:border-navy-300 focus:outline-none"
-        />
+        <textarea name="note" rows={2} className={inputClass} />
       </div>
       {state.status === "error" && <p className="text-sm text-claret-500">{state.message}</p>}
       <button

@@ -29,11 +29,11 @@ export default async function AssignmentsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line bg-ivory-100 text-left">
-                <th className="px-4 py-2.5 text-[10.5px] font-bold uppercase tracking-wider text-muted">
+                <th className="t-th px-4 py-2.5 text-muted">
                   Delegate · Client
                 </th>
                 {grid.clients.map((c) => (
-                  <th key={c.id} className="px-3 py-2.5 text-center text-[10.5px] font-bold uppercase tracking-wider text-muted">
+                  <th key={c.id} className="t-th px-3 py-2.5 text-center text-muted">
                     {c.displayName}
                   </th>
                 ))}
@@ -58,7 +58,7 @@ export default async function AssignmentsPage() {
                             type="submit"
                             aria-pressed={isAssigned}
                             aria-label={isAssigned ? "Assigned — revoke" : "Not assigned — assign"}
-                            className={`h-6 w-6 rounded-md border text-xs font-bold ${
+                            className={`h-7 w-7 rounded-md border text-xs font-bold ${
                               isAssigned
                                 ? "border-verde-700 bg-verde-100 text-verde-700"
                                 : "border-line bg-ivory-100 text-muted hover:border-gold-500"

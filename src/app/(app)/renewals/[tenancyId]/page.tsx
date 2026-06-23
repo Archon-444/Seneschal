@@ -95,7 +95,7 @@ export default async function RenewalReportPage({
       </div>
 
       {/* RERA position */}
-      <Card className="mb-6 border-gold-300 bg-gold-50/40">
+      <Card className="mb-6 border-gold-300 bg-gold-100/40">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-display text-xl text-navy-900">Index-based position · Decree 43</h2>
           {risk!.latestIndex && (

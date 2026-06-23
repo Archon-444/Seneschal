@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { requirePlatformAdmin } from "@/server/auth/request";
 import { platformStats } from "@/server/admin/platformStats";
-import { Badge, Card, KpiCard, LinkButton, PageHeader, Table, Td } from "@/components/ui";
-import { formatDubaiDate } from "@/server/calculators/dates";
+import { Badge, DubaiDate, EmptyState, KpiCard, LinkButton, PageHeader, Table, Td } from "@/components/ui";
 import { archiveAction, suspendAction, unarchiveAction, unsuspendAction } from "./actions";
 
 // Platform console (F-Admin §3, §7). Unreachable without isPlatformAdmin. Shows
@@ -56,11 +55,10 @@ export default async function AdminPage() {
       </div>
 
       {stats.length === 0 ? (
-        <Card>
-          <p className="text-sm text-muted">No workspaces provisioned yet.</p>
-        </Card>
+        <EmptyState title="No workspaces yet" message="Provision the first workspace to get started." />
       ) : (
         <Table
+          stack
           headers={[
             "Workspace",
             "Type",
@@ -77,34 +75,34 @@ export default async function AdminPage() {
         >
           {stats.map((s) => (
             <tr key={s.workspaceId}>
-              <Td>
+              <Td label="Workspace">
                 {s.name}
                 {s.archived && <span className="ml-2 text-xs text-claret-700">(archived)</span>}
                 {!s.archived && s.suspended && <span className="ml-2 text-xs text-amber-700">(suspended)</span>}
               </Td>
-              <Td>
+              <Td label="Type">
                 <Badge value={s.type} />
               </Td>
-              <Td className="figure">{s.seatsUsed}</Td>
-              <Td className="figure">{s.properties}</Td>
-              <Td className="figure">{s.tenanciesByStatus.ACTIVE ?? 0}</Td>
-              <Td className="figure">{s.openProofRequests}</Td>
-              <Td className="figure">{s.openRiskFlags}</Td>
-              <Td className="figure text-xs">
+              <Td label="Seats" className="figure">{s.seatsUsed}</Td>
+              <Td label="Properties" className="figure">{s.properties}</Td>
+              <Td label="Active tenancies" className="figure">{s.tenanciesByStatus.ACTIVE ?? 0}</Td>
+              <Td label="Open proofs" className="figure">{s.openProofRequests}</Td>
+              <Td label="Open flags" className="figure">{s.openRiskFlags}</Td>
+              <Td label="Sends ok/fail/queued" className="figure text-xs">
                 {s.notifications.sent}/{s.notifications.failed}/{s.notifications.queued}
               </Td>
-              <Td>
+              <Td label="Subscription">
                 {s.subscriptionStatus ? (
                   <Badge value={s.subscriptionStatus.toUpperCase()} />
                 ) : (
                   <span className="text-muted">—</span>
                 )}
               </Td>
-              <Td className="figure text-xs">
-                {s.lastActivityAt ? formatDubaiDate(s.lastActivityAt) : "—"}
+              <Td label="Last activity" className="text-xs">
+                {s.lastActivityAt ? <DubaiDate value={s.lastActivityAt} /> : "—"}
               </Td>
               <Td>
-                <div className="flex gap-1.5 text-xs">
+                <div className="flex flex-wrap justify-end gap-1.5 text-xs">
                   {s.archived ? (
                     // Archive is recoverable — an archived workspace offers only Unarchive.
                     <form action={unarchiveAction}>

@@ -3,8 +3,8 @@ import { requireCtx } from "@/server/auth/request";
 import { isPersonaRole } from "@/server/authz";
 import { listMyMoveIns, listMoveInPhotos } from "@/server/services/moveIn";
 import { getDocumentUrl } from "@/server/services/documents";
-import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui";
+import { Badge, Card, DubaiDate, EmptyState, PageHeader } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { acknowledgeMoveInAction } from "./actions";
 
 function propLabel(p: { community: string; building: string | null; unitNo: string | null } | null): string {
@@ -23,7 +23,9 @@ export default async function MoveInPage() {
   const withPhotos = await Promise.all(
     moveIns.map(async (m) => {
       const photos = await listMoveInPhotos(ctx, m.id);
-      const links = await Promise.all(photos.map(async (d) => ({ id: d.id, url: (await getDocumentUrl(ctx, d.id)).url, name: d.fileName })));
+      const links = await Promise.all(
+        photos.map(async (d) => ({ id: d.id, url: (await getDocumentUrl(ctx, d.id)).url, name: d.fileName })),
+      );
       return { m, links };
     }),
   );
@@ -36,7 +38,10 @@ export default async function MoveInPage() {
         subtitle="The recorded condition of your unit at handover. Both you and the other party confirm it — this is the shared record."
       />
       {withPhotos.length === 0 ? (
-        <EmptyState message="No move-in record yet." />
+        <EmptyState
+          title="No move-in record yet"
+          message="When a handover is recorded, its condition and photos appear here for you to acknowledge."
+        />
       ) : (
         <div className="space-y-6">
           {withPhotos.map(({ m, links }) => {
@@ -49,26 +54,47 @@ export default async function MoveInPage() {
                 </div>
                 {m.notes ? <p className="mb-3 text-sm text-navy-700">{m.notes}</p> : null}
                 <div className="mb-3 text-xs text-muted">
-                  Landlord: {m.landlordAckAt ? `acknowledged ${formatDubaiDate(m.landlordAckAt)}` : "pending"} ·{" "}
-                  Tenant: {m.tenantAckAt ? `acknowledged ${formatDubaiDate(m.tenantAckAt)}` : "pending"}
+                  Landlord:{" "}
+                  {m.landlordAckAt ? (
+                    <>
+                      acknowledged <DubaiDate value={m.landlordAckAt} />
+                    </>
+                  ) : (
+                    "pending"
+                  )}{" "}
+                  · Tenant:{" "}
+                  {m.tenantAckAt ? (
+                    <>
+                      acknowledged <DubaiDate value={m.tenantAckAt} />
+                    </>
+                  ) : (
+                    "pending"
+                  )}
                 </div>
 
                 {links.length > 0 && (
                   <ul className="mb-4 grid gap-2 sm:grid-cols-2">
                     {links.map((l) => (
                       <li key={l.id}>
-                        <a href={l.url} target="_blank" rel="noreferrer" className="text-sm text-gold-700 hover:underline">{l.name}</a>
+                        <a
+                          href={l.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-gold-700 hover:underline"
+                        >
+                          {l.name}
+                        </a>
                       </li>
                     ))}
                   </ul>
                 )}
 
                 {acknowledged ? (
-                  <p className="text-sm text-verde">You have acknowledged this condition record.</p>
+                  <p className="text-sm text-verde-700">You have acknowledged this condition record.</p>
                 ) : (
                   <form action={acknowledgeMoveInAction}>
                     <input type="hidden" name="id" value={m.id} />
-                    <Button type="submit">Acknowledge condition</Button>
+                    <SubmitButton pendingLabel="Saving…">Acknowledge condition</SubmitButton>
                   </form>
                 )}
               </Card>

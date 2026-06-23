@@ -6,7 +6,8 @@ import { listSecureLinks } from "@/server/services/secureLinks";
 import { listDocuments } from "@/server/services/documents";
 import { listEvidence, EVIDENCE_LABELS } from "@/server/services/evidenceQuery";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { BackLink, Badge, Button, Card, Field, inputClass, PageHeader, resolveScopeLink, ScopeLink, Table, Td } from "@/components/ui";
+import { BackLink, Badge, Card, DubaiDate, Field, inputClass, PageHeader, resolveScopeLink, ScopeLink, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { decideProofAction, resendProofAction, revokeLinkAction } from "../../actions";
 
 export default async function ProofDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -35,7 +36,7 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
         actions={
           <form action={resendProofAction}>
             <input type="hidden" name="id" value={id} />
-            <Button type="submit" variant="secondary">Send new link</Button>
+            <SubmitButton variant="secondary" pendingLabel="Sending…">Send new link</SubmitButton>
           </form>
         }
       />
@@ -75,25 +76,25 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
           <h2 className="font-display mb-3 text-lg text-navy-900">Submitted documents</h2>
-          <Table headers={["File", "Uploaded"]}>
+          <Table stack headers={["File", "Uploaded"]}>
             {docs.map((d) => (
               <tr key={d.id}>
-                <Td>
+                <Td label="File">
                   <Link href={`/vault/${d.id}`} className="text-navy-900 hover:underline">{d.fileName}</Link>
                 </Td>
-                <Td className="figure">{formatDubaiDate(d.createdAt)}</Td>
+                <Td label="Uploaded"><DubaiDate value={d.createdAt} /></Td>
               </tr>
             ))}
           </Table>
 
           <h2 className="font-display mt-6 mb-3 text-lg text-navy-900">Secure links</h2>
-          <Table headers={["Created", "Expires", "Uses", "State", ""]}>
+          <Table stack headers={["Created", "Expires", "Uses", "State", ""]}>
             {links.map((l) => (
               <tr key={l.id}>
-                <Td className="figure">{formatDubaiDate(l.createdAt)}</Td>
-                <Td className="figure">{formatDubaiDate(l.expiresAt)}</Td>
-                <Td className="figure">{l.useCount}{l.maxUses ? `/${l.maxUses}` : ""}</Td>
-                <Td>
+                <Td label="Created"><DubaiDate value={l.createdAt} /></Td>
+                <Td label="Expires"><DubaiDate value={l.expiresAt} /></Td>
+                <Td label="Uses" className="figure">{l.useCount}{l.maxUses ? `/${l.maxUses}` : ""}</Td>
+                <Td label="State">
                   <Badge value={l.revokedAt ? "REJECTED" : l.expiresAt < new Date() ? "OVERDUE" : "ACTIVE"} />
                 </Td>
                 <Td>

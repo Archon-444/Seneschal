@@ -4,8 +4,8 @@ import { requireCtx } from "@/server/auth/request";
 import { getContactDetail } from "@/server/services/contacts";
 import { hasActiveMessagingConsent } from "@/server/services/consent";
 import { roleHas } from "@/server/capabilities";
-import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, BackLink, Button, Card, EmptyState, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, BackLink, Card, DubaiDate, EmptyState, Money, PageHeader, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import {
   grantMessagingConsentAction,
   revokeMessagingConsentAction,
@@ -48,16 +48,18 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             <div>
               <div className="text-sm font-medium text-navy-900">Landlord verification</div>
               <div className="text-xs text-muted">
-                {isVerified
-                  ? `Verified${contact.verifiedAt ? ` on ${formatDubaiDate(contact.verifiedAt)}` : ""} — owns/controls the units they list.`
-                  : "Not yet verified. Confirm identity and ownership before their listings carry the verified mark."}
+                {isVerified ? (
+                  <>Verified{contact.verifiedAt ? <> on <DubaiDate value={contact.verifiedAt} /></> : ""} — owns/controls the units they list.</>
+                ) : (
+                  "Not yet verified. Confirm identity and ownership before their listings carry the verified mark."
+                )}
               </div>
             </div>
             <form action={isVerified ? revokeLandlordVerificationAction : verifyLandlordAction}>
               <input type="hidden" name="contactId" value={contact.id} />
-              <Button type="submit" variant={isVerified ? "secondary" : "primary"}>
+              <SubmitButton variant={isVerified ? "secondary" : "primary"} pendingLabel="Saving…">
                 {isVerified ? "Revoke verification" : "Verify landlord"}
-              </Button>
+              </SubmitButton>
             </form>
           </div>
         </Card>
@@ -88,9 +90,9 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </div>
             <form action={messagingOptedIn ? revokeMessagingConsentAction : grantMessagingConsentAction}>
               <input type="hidden" name="contactId" value={contact.id} />
-              <Button type="submit" variant={messagingOptedIn ? "secondary" : "primary"}>
+              <SubmitButton variant={messagingOptedIn ? "secondary" : "primary"} pendingLabel="Saving…">
                 {messagingOptedIn ? "Revoke consent" : "Record opt-in"}
-              </Button>
+              </SubmitButton>
             </form>
           </div>
         </Card>
@@ -98,22 +100,22 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
       <h2 className="font-display mb-3 text-xl text-navy-900">Contracts</h2>
       {tenancies.length === 0 ? (
-        <EmptyState message="This contact is not a party to any tenancy yet." />
+        <EmptyState title="No contracts" message="This contact is not a party to any tenancy yet." />
       ) : (
-        <Table headers={["Role", "Property", "Term", "Rent", "Ejari"]}>
+        <Table stack headers={["Role", "Property", "Term", "Rent", "Ejari"]}>
           {tenancies.map((t) => (
             <tr key={t.id}>
-              <Td><Badge value={roleFor(t).toUpperCase()} /></Td>
-              <Td>
+              <Td label="Role"><Badge value={roleFor(t).toUpperCase()} /></Td>
+              <Td label="Property">
                 <Link href={`/properties/${t.propertyId}`} className="text-navy-900 hover:underline">
                   {t.property.community}{t.property.unitNo ? ` · ${t.property.unitNo}` : ""}
                 </Link>
               </Td>
-              <Td className="figure whitespace-nowrap text-xs">
-                {formatDubaiDate(t.startDate)} → {formatDubaiDate(t.endDate)}
+              <Td label="Term" className="whitespace-nowrap text-xs">
+                <DubaiDate value={t.startDate} /> → <DubaiDate value={t.endDate} />
               </Td>
-              <Td><Money amount={String(t.annualRent)} /></Td>
-              <Td className="figure text-xs">{t.ejariNo ?? "—"}</Td>
+              <Td label="Rent"><Money amount={String(t.annualRent)} /></Td>
+              <Td label="Ejari" className="figure text-xs">{t.ejariNo ?? "—"}</Td>
             </tr>
           ))}
         </Table>
@@ -122,14 +124,14 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       {proofRequests.length > 0 && (
         <>
           <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Assigned proof requests</h2>
-          <Table headers={["Request", "Due", "Status"]}>
+          <Table stack headers={["Request", "Due", "Status"]}>
             {proofRequests.map((r) => (
               <tr key={r.id}>
-                <Td>
+                <Td label="Request">
                   <Link href={`/proofs/${r.id}`} className="text-navy-900 hover:underline">{r.title}</Link>
                 </Td>
-                <Td className="figure">{r.dueAt ? formatDubaiDate(r.dueAt) : "—"}</Td>
-                <Td><Badge value={r.status} /></Td>
+                <Td label="Due">{r.dueAt ? <DubaiDate value={r.dueAt} /> : "—"}</Td>
+                <Td label="Status"><Badge value={r.status} /></Td>
               </tr>
             ))}
           </Table>

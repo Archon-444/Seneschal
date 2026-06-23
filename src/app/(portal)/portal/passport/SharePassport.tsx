@@ -20,7 +20,7 @@ export function SharePassport() {
       <Button type="submit" variant="secondary" disabled={pending}>
         {pending ? "Creating…" : "Create secure link"}
       </Button>
-      {state.error && <p className="text-sm text-claret">{state.error}</p>}
+      {state.error && <p className="text-sm text-claret-700">{state.error}</p>}
       {state.url && (
         <input
           readOnly

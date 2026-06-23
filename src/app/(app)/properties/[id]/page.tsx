@@ -5,8 +5,9 @@ import { getProperty } from "@/server/services/properties";
 import { getRenewalRisk } from "@/server/services/renewals";
 import { listDocuments } from "@/server/services/documents";
 import { listEvidence, EVIDENCE_LABELS } from "@/server/services/evidenceQuery";
-import { daysBetween, formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
-import { Badge, BackLink, Button, Card, EmptyState, Field, inputClass, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
+import { daysBetween, todayInDubai } from "@/server/calculators/dates";
+import { Badge, BackLink, Card, DubaiDate, EmptyState, Field, inputClass, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import {
   createMoveInAction,
   acknowledgeMoveInOperatorAction,
@@ -81,7 +82,7 @@ export default async function PropertyDetailPage({
       {approachingRenewal && (
         <Link
           href={`/renewals/${tenancyFull!.id}`}
-          className="mb-6 inline-flex items-center gap-1 rounded-md border border-gold-300 bg-gold-50/40 px-3 py-1.5 text-sm font-medium text-gold-700 hover:bg-gold-100"
+          className="mb-6 inline-flex items-center gap-1 rounded-md border border-gold-300 bg-gold-100/40 px-3 py-1.5 text-sm font-medium text-gold-700 hover:bg-gold-100"
         >
           Approaching renewal · {daysToEnd} days to expiry — view risk report →
         </Link>
@@ -100,13 +101,15 @@ export default async function PropertyDetailPage({
               <Field label="Condition notes">
                 <input name="notes" className={inputClass} placeholder="e.g. two scratches on the kitchen counter" />
               </Field>
-              <Button type="submit" variant="secondary">Record move-in</Button>
+              <SubmitButton variant="secondary" pendingLabel="Recording…">Record move-in</SubmitButton>
             </form>
           ) : (
             <div className="space-y-3 text-sm">
               <div className="text-xs text-muted">
-                Landlord: {moveIn.landlordAckAt ? `acknowledged ${formatDubaiDate(moveIn.landlordAckAt)}` : "pending"} ·{" "}
-                Tenant: {moveIn.tenantAckAt ? `acknowledged ${formatDubaiDate(moveIn.tenantAckAt)}` : "pending"}
+                Landlord:{" "}
+                {moveIn.landlordAckAt ? <>acknowledged <DubaiDate value={moveIn.landlordAckAt} /></> : "pending"} ·{" "}
+                Tenant:{" "}
+                {moveIn.tenantAckAt ? <>acknowledged <DubaiDate value={moveIn.tenantAckAt} /></> : "pending"}
               </div>
               <div className="flex flex-wrap gap-2">
                 {!moveIn.landlordAckAt && (
@@ -120,7 +123,7 @@ export default async function PropertyDetailPage({
                 <input type="hidden" name="id" value={moveIn.id} />
                 <input type="hidden" name="propertyId" value={id} />
                 <input name="file" type="file" required className={inputClass + " max-w-xs"} />
-                <Button type="submit" variant="secondary">Add photo</Button>
+                <SubmitButton variant="secondary" pendingLabel="Uploading…">Add photo</SubmitButton>
               </form>
             </div>
           )}
@@ -157,7 +160,7 @@ export default async function PropertyDetailPage({
             <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm lg:grid-cols-3">
               <Detail label="Status"><Badge value={tenancyFull.status} /></Detail>
               <Detail label="Term">
-                <span className="figure">{formatDubaiDate(tenancyFull.startDate)} → {formatDubaiDate(tenancyFull.endDate)}</span>
+                <DubaiDate value={tenancyFull.startDate} /> → <DubaiDate value={tenancyFull.endDate} />
               </Detail>
               <Detail label="Annual rent"><Money amount={String(tenancyFull.annualRent)} /></Detail>
               <Detail label="Deposit">{tenancyFull.depositAmount ? <Money amount={String(tenancyFull.depositAmount)} /> : "—"}</Detail>
@@ -182,7 +185,7 @@ export default async function PropertyDetailPage({
               </Detail>
             </div>
             {pos && (
-              <div className="mt-6 rounded-lg border border-gold-300 bg-gold-50/40 p-4">
+              <div className="mt-6 rounded-lg border border-gold-300 bg-gold-100/40 p-4">
                 <h3 className="font-display mb-2 text-lg text-navy-900">Market position</h3>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
                   <MarketFact label="Rent vs market" value={`${Math.abs(rentVsMarketPct)}% ${rentVsMarketPct >= 0 ? "below" : "above"}`} />
@@ -192,18 +195,18 @@ export default async function PropertyDetailPage({
                 </div>
                 <p className="mt-3 text-xs text-muted">
                   Estimated from the captured index{renewalRisk!.latestIndex?.isBenchmark ? " (community benchmark)" : ""} · not
-                  legal advice · source captured {formatDubaiDate(renewalRisk!.latestIndex!.capturedAt)}.{" "}
+                  legal advice · source captured <DubaiDate value={renewalRisk!.latestIndex!.capturedAt} />.{" "}
                   <Link href={`/renewals/${tenancyFull.id}`} className="text-gold-700 hover:underline">Full report →</Link>
                 </p>
               </div>
             )}
             <h3 className="font-display mt-6 mb-2 text-lg text-navy-900">Open deadlines</h3>
-            <Table headers={["Due", "Kind", "Rule"]}>
+            <Table stack headers={["Due", "Kind", "Rule"]}>
               {tenancyFull.deadlines.map((d) => (
                 <tr key={d.id}>
-                  <Td className="figure whitespace-nowrap">{formatDubaiDate(d.dueAt)}</Td>
-                  <Td><Badge value={d.kind} /></Td>
-                  <Td className="text-xs text-navy-300">
+                  <Td label="Due" className="whitespace-nowrap"><DubaiDate value={d.dueAt} /></Td>
+                  <Td label="Kind"><Badge value={d.kind} /></Td>
+                  <Td label="Rule" className="text-xs text-navy-300">
                     {(d.computedFrom as { rule?: string } | null)?.rule ?? "—"}
                   </Td>
                 </tr>
@@ -211,19 +214,19 @@ export default async function PropertyDetailPage({
             </Table>
           </Card>
         ) : (
-          <EmptyState message="No active tenancy. Add one to generate the deadline calendar." />
+          <EmptyState title="No active tenancy" message="Add one to generate the deadline calendar." />
         )
       )}
 
       {tab === "payments" && (
         tenancyFull ? (
           <>
-            <Table headers={["#", "Due", "Amount", "Instrument", "Cheque no", "Bank", "Status", "Actions"]}>
+            <Table stack headers={["#", "Due", "Amount", "Instrument", "Cheque no", "Bank", "Status", "Actions"]}>
               {tenancyFull.paymentItems.map((item) => (
                 <PaymentRow key={item.id} item={{
                   id: item.id,
                   seq: item.seq,
-                  dueDate: formatDubaiDate(item.dueDate),
+                  dueDate: item.dueDate,
                   amount: String(item.amount),
                   instrument: item.instrument,
                   chequeNo: item.chequeNo,
@@ -237,7 +240,7 @@ export default async function PropertyDetailPage({
             </p>
           </>
         ) : (
-          <EmptyState message="No tenancy — no payment schedule." />
+          <EmptyState title="No payment schedule" message="There's no tenancy on this unit yet." />
         )
       )}
 
@@ -245,17 +248,17 @@ export default async function PropertyDetailPage({
         <div className="space-y-6">
           <UploadForm scopeType={tenancy ? "TENANCY" : "PROPERTY"} scopeId={tenancy?.id ?? id} back={`/properties/${id}?tab=documents`} />
           {docs.length === 0 ? (
-            <EmptyState message="No documents on file for this property." />
+            <EmptyState title="No documents" message="No documents on file for this property." />
           ) : (
-            <Table headers={["File", "Kind", "Uploaded", "SHA-256"]}>
+            <Table stack headers={["File", "Kind", "Uploaded", "SHA-256"]}>
               {docs.map((d) => (
                 <tr key={d.id}>
-                  <Td>
+                  <Td label="File">
                     <Link href={`/vault/${d.id}`} className="text-navy-900 hover:underline">{d.fileName}</Link>
                   </Td>
-                  <Td><Badge value={d.kind} /></Td>
-                  <Td className="figure whitespace-nowrap">{formatDubaiDate(d.createdAt)}</Td>
-                  <Td className="figure text-xs text-navy-300">{d.sha256.slice(0, 16)}…</Td>
+                  <Td label="Kind"><Badge value={d.kind} /></Td>
+                  <Td label="Uploaded" className="whitespace-nowrap"><DubaiDate value={d.createdAt} /></Td>
+                  <Td label="SHA-256" className="figure text-xs text-navy-300">{d.sha256.slice(0, 16)}…</Td>
                 </tr>
               ))}
             </Table>
@@ -265,7 +268,7 @@ export default async function PropertyDetailPage({
 
       {tab === "evidence" && (
         evidence.length === 0 ? (
-          <EmptyState message="No evidence recorded yet." />
+          <EmptyState title="No evidence yet" message="Actions on this property will appear here." />
         ) : (
           <ol className="relative ml-3 space-y-4 border-l border-ivory-300 pl-6">
             {evidence.map((e) => (
@@ -319,7 +322,7 @@ function AckButton({ id, propertyId, party, label }: { id: string; propertyId: s
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="propertyId" value={propertyId} />
       <input type="hidden" name="party" value={party} />
-      <Button type="submit" variant="secondary">{label}</Button>
+      <SubmitButton variant="secondary" pendingLabel="Saving…">{label}</SubmitButton>
     </form>
   );
 }

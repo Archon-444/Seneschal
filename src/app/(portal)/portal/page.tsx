@@ -70,14 +70,14 @@ async function TenantHome({ ctx }: { ctx: AuthzContext }) {
                     tone="warn"
                   />
                 </div>
-                <Table headers={["#", "Due", "Amount", "Instrument", "Status"]}>
+                <Table stack headers={["#", "Due", "Amount", "Instrument", "Status"]}>
                   {items.map((p) => (
                     <tr key={p.id}>
-                      <Td className="figure">{p.seq}</Td>
-                      <Td className="figure">{formatDubaiDate(p.dueDate)}</Td>
-                      <Td><Money amount={String(p.amount)} /></Td>
-                      <Td>{p.instrument}{p.chequeNo ? ` · ${p.chequeNo}` : ""}</Td>
-                      <Td><Badge value={p.status} /></Td>
+                      <Td label="#" className="figure">{p.seq}</Td>
+                      <Td label="Due" className="figure">{formatDubaiDate(p.dueDate)}</Td>
+                      <Td label="Amount"><Money amount={String(p.amount)} /></Td>
+                      <Td label="Instrument">{p.instrument}{p.chequeNo ? ` · ${p.chequeNo}` : ""}</Td>
+                      <Td label="Status"><Badge value={p.status} /></Td>
                     </tr>
                   ))}
                 </Table>
@@ -135,13 +135,13 @@ async function LandlordHome({ ctx }: { ctx: AuthzContext }) {
       {properties.length === 0 ? (
         <EmptyState message="No properties are linked to your account yet." />
       ) : (
-        <Table headers={["Property", "Type", "Bedrooms", "Status"]}>
+        <Table stack headers={["Property", "Type", "Bedrooms", "Status"]}>
           {properties.map((p) => (
             <tr key={p.id}>
-              <Td className="font-semibold text-navy-900">{propertyLabel(p)}</Td>
-              <Td>{p.propertyType ?? "—"}</Td>
-              <Td className="figure">{p.bedrooms ?? "—"}</Td>
-              <Td><Badge value={p.tenancies.length > 0 ? "ACTIVE" : "VACANT"} /></Td>
+              <Td label="Property" className="font-semibold text-navy-900">{propertyLabel(p)}</Td>
+              <Td label="Type">{p.propertyType ?? "—"}</Td>
+              <Td label="Bedrooms" className="figure">{p.bedrooms ?? "—"}</Td>
+              <Td label="Status"><Badge value={p.tenancies.length > 0 ? "ACTIVE" : "VACANT"} /></Td>
             </tr>
           ))}
         </Table>

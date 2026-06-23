@@ -99,6 +99,27 @@ export function formatDubaiDate(d: Date): string {
   });
 }
 
+/**
+ * Display a real timestamp (a time slot — e.g. Viewing.scheduledAt — NOT a
+ * date-only contract date) in Dubai local convention: "15 Sept 2026, 14:30".
+ * Dubai is fixed UTC+4 (no DST), so the +4h shift (same authority as
+ * todayInDubai) makes both the calendar day and the wall-clock time exact —
+ * including when the instant crosses midnight into the next Dubai day.
+ * Display-only: never feed this back into date arithmetic.
+ */
+export function formatDubaiDateTime(d: Date): string {
+  const shifted = new Date(d.getTime() + 4 * 60 * 60 * 1000);
+  const datePart = toUtcDateOnly(shifted).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const hh = String(shifted.getUTCHours()).padStart(2, "0");
+  const mm = String(shifted.getUTCMinutes()).padStart(2, "0");
+  return `${datePart}, ${hh}:${mm}`;
+}
+
 /** Whole calendar days from `from` to `to` (negative if `to` is earlier). */
 export function daysBetween(from: Date, to: Date): number {
   const ms = toUtcDateOnly(to).getTime() - toUtcDateOnly(from).getTime();

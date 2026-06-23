@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { getOrCreateMyPassport, listPassportDocuments } from "@/server/services/tenantPassport";
 import { getDocumentUrl } from "@/server/services/documents";
-import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, EmptyState, Field, inputClass, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Card, DubaiDate, EmptyState, Field, inputClass, PageHeader, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { updatePassportAction, uploadPassportDocumentAction } from "./actions";
 import { SharePassport } from "./SharePassport";
 
@@ -82,7 +82,7 @@ export default async function PassportPage() {
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <Button type="submit">Save passport</Button>
+            <SubmitButton pendingLabel="Saving…">Save passport</SubmitButton>
           </div>
         </form>
       </Card>
@@ -92,16 +92,25 @@ export default async function PassportPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             {docLinks.length === 0 ? (
-              <EmptyState message="No documents yet. Add your Emirates ID, passport, or a salary certificate." />
+              <EmptyState
+                title="No documents yet"
+                message="Add your Emirates ID, passport, or a salary certificate."
+              />
             ) : (
-              <Table headers={["Document", "Type", "Added", ""]}>
+              <Table stack headers={["Document", "Type", "Added", ""]}>
                 {docLinks.map(({ doc, url }) => (
                   <tr key={doc.id}>
-                    <Td className="font-medium text-navy-900">{doc.fileName}</Td>
-                    <Td>{doc.kind.replace(/_/g, " ")}</Td>
-                    <Td className="figure">{formatDubaiDate(doc.createdAt)}</Td>
+                    <Td label="Document" className="font-medium text-navy-900">
+                      {doc.fileName}
+                    </Td>
+                    <Td label="Type">{doc.kind.replace(/_/g, " ")}</Td>
+                    <Td label="Added">
+                      <DubaiDate value={doc.createdAt} />
+                    </Td>
                     <Td>
-                      <a href={url} target="_blank" rel="noreferrer" className="text-gold-700 hover:underline">View</a>
+                      <a href={url} target="_blank" rel="noreferrer" className="text-gold-700 hover:underline">
+                        View
+                      </a>
                     </Td>
                   </tr>
                 ))}
@@ -122,7 +131,7 @@ export default async function PassportPage() {
                 <Field label="File">
                   <input name="file" type="file" required className={inputClass} />
                 </Field>
-                <Button type="submit">Upload</Button>
+                <SubmitButton pendingLabel="Uploading…">Upload</SubmitButton>
               </form>
             </Card>
 

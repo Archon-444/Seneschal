@@ -57,7 +57,7 @@ export function Sidebar({
     // The platform console is a context-switch OUT of the workspace, not a feature: a divider
     // above it and gold accent mark it as leaving the workspace plane.
     <div className="mt-auto border-t border-navy-800 px-3 pt-3 pb-1">
-      {!collapsed && <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-400">Platform</div>}
+      {!collapsed && <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-300">Platform</div>}
       {link({ href: "/admin", label: "Platform console", icon: "staff" }, true)}
     </div>
   );
@@ -82,7 +82,7 @@ export function Sidebar({
     collapsed ? (
       <div className="mx-1 my-2 border-t border-navy-800" />
     ) : (
-      <div className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-400">{label}</div>
+      <div className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-300">{label}</div>
     );
 
   return (

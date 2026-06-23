@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { inputClass } from "@/components/ui";
 import { respondToOfferAction, type OfferResponseState } from "./actions";
 
 export function TenantOfferForm({ token }: { token: string }) {
@@ -31,14 +32,14 @@ export function TenantOfferForm({ token }: { token: string }) {
               Your proposed annual rent (AED)
             </label>
             <input name="annualRent" type="number" min="1" step="1" required
-              className="w-full rounded-md border border-ivory-300 px-3 py-2 text-sm focus:border-navy-300 focus:outline-none" />
+              className={inputClass} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
               Payment schedule
             </label>
             <input name="paymentSchedule" required placeholder="e.g. 2 cheques"
-              className="w-full rounded-md border border-ivory-300 px-3 py-2 text-sm focus:border-navy-300 focus:outline-none" />
+              className={inputClass} />
           </div>
         </div>
       )}
@@ -48,8 +49,7 @@ export function TenantOfferForm({ token }: { token: string }) {
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
             {mode === "ask" ? "Your question" : "Note (optional)"}
           </label>
-          <textarea name="note" rows={2} required={mode === "ask"}
-            className="w-full rounded-md border border-ivory-300 px-3 py-2 text-sm focus:border-navy-300 focus:outline-none" />
+          <textarea name="note" rows={2} required={mode === "ask"} className={inputClass} />
         </div>
       )}
 

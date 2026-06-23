@@ -63,7 +63,7 @@ export default async function ExternalLinkPage({ params }: { params: Promise<{ t
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display text-2xl text-navy-900">{listing.headline ?? unit}</h1>
           {listing.ownerVerified && (
-            <span className="rounded-full bg-verde/10 px-2.5 py-1 text-xs font-medium text-verde">Verified landlord</span>
+            <span className="rounded-full bg-verde-100 px-2.5 py-1 text-xs font-medium text-verde-700">Verified landlord</span>
           )}
         </div>
         <p className="mt-1 text-sm text-navy-500">{unit}</p>

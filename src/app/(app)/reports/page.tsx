@@ -2,8 +2,7 @@ import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { listReports } from "@/server/services/reports";
 import { listClients } from "@/server/services/clients";
-import { formatDubaiDate } from "@/server/calculators/dates";
-import { EmptyState, PageHeader, Table, Td } from "@/components/ui";
+import { DubaiDate, EmptyState, PageHeader, Table, Td } from "@/components/ui";
 import { generateReportAction } from "../actions";
 
 export default async function ReportsPage() {
@@ -25,16 +24,23 @@ export default async function ReportsPage() {
         ))}
       </div>
       {reports.length === 0 ? (
-        <EmptyState message="No reports generated yet." />
+        <EmptyState
+          title="No reports yet"
+          message="Generate a monthly client report using the buttons above."
+        />
       ) : (
-        <Table headers={["Generated", "Kind", "Client", ""]}>
+        <Table stack headers={["Generated", "Kind", "Client", ""]}>
           {reports.map((r) => (
             <tr key={r.id}>
-              <Td className="figure">{formatDubaiDate(r.createdAt)}</Td>
-              <Td>{r.kind}</Td>
-              <Td>{clientName(r.clientPrincipalId)}</Td>
+              <Td label="Generated" className="whitespace-nowrap">
+                <DubaiDate value={r.createdAt} />
+              </Td>
+              <Td label="Kind">{r.kind}</Td>
+              <Td label="Client">{clientName(r.clientPrincipalId)}</Td>
               <Td>
-                <Link href={`/reports/${r.id}`} className="text-sm text-navy-500 hover:underline">Open →</Link>
+                <Link href={`/reports/${r.id}`} className="text-sm text-navy-500 hover:underline">
+                  Open →
+                </Link>
               </Td>
             </tr>
           ))}

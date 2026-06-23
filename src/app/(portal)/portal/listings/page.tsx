@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { listListings } from "@/server/services/listings";
 import { listProperties } from "@/server/services/properties";
-import { Badge, Button, Card, EmptyState, Field, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, EmptyState, Field, FormSection, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { createListingAction } from "./actions";
 
 // Landlord listings index (1B). LANDLORD-only; the persona layout already bars
@@ -26,28 +27,33 @@ export default async function ListingsPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           {rows.length === 0 ? (
-            <EmptyState message="No listings yet. Create one from an owned unit to start." />
+            <EmptyState title="No listings yet" message="Create one from an owned vacant unit to start." />
           ) : (
-            <Table headers={["Unit", "Asking rent", "Readiness", "Status"]}>
+            <Table stack headers={["Unit", "Asking rent", "Readiness", "Status"]}>
               {rows.map((l) => (
                 <tr key={l.id}>
-                  <Td>
+                  <Td label="Unit">
                     <Link href={`/portal/listings/${l.id}`} className="font-medium text-navy-900 hover:underline">
                       {propertyLabel(l.property)}
                     </Link>
                     {l.headline ? <div className="text-xs text-muted">{l.headline}</div> : null}
                   </Td>
-                  <Td>{l.askingRent != null ? <Money amount={String(l.askingRent)} /> : "—"}</Td>
-                  <Td className="figure">{l.readinessScore ?? 0}/100</Td>
-                  <Td><Badge value={l.status} /></Td>
+                  <Td label="Asking rent">
+                    {l.askingRent != null ? <Money amount={String(l.askingRent)} /> : "—"}
+                  </Td>
+                  <Td label="Readiness" className="figure">
+                    {l.readinessScore ?? 0}/100
+                  </Td>
+                  <Td label="Status">
+                    <Badge value={l.status} />
+                  </Td>
                 </tr>
               ))}
             </Table>
           )}
         </div>
 
-        <Card>
-          <h2 className="font-display mb-3 text-lg text-navy-900">New listing</h2>
+        <FormSection title="New listing">
           {vacant.length === 0 ? (
             <p className="text-sm text-muted">
               All your units are currently occupied. Listings are for vacant units; one becomes available
@@ -55,11 +61,13 @@ export default async function ListingsPage() {
             </p>
           ) : (
             <form action={createListingAction} className="space-y-3">
-              <Field label="Vacant unit">
+              <Field label="Vacant unit" required>
                 <select name="propertyId" required className={inputClass}>
                   <option value="">Select…</option>
                   {vacant.map((p) => (
-                    <option key={p.id} value={p.id}>{propertyLabel(p)}</option>
+                    <option key={p.id} value={p.id}>
+                      {propertyLabel(p)}
+                    </option>
                   ))}
                 </select>
               </Field>
@@ -69,10 +77,10 @@ export default async function ListingsPage() {
               <Field label="Asking rent (AED / year)">
                 <input name="askingRent" type="number" min="0" className={inputClass} placeholder="95000" />
               </Field>
-              <Button type="submit">Create draft</Button>
+              <SubmitButton pendingLabel="Creating…">Create draft</SubmitButton>
             </form>
           )}
-        </Card>
+        </FormSection>
       </div>
     </>
   );

@@ -1,7 +1,6 @@
 import { requireCtx } from "@/server/auth/request";
 import { listRiskFlags } from "@/server/services/risk";
-import { formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, EmptyState, PageHeader, ScopeLink, Table, Td } from "@/components/ui";
+import { Badge, DubaiDate, EmptyState, PageHeader, ScopeLink, Table, Td } from "@/components/ui";
 import { ackFlagAction } from "../actions";
 
 export default async function RiskPage() {
@@ -12,17 +11,29 @@ export default async function RiskPage() {
     <>
       <PageHeader title="Risk flags" subtitle="Deterministic rules only — one open flag per code per scope" />
       {flags.length === 0 ? (
-        <EmptyState message="No risk flags." />
+        <EmptyState title="No risk flags" message="Deterministic rules raise flags here when something needs attention." />
       ) : (
-        <Table headers={["Raised", "Code", "Severity", "Scope", "Status", "Rule", ""]}>
+        <Table stack headers={["Raised", "Code", "Severity", "Scope", "Status", "Rule", ""]}>
           {flags.map((f) => (
             <tr key={f.id} className={f.status === "CLEARED" ? "opacity-50" : ""}>
-              <Td className="figure whitespace-nowrap">{formatDubaiDate(f.raisedAt)}</Td>
-              <Td><Badge value={f.code} /></Td>
-              <Td><Badge value={f.severity} /></Td>
-              <Td className="text-xs"><ScopeLink scopeType={f.scopeType} scopeId={f.scopeId} /></Td>
-              <Td><Badge value={f.status} /></Td>
-              <Td className="figure text-xs">{f.ruleVersion ?? "—"}</Td>
+              <Td label="Raised" className="whitespace-nowrap">
+                <DubaiDate value={f.raisedAt} />
+              </Td>
+              <Td label="Code">
+                <Badge value={f.code} />
+              </Td>
+              <Td label="Severity">
+                <Badge value={f.severity} />
+              </Td>
+              <Td label="Scope" className="text-xs">
+                <ScopeLink scopeType={f.scopeType} scopeId={f.scopeId} />
+              </Td>
+              <Td label="Status">
+                <Badge value={f.status} />
+              </Td>
+              <Td label="Rule" className="figure text-xs">
+                {f.ruleVersion ?? "—"}
+              </Td>
               <Td>
                 {f.status === "OPEN" && (
                   <form action={ackFlagAction}>
