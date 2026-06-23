@@ -61,9 +61,12 @@ export function AppShell({
           collapsed ? "w-16" : "w-60"
         }`}
       >
-        <div className={`border-b border-navy-700 py-5 ${collapsed ? "px-3 text-center" : "px-5"}`}>
+        <div
+          className={`flex h-14 items-center border-b border-navy-700 ${
+            collapsed ? "justify-center px-3" : "px-5"
+          }`}
+        >
           {brand(!collapsed)}
-          {!collapsed && workspaceName && <div className="mt-1 truncate text-xs text-navy-300">{workspaceName}</div>}
         </div>
         <Sidebar nav={nav} isStaff={isStaff} collapsed={collapsed} />
       </aside>
