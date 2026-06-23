@@ -5,6 +5,7 @@ import * as clients from "@/server/services/clients";
 import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
 import { acceptOffer, mintRenewedTenancy, openRenewalCase, proposeOffer } from "@/server/services/renewals";
+import { AuthzError } from "@/server/authz";
 
 // PR-pilot P0-1 — renewal terminal mutations must be atomic and singular under
 // concurrency. Each test fires the same operation twice (or N times) in parallel
@@ -73,6 +74,16 @@ describe("renewal concurrency", () => {
     const failed = results.filter((r) => r.status === "rejected");
     expect(ok).toHaveLength(1);
     expect(failed).toHaveLength(1);
+
+    // SHAPE under contention: the loser must surface a CLEAN 409 from the
+    // application layer — the guarded claim (updateMany count !== 1) converts the
+    // lost race into an AuthzError, it does NOT let the Tenancy_renewsFromTenancyId
+    // unique violation bubble up as a raw Prisma error (which the route layer would
+    // surface as a 500). Assert the error TYPE + status, not just that one rejected.
+    const loser = (failed[0] as PromiseRejectedResult).reason;
+    expect(loser).toBeInstanceOf(AuthzError);
+    expect((loser as AuthzError).status).toBe(409);
+    expect(loser).not.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
 
     // Exactly one successor tenancy points at the predecessor, and the case
     // references that single successor.
