@@ -7,14 +7,17 @@
 // running app enforces — a deploy that would fail closed at first cold start
 // is rejected here first. The two must stay in sync; that file is the spec.
 //
-// Production gating uses NODE_ENV, exactly as the runtime validator does.
-// Vercel sets NODE_ENV=production for deploy builds, so the strong checks fire
-// on every real deploy; a local `pnpm vercel-build` (NODE_ENV unset) keeps them
-// as warnings so it doesn't false-fail without prod secrets present.
+// Production gating uses VERCEL_ENV, NOT NODE_ENV. Vercel sets
+// NODE_ENV=production for *every* deploy build including previews, so gating on
+// it would hard-fail a preview that legitimately lacks production-only config
+// (an https APP_BASE_URL, a Blob token, etc). VERCEL_ENV is "production" only
+// for a real production deploy. Off Vercel (VERCEL_ENV unset) we fall back to
+// NODE_ENV so a non-Vercel production build is still gated, while a local
+// `pnpm vercel-build` (neither set) keeps the prod checks as warnings.
 
 const MIN_SECRET_LEN = 32;
-const isProd = process.env.NODE_ENV === "production";
 const env = process.env;
+const isProd = env.VERCEL_ENV ? env.VERCEL_ENV === "production" : env.NODE_ENV === "production";
 const problems = [];
 
 // Always required — without these the build itself (migrate deploy) can't run.
@@ -23,13 +26,19 @@ if (!env.DATABASE_URL) {
     "DATABASE_URL missing — attach the Neon/Postgres integration or set it in Project → Settings → Environment Variables",
   );
 }
-if (!env.APP_SECRET || env.APP_SECRET.length < MIN_SECRET_LEN) {
-  problems.push(`APP_SECRET missing or shorter than ${MIN_SECRET_LEN} chars (openssl rand -hex 32)`);
+// APP_SECRET presence is always required; the length floor mirrors
+// checkProductionEnv, which only enforces it in production (dev/.env.example use
+// a short placeholder), so it lives in the prod-gated block below.
+if (!env.APP_SECRET) {
+  problems.push("APP_SECRET missing (openssl rand -hex 32)");
 }
 
 // Production-critical — mirrors checkProductionEnv. Hard-fail on a prod deploy;
-// downgraded to a warning otherwise so local builds aren't blocked.
+// downgraded to a warning otherwise so local/preview builds aren't blocked.
 const prodProblems = [];
+if (env.APP_SECRET && env.APP_SECRET.length < MIN_SECRET_LEN) {
+  prodProblems.push(`APP_SECRET shorter than ${MIN_SECRET_LEN} chars (openssl rand -hex 32)`);
+}
 if (!env.APP_BASE_URL || !env.APP_BASE_URL.startsWith("https://")) {
   prodProblems.push("APP_BASE_URL must be set to an https:// URL (used in emails + secure links)");
 }
