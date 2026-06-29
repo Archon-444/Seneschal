@@ -33,3 +33,15 @@ Use the **`frontend-design`** skill (`.claude/skills/frontend-design`) when buil
 ## A caution
 
 A design skill makes screens *look* right — which is seductive because Seneschal's risky parts are invisible: client scoping, evidence integrity, the OCR review gate, consent records. Use `frontend-design` for polish, but the **acceptance walkthrough and the integration/security suite are what tell you it works**. A pretty proof-upload page is not proof the consent record and evidence event actually wrote — confirm that.
+
+## gstack (optional review tooling)
+
+[gstack](https://github.com/garrytan/gstack) is an external, MIT-licensed Claude Code skill pack. We adopt only its **review-and-safety** subset here — not its full opinionated workflow, and **not** its browsing-routing rule (we keep our own browser/MCP tooling). The skills below are available **only if** gstack is installed in `~/.claude/skills/gstack` (prerequisite: Bun v1.0+, then `git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`). If they don't resolve, gstack isn't installed — skip them, don't guess.
+
+- `/review` — production-bug-focused code review of a diff.
+- `/codex` — second-opinion review via an alternate model.
+- `/investigate` — root-cause a bug or failing test before changing code.
+- `/careful` — extra-rigorous mode for high-stakes edits (use around authz, evidence/audit, and secure-link code per the non-negotiables above).
+- `/freeze` — snapshot/guard known-good state before a risky change.
+
+These complement, not replace, the Seneschal gates (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`) and the integration/security suite.
