@@ -115,3 +115,40 @@ describe("sensitive notification redaction (auth_otp_v1)", () => {
     ).rejects.toThrow(/cannot be delivered in-app/i);
   });
 });
+
+// A secure-link send embeds the live /link/<token> URL in its body. The token is the only
+// credential gating the public link, so it must be redacted from bodyRef exactly like an OTP —
+// otherwise it persists on the insert-only, feed-rendered message row and stays replayable.
+describe("sensitive notification redaction (secure-link templates)", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it.each(["proof_request_v1", "renewal_offer_v1"])(
+    "%s keeps the live token off the persisted message row, riding it on the outbox payload",
+    async (templateCode) => {
+      const W = await makeWorkspace("Link WS");
+      const contact = await prisma.contact.create({
+        data: { workspaceId: W.workspaceId, kind: "TENANT", name: "External", email: "ext@test.example" },
+      });
+      const token = "LIVEtoken_ABC-123xyz";
+      const msg = await notify({
+        workspaceId: W.workspaceId,
+        channel: "EMAIL",
+        templateCode,
+        subject: "Action needed",
+        body: `Open https://app.example/link/${token} to respond.`,
+        toContactId: contact.id,
+        toAddress: contact.email!,
+      });
+
+      const row = await prisma.notificationMessage.findUniqueOrThrow({ where: { id: msg.id } });
+      expect(row.bodyRef).toBe(redactedBodyFor(templateCode));
+      expect(row.bodyRef).not.toContain(token); // the token is absent from the persisted row
+
+      // The live token exists only on the outbox payload, so the recipient still gets the URL.
+      const ob = await prisma.outbox.findFirstOrThrow({ where: { topic: "notification.send" } });
+      expect(payloadBody(ob.payload)).toContain(token);
+    },
+  );
+});

@@ -11,13 +11,25 @@ function consoleAdapter(): ProviderAdapter {
   return {
     async send({ to, subject, body }) {
       // Dev/preview retrieval path: the body (incl. a live OTP code) is logged ONLY outside
-      // production, so the builder can sign into seeded demo logins. In production the console
+      // production, so the builder can sign into seeded demo logins. Secure-link tokens are
+      // bearer credentials, not demo codes — redact them so a live /link/<token> (or the
+      // proof+<token>@ intake address) never lands in logs even in dev. In production the console
       // adapter is not selected (resend is), and even if it were, the body is withheld.
-      const detail = process.env.NODE_ENV !== "production" ? ` body=${JSON.stringify(body)}` : "";
+      const detail =
+        process.env.NODE_ENV !== "production" ? ` body=${JSON.stringify(redactLinkTokens(body))}` : "";
       console.log(`[email:console] to=${to} subject=${subject ?? "(none)"}${detail}`);
       return { providerRef: `console-${Date.now()}` };
     },
   };
+}
+
+/** Strip secure-link tokens from a body before it is logged — the token is the credential that
+ *  gates the public link, so it must not reach a log sink. Leaves OTP codes (6 digits) intact so
+ *  the dev sign-in retrieval path still works. */
+export function redactLinkTokens(body: string): string {
+  return body
+    .replace(/\/link\/[A-Za-z0-9_-]+/g, "/link/[redacted]")
+    .replace(/proof\+[A-Za-z0-9_-]+@/g, "proof+[redacted]@");
 }
 
 function resendAdapter(): ProviderAdapter {

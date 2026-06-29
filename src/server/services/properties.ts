@@ -106,6 +106,18 @@ export async function createProperty(ctx: AuthzContext, data: PropertyInput) {
 export async function updateProperty(ctx: AuthzContext, id: string, data: Partial<PropertyInput>) {
   require_(ctx, "properties.write");
   await getProperty(ctx, id);
+  // `getProperty` only validates the CURRENT row is in scope. `clientPrincipalId` is the single
+  // pivot the whole scoping model keys on, so a re-pivot must be validated against the INCOMING
+  // client too — mirror createProperty, or a delegate could move the property to an unassigned
+  // client (or null it out of scope) and an operator could point it at another workspace.
+  if (data.clientPrincipalId !== undefined) {
+    if (isDelegateRole(ctx.role)) {
+      assertDelegateClientId(ctx, data.clientPrincipalId);
+    } else if (data.clientPrincipalId) {
+      const client = await prisma.clientPrincipal.findUnique({ where: { id: data.clientPrincipalId } });
+      assertSameWorkspace(ctx, client);
+    }
+  }
   const property = await prisma.property.update({ where: { id }, data });
   await recordAudit({
     workspaceId: ctx.workspaceId,
