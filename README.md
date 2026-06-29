@@ -13,7 +13,8 @@ AI never writes trusted records; every extracted field passes human review.
 
 Next.js (App Router) · TypeScript · Tailwind · Prisma + PostgreSQL · email OTP
 auth · private object storage with signed expiring URLs · Resend email gateway
-(WhatsApp adapter stubbed for 1B) · Outbox + in-process job runner · Vitest.
+(WhatsApp Meta Cloud API adapter built, off by default) · Outbox + in-process
+job runner · Vitest.
 
 ## Setup
 
@@ -43,7 +44,7 @@ pnpm test:unit         # calculators, capability matrix, crypto
 pnpm test:integration  # scoping ⛔, imports ⛔, proofs, payments, documents, extraction ⛔
 ```
 
-160 tests. The cross-workspace suite (T1.4), import machinery (T6.1), secure
+Several hundred tests. The cross-workspace suite (T1.4), import machinery (T6.1), secure
 links (T7.2), upload pipeline (T5.1/2) and the extraction harness vs
 `fixtures/ground-truth.json` (T6.3/4) are release gates and run in CI.
 
@@ -199,15 +200,21 @@ same `StorageDriver` interface.
 
 No marketplace/listings/brokerage flows, no payment processing or custody (the
 payments/DDS rail is the future **Phase 2** — Seneschal stays record-keeping
-only), no legal advice, no contractor dispatch, no live WhatsApp (see
-`docs/whatsapp-readiness.md`), no anomaly AI. (The **Stage 2 renewal engine** is
+only), no legal advice, no contractor dispatch, no anomaly AI. WhatsApp delivery
+is wired but **off by default** — the Meta Cloud API adapter ships behind the
+`notify()` gateway and stays a console no-op until `WHATSAPP_PROVIDER=meta` plus
+credentials are set; the remaining work is ops/approvals, not code (see
+`docs/whatsapp-readiness.md`). (The **Stage 2 renewal engine** is
 built and migrated — it is no longer a non-goal; see the renewal acceptance
 walkthrough above.)
 
 ## Stage 1B hooks &amp; terminology
 
-`TODO` markers only: WhatsApp adapter swap (Stage 1B), maintenance UI (schema
-live). The **Stage 2 renewal engine is built and migrated** — RenewalCase,
+`TODO` markers only: maintenance UI (schema live). WhatsApp is no longer a
+hook — the Meta Cloud API adapter and signature-verifying webhook
+(`src/app/api/v1/webhooks/whatsapp/route.ts`) are implemented and tested; going
+live is an ops/approval step, not a code swap. The **Stage 2 renewal engine is
+built and migrated** — RenewalCase,
 RentIndexCapture, Offer and Notice ship across the renewal migrations, with the
 full service layer in `src/server/services/renewals.ts` and the loop proven by
 the integration suite (`tests/integration/renewal*.test.ts`).

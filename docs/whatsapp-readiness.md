@@ -1,10 +1,19 @@
-# WhatsApp readiness — Stage 1B ops tracking (T9.3)
+# WhatsApp readiness — ops tracking (T9.3)
 
-WhatsApp live sending ships in Stage 1B. Stage 1A carries **zero code
-dependency** on WhatsApp: the adapter in `src/server/notify/whatsapp.ts` is a
-stub behind the same `notify()` gateway as email, so 1B swaps one module.
+**Code status: built, off by default.** The Meta Cloud API adapter
+(`src/server/notify/whatsapp.ts`) and the signature-verifying webhook
+(`src/app/api/v1/webhooks/whatsapp/route.ts`) are implemented and covered by the
+integration suite (`tests/integration/whatsapp.test.ts`). They sit behind the
+same `notify()` gateway as email and stay a **safe console no-op** until
+`WHATSAPP_PROVIDER=meta` plus credentials are set — nothing leaves the system
+without configuration, and the webhook returns 404 (and fails closed without
+`WHATSAPP_APP_SECRET`) while the provider is unset.
 
-## Ops checklist (no code involved)
+Going live is therefore **an ops/approval step, not a code change.** The
+remaining work is the Meta Business approvals, template catalogue, sender number
+and opt-in flow tracked below.
+
+## Ops checklist (no code involved — gates going live)
 
 | Item | Owner | Status |
 | --- | --- | --- |
@@ -28,8 +37,21 @@ stub behind the same `notify()` gateway as email, so 1B swaps one module.
 Copy constraints apply (no "by law"/"enforceable"/"lawful" phrasing; always
 "review before action", "based on supplied data").
 
-## Architecture note (1B intake)
+## Architecture note
 
-Inbound WhatsApp proof submission will reuse the email-intake path: provider
-webhook → Outbox → same `submitProofViaLink`-equivalent pipeline keyed by the
-tokenized conversation reference. No webhook executes business logic inline (§7).
+**Outbound (built):** sends route through `notify()` → `whatsappAdapter()`. With
+`WHATSAPP_PROVIDER=meta` the adapter POSTs to the Meta Graph API, passing the
+outbox `idempotencyKey` as `biz_opaque_callback_data` so a crashed-after-accept
+retry isn't a second send.
+
+**Webhook (built):** `GET` is the verify-token handshake; `POST` verifies a
+raw-body HMAC (`x-hub-signature-256`) with `timingSafeEqual` before parsing, then
+defers to the Outbox (`whatsapp.status`) and returns 200 fast — no business logic
+runs inline (§7). It is inert (404) unless `WHATSAPP_PROVIDER=meta`, and fails
+closed (500) if `WHATSAPP_APP_SECRET` is unset rather than trusting an
+empty-string HMAC key.
+
+**Inbound proof submission (not yet built):** when added it will reuse the
+email-intake path — provider webhook → Outbox → the same
+`submitProofViaLink`-equivalent pipeline keyed by the tokenized conversation
+reference. The current webhook handles delivery-status callbacks only.

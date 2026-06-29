@@ -50,7 +50,9 @@ hardcoded `true` (not env: fail-closed, prod can't be misconfigured *on*).
   handlers, so they guard the dormant code for a safe revival. They are **not**
   skipped.
 - **H4 (atomic secure-link consume) is deferred on these paths** — a branch that
-  never consumes can't have a consume TOCTOU.
+  never consumes can't have a consume TOCTOU. This is safe **only** while the
+  paths stay quarantined and fail-closed: H4 consume-first is a hard prerequisite
+  for any revival (see below), not an optional follow-up.
 
 ## If these were ever reconsidered (not planned)
 
@@ -61,5 +63,9 @@ notes below only record how the code was made dormant, not a green-light path:
 - The flags live in `src/server/config/features.ts` (hardcoded `true`,
   fail-closed — not env-driven, so prod can't be switched on by config).
 - Nothing was skipped in the test suite; the dormant code keeps its own tests.
-- The H4 consume-first fix would have to be applied to `getPassportForLink` /
-  `getListingForLink` (and the enquiry path) before any real-data exposure.
+- **Hard prerequisite:** the H4 consume-first fix MUST be applied to
+  `getPassportForLink` / `getListingForLink` (and the enquiry path) before these
+  link branches consume a token or fetch data. Today they short-circuit *before*
+  consume/data-fetch (the table above), so the deferral is safe; the moment any
+  revival removes that short-circuit, the consume-first fix has to land in the
+  same change — do not un-quarantine without it.
