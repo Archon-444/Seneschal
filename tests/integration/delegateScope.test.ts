@@ -263,6 +263,19 @@ describe("writes denied for sibling B (capability ≠ scope)", () => {
   it("updateProperty / archiveProperty on B → denied", async () => {
     await expect(properties.updateProperty(D.ctx, B.propertyId, { notes: "x" })).rejects.toThrow();
   });
+  it("updateProperty on A cannot re-pivot clientPrincipalId out of scope (to sibling B, or null)", async () => {
+    // The property itself is in scope, but clientPrincipalId is the pivot the model keys on:
+    // moving it to an unassigned client (or nulling it) is a scope escape and must be denied.
+    await expect(
+      properties.updateProperty(D.ctx, A.propertyId, { clientPrincipalId: B.clientId }),
+    ).rejects.toThrow();
+    await expect(
+      properties.updateProperty(D.ctx, A.propertyId, { clientPrincipalId: null }),
+    ).rejects.toThrow();
+    // The property stays with A — the rejected writes did not take effect.
+    const row = await prisma.property.findUniqueOrThrow({ where: { id: A.propertyId } });
+    expect(row.clientPrincipalId).toBe(A.clientId);
+  });
   it("createTenancy on B's property → denied", async () => {
     await expect(
       tenancies.createTenancy(D.ctx, {

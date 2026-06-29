@@ -88,10 +88,18 @@ describe("email intake (T7.4)", () => {
     ).toBe(false);
   });
 
-  it("outbound proof email contains the tokenized reply address", async () => {
-    const message = await prisma.notificationMessage.findFirst({
+  it("outbound proof email carries the tokenized reply address on the live body, not the persisted row", async () => {
+    const message = await prisma.notificationMessage.findFirstOrThrow({
       where: { relatedId: proofId, direction: "OUTBOUND" },
     });
-    expect(message!.bodyRef).toContain(`proof+${token}@`);
+    // Hardening: proof_request_v1 is a sensitive template — the token is a bearer credential and
+    // must not persist on the insert-only, feed-rendered message row.
+    expect(message.bodyRef).not.toContain(`proof+${token}@`);
+    expect(message.bodyRef).not.toContain(token);
+    // It rides the outbox payload instead, so the recipient still receives the reply-to address.
+    const ob = await prisma.outbox.findFirstOrThrow({
+      where: { topic: "notification.send", payload: { path: ["messageId"], equals: message.id } },
+    });
+    expect((ob.payload as { body?: string }).body).toContain(`proof+${token}@`);
   });
 });
