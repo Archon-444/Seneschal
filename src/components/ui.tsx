@@ -163,7 +163,7 @@ export function Table({
         <thead>
           <tr className="border-b border-line bg-ivory-100 text-left">
             {headers.map((h) => (
-              <th key={h} className="t-th px-4 py-2.5 text-muted">
+              <th key={h} scope="col" className="t-th px-4 py-2.5 text-muted">
                 {h}
               </th>
             ))}
@@ -255,12 +255,19 @@ export function Field({
   children,
   hint,
   required,
+  error,
+  errorId,
 }: {
   label: string;
   children: ReactNode;
   /** Short helper text under the control. */
   hint?: string;
   required?: boolean;
+  /** Validation error — replaces the hint. Pair with `errorId`: give the
+   *  control `aria-invalid` and `aria-describedby={errorId}` so screen
+   *  readers announce the message with the field. */
+  error?: string;
+  errorId?: string;
 }) {
   return (
     <label className="block">
@@ -273,7 +280,13 @@ export function Field({
         )}
       </span>
       {children}
-      {hint && <span className="t-caption mt-1 block text-muted">{hint}</span>}
+      {error ? (
+        <span id={errorId} className="t-caption mt-1 block text-claret-700">
+          {error}
+        </span>
+      ) : (
+        hint && <span className="t-caption mt-1 block text-muted">{hint}</span>
+      )}
     </label>
   );
 }
@@ -461,8 +474,12 @@ export function FormActions({ children, note }: { children: ReactNode; note?: Re
 export function FormStatus({ error, success }: { error?: string | null; success?: string | null }) {
   if (!error && !success) return null;
   return error ? (
-    <p className="rounded-lg bg-claret-100 px-3 py-2 text-sm text-claret-700">{error}</p>
+    <p role="alert" className="rounded-lg bg-claret-100 px-3 py-2 text-sm text-claret-700">
+      {error}
+    </p>
   ) : (
-    <p className="rounded-lg bg-verde-100 px-3 py-2 text-sm text-verde-700">{success}</p>
+    <p role="status" className="rounded-lg bg-verde-100 px-3 py-2 text-sm text-verde-700">
+      {success}
+    </p>
   );
 }

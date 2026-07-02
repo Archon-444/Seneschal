@@ -55,8 +55,16 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen">
+      {/* Keyboard users: first Tab lands here and jumps past the chrome. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-navy-900 focus:shadow-md"
+      >
+        Skip to content
+      </a>
       {/* Desktop sidebar */}
       <aside
+        aria-label="Primary navigation"
         className={`hidden shrink-0 flex-col border-r border-navy-800 bg-navy-900 text-ivory-100 md:flex ${
           collapsed ? "w-16" : "w-60"
         }`}
@@ -75,7 +83,7 @@ export function AppShell({
       {drawerOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-navy-900/40" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
-          <aside className="relative flex h-full w-64 flex-col bg-navy-900 text-ivory-100">
+          <aside aria-label="Primary navigation" className="relative flex h-full w-64 flex-col bg-navy-900 text-ivory-100">
             <div className="flex items-center justify-between border-b border-navy-700 px-5 py-5">
               {brand(true)}
               <button
@@ -152,7 +160,9 @@ export function AppShell({
             signOut={signOut}
           />
         </header>
-        <main className="flex-1 px-6 py-8 sm:px-8">{children}</main>
+        <main id="main-content" tabIndex={-1} className="flex-1 px-6 py-8 outline-none sm:px-8">
+          {children}
+        </main>
       </div>
     </div>
   );
