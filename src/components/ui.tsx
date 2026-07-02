@@ -255,12 +255,19 @@ export function Field({
   children,
   hint,
   required,
+  error,
+  errorId,
 }: {
   label: string;
   children: ReactNode;
   /** Short helper text under the control. */
   hint?: string;
   required?: boolean;
+  /** Validation error — replaces the hint. Pair with `errorId`: give the
+   *  control `aria-invalid` and `aria-describedby={errorId}` so screen
+   *  readers announce the message with the field. */
+  error?: string;
+  errorId?: string;
 }) {
   return (
     <label className="block">
@@ -273,7 +280,13 @@ export function Field({
         )}
       </span>
       {children}
-      {hint && <span className="t-caption mt-1 block text-muted">{hint}</span>}
+      {error ? (
+        <span id={errorId} className="t-caption mt-1 block text-claret-700">
+          {error}
+        </span>
+      ) : (
+        hint && <span className="t-caption mt-1 block text-muted">{hint}</span>
+      )}
     </label>
   );
 }
