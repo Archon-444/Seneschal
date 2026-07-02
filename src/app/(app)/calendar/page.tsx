@@ -140,7 +140,35 @@ export default async function CalendarPage({
         </Link>
       </div>
 
-      <div className="grid grid-cols-7 overflow-hidden rounded-lg border border-ivory-300 bg-white text-sm shadow-sm">
+      {/* Below sm the 7-column grid is untappable — swap to a per-day list. */}
+      <div className="rounded-lg border border-ivory-300 bg-white p-3 text-sm shadow-sm sm:hidden">
+        {inMonth.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted">No deadlines this month.</p>
+        ) : (
+          [...byDay.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([dayKey, dayItems]) => (
+              <div key={dayKey} className="border-b border-dashed border-line py-2 last:border-0">
+                <div
+                  className={`figure text-xs font-semibold ${dayKey === isoDate(today) ? "text-gold-700" : "text-navy-500"}`}
+                >
+                  <DubaiDate value={dayItems[0].dueAt} />
+                  {dayKey === isoDate(today) && " · today"}
+                </div>
+                {dayItems.map((d) => (
+                  <div
+                    key={d.id}
+                    className={`mt-1 rounded px-1.5 py-0.5 text-xs ${isManual(d) ? "bg-gold-100 text-gold-700" : "bg-navy-50 text-navy-700"}`}
+                  >
+                    {deadlineLabel(d)}
+                  </div>
+                ))}
+              </div>
+            ))
+        )}
+      </div>
+
+      <div className="hidden grid-cols-7 overflow-hidden rounded-lg border border-ivory-300 bg-white text-sm shadow-sm sm:grid">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div
             key={d}

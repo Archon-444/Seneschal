@@ -4,6 +4,7 @@ import { requireCtx } from "@/server/auth/request";
 import { getRenewalRisk } from "@/server/services/renewals";
 import { daysBetween, formatDubaiDate } from "@/server/calculators/dates";
 import { Badge, Button, Card, Field, FormActions, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import { InfoTooltip } from "@/components/Tooltip";
 import {
   acceptOfferAction,
   captureIndexAction,
@@ -123,10 +124,26 @@ export default async function RenewalReportPage({
                 .map((o) => ({ label: `AED ${o.annualRent.toLocaleString("en-AE")}`, value: o.annualRent, party: o.party }))}
             />
             <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Fact label="Index average market rent" value={<Money amount={pos.marketRentAvg} />} />
-              <Fact label="Your rent vs market" value={`${Math.round(pos.gapPct * 100)}% below`} />
-              <Fact label="Decree 43 band" value={`${pos.bandPct}%`} />
-              <Fact label="Value at risk / yr" value={<Money amount={pos.valueAtRisk} />} />
+              <Fact
+                label="Index average market rent"
+                value={<Money amount={pos.marketRentAvg} />}
+                info="The captured index figure for comparable units — see the benchmark's source and capture date below."
+              />
+              <Fact
+                label="Your rent vs market"
+                value={`${Math.round(pos.gapPct * 100)}% below`}
+                info="How far the current rent sits below the index average. This gap decides which Decree 43 band applies."
+              />
+              <Fact
+                label="Decree 43 band"
+                value={`${pos.bandPct}%`}
+                info="The maximum permissible increase for this gap under Decree No. (43) of 2013. An estimate anchored to the captured index — not legal advice."
+              />
+              <Fact
+                label="Value at risk / yr"
+                value={<Money amount={pos.valueAtRisk} />}
+                info="Annual rent forgone if no permissible increase is applied: the gap between current rent and the index-based ceiling estimate."
+              />
             </div>
             <div className="mt-4 flex items-start gap-3 rounded-lg bg-white/70 p-3 text-sm text-navy-700">
               <span className="mt-0.5 rounded-full bg-navy-900 px-2 py-0.5 text-xs font-bold text-ivory-50">
@@ -452,10 +469,13 @@ function KeyDate({ label, value, note, hot = false }: { label: string; value: st
   );
 }
 
-function Fact({ label, value }: { label: string; value: React.ReactNode }) {
+function Fact({ label, value, info }: { label: string; value: React.ReactNode; info?: string }) {
   return (
     <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div>
+      <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted">
+        {label}
+        {info && <InfoTooltip text={info} />}
+      </div>
       <div className="figure mt-0.5 text-lg text-navy-900">{value}</div>
     </div>
   );
