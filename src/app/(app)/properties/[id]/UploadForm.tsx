@@ -1,4 +1,5 @@
 import { Button, Card, Field, inputClass } from "@/components/ui";
+import { MAX_UPLOAD_LABEL } from "@/lib/uploadLimits";
 import { uploadDocumentAction } from "../../actions";
 
 const KINDS = [
@@ -32,7 +33,7 @@ export function UploadForm({
         <input type="hidden" name="scopeType" value={scopeType} />
         <input type="hidden" name="scopeId" value={scopeId} />
         <input type="hidden" name="back" value={back} />
-        <Field label="File">
+        <Field label="File" hint={`Up to ${MAX_UPLOAD_LABEL} per file.`}>
           <input type="file" name="file" required className="text-sm" />
         </Field>
         <Field label="Kind">

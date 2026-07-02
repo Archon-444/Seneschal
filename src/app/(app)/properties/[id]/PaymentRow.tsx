@@ -1,4 +1,5 @@
 import { Badge, DubaiDate, Money, Td } from "@/components/ui";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { transitionPaymentAction } from "../../actions";
 
 const NEXT_ACTIONS: Record<string, { to: string; label: string }[]> = {
@@ -37,16 +38,32 @@ export function PaymentRow({ item, propertyId }: { item: PaymentRowData; propert
       <Td label="Status"><Badge value={item.status} /></Td>
       <Td label="Actions">
         <div className="flex gap-2">
-          {actions.map((a) => (
-            <form key={a.to} action={transitionPaymentAction}>
-              <input type="hidden" name="paymentItemId" value={item.id} />
-              <input type="hidden" name="propertyId" value={propertyId} />
-              <input type="hidden" name="to" value={a.to} />
-              <button className="text-xs text-navy-500 underline-offset-2 hover:text-navy-900 hover:underline">
-                {a.label}
-              </button>
-            </form>
-          ))}
+          {actions.map((a) =>
+            a.to === "BOUNCED" ? (
+              // Recording a bounce is a permanent register entry — gate it
+              // behind a confirm. The dialog submits the SAME action.
+              <ConfirmDialog
+                key={a.to}
+                trigger={a.label}
+                triggerClassName="text-xs text-claret-500 underline-offset-2 hover:text-claret-700 hover:underline"
+                title="Record cheque as bounced?"
+                message={`This records cheque ${item.chequeNo ?? `#${item.seq}`} as bounced in the register and its evidence log. Seneschal records status only — no funds are held or moved. If the bank later clears it, record it as received again.`}
+                confirmLabel="Record bounced"
+                tone="danger"
+                action={transitionPaymentAction}
+                hiddenFields={{ paymentItemId: item.id, propertyId, to: a.to }}
+              />
+            ) : (
+              <form key={a.to} action={transitionPaymentAction}>
+                <input type="hidden" name="paymentItemId" value={item.id} />
+                <input type="hidden" name="propertyId" value={propertyId} />
+                <input type="hidden" name="to" value={a.to} />
+                <button className="text-xs text-navy-500 underline-offset-2 hover:text-navy-900 hover:underline">
+                  {a.label}
+                </button>
+              </form>
+            ),
+          )}
         </div>
       </Td>
     </tr>

@@ -10,6 +10,7 @@ import { createEnquiryFromLink } from "@/server/services/enquiries";
 import { recordLinkMessagingOptIn } from "@/server/services/consent";
 import { dispatchPending } from "@/server/outbox";
 import { handlers } from "@/server/outbox/runner";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, MAX_FILES_PER_REQUEST } from "@/lib/uploadLimits";
 
 export type SubmitState =
   | { status: "idle" }
@@ -55,11 +56,12 @@ export async function respondToOfferAction(
   return { status: "done", action };
 }
 
-const MAX_FILE_BYTES = 15 * 1024 * 1024;
-// H5 upload caps. The total request body is already hard-capped by Next's
-// serverActions.bodySizeLimit; these guard the count and the per-(link, IP)
-// submission rate that the body limit doesn't.
-const MAX_FILES_PER_REQUEST = 10;
+// H5 upload caps — the numbers live in src/lib/uploadLimits so the hint text
+// shown to the user can't drift from what's enforced here. The total request
+// body is already hard-capped by Next's serverActions.bodySizeLimit; these
+// guard the count and the per-(link, IP) submission rate that the body limit
+// doesn't.
+const MAX_FILE_BYTES = MAX_UPLOAD_BYTES;
 const PROOF_RATE_LIMIT = 10; // submissions per window per (linkId, ip)
 const PROOF_RATE_WINDOW_MS = 5 * 60_000;
 
@@ -77,7 +79,7 @@ export async function submitProofAction(_prev: SubmitState, formData: FormData):
   }
   for (const f of files) {
     if (f.size > MAX_FILE_BYTES) {
-      return { status: "error", message: `${f.name} is larger than 15 MB.` };
+      return { status: "error", message: `${f.name} is larger than ${MAX_UPLOAD_LABEL}.` };
     }
   }
 

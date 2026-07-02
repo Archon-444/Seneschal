@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { inputClass } from "@/components/ui";
+import { MAX_UPLOAD_LABEL, MAX_FILES_PER_REQUEST } from "@/lib/uploadLimits";
 import { submitProofAction, type SubmitState } from "./actions";
 
 export function UploadProofForm({ token }: { token: string }) {
@@ -30,6 +31,9 @@ export function UploadProofForm({ token }: { token: string }) {
           accept="image/*,application/pdf"
           className="block w-full text-sm text-navy-700 file:mr-3 file:rounded-md file:border-0 file:bg-navy-800 file:px-4 file:py-2 file:text-sm file:text-ivory-50"
         />
+        <p className="mt-1 text-xs text-muted">
+          Up to {MAX_FILES_PER_REQUEST} files, {MAX_UPLOAD_LABEL} each. Images or PDF.
+        </p>
       </div>
       <div>
         <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">

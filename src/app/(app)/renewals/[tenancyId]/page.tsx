@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { getRenewalRisk } from "@/server/services/renewals";
 import { daysBetween, formatDubaiDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, Field, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Button, Card, Field, FormActions, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
 import {
   acceptOfferAction,
   captureIndexAction,
@@ -359,31 +359,46 @@ function NoticeServiceCard({
             <input type="hidden" name="renewalCaseId" value={renewalCaseId} />
             <input type="hidden" name="tenancyId" value={tenancyId} />
             {pending && <input type="hidden" name="noticeId" value={notice!.id} />}
-            <div className="flex flex-wrap items-end gap-3">
-              <Field label="Service method">
-                <select name="serviceMethod" defaultValue={notice?.serviceMethod ?? "EMAIL"} className={inputClass}>
-                  {SERVICE_METHODS.map((m) => (
-                    <option key={m} value={m}>{label(m)}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Delivery reference">
+            <Field label="Service method">
+              <select name="serviceMethod" defaultValue={notice?.serviceMethod ?? "EMAIL"} className={inputClass}>
+                {SERVICE_METHODS.map((m) => (
+                  <option key={m} value={m}>{label(m)}</option>
+                ))}
+              </select>
+            </Field>
+            <fieldset className="space-y-3 rounded-lg border border-line bg-ivory-100/60 p-3">
+              <legend className="t-label px-1 text-muted">
+                Proof of service — provide at least one
+              </legend>
+              <Field label="Delivery reference" hint="Courier tracking no., registered-post ref, or inbox reference.">
                 <input name="serviceRef" className={inputClass} placeholder="courier / inbox ref" />
               </Field>
-            </div>
-            <Field label="Proof of service document (optional)">
-              <input type="file" name="file" className="text-sm" />
-            </Field>
-            <label className="flex items-center gap-2 text-sm text-navy-700">
-              <input type="checkbox" name="attest" value="yes" />
-              I attest this notice was served as recorded
-            </label>
-            <Field label="Attested by (name)">
-              <input name="attestedBy" className={inputClass} placeholder="your name" />
-            </Field>
-            <Button type="submit" variant="secondary">
-              {pending ? "Confirm service with evidence" : "Record notice service"}
-            </Button>
+              <Field label="Service document" hint="A delivery receipt, signed copy, or similar.">
+                <input type="file" name="file" className="text-sm" />
+              </Field>
+              <div>
+                <label className="flex items-center gap-2 text-sm text-navy-700">
+                  <input type="checkbox" name="attest" value="yes" />
+                  I attest this notice was served as recorded
+                </label>
+                <div className="mt-2">
+                  <Field label="Attested by (name)">
+                    <input name="attestedBy" className={inputClass} placeholder="your name" />
+                  </Field>
+                </div>
+              </div>
+            </fieldset>
+            <FormActions
+              note={
+                pending
+                  ? "At least one proof element above is needed to move this notice to served."
+                  : "With no proof attached, the service is recorded but held as awaiting evidence — it does not count as served."
+              }
+            >
+              <Button type="submit" variant="secondary">
+                {pending ? "Confirm service with evidence" : "Record notice service"}
+              </Button>
+            </FormActions>
           </form>
         </>
       )}
