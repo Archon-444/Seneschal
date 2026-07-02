@@ -12,14 +12,23 @@ import { dispatchPending } from "@/server/outbox";
 import { handlers } from "@/server/outbox/runner";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, MAX_FILES_PER_REQUEST } from "@/lib/uploadLimits";
 
+// Success states echo back WHAT was submitted so the external party gets a
+// concrete receipt, not a generic thank-you. They must never carry the link
+// token (or anything derived from it) — only the user's own typed values.
 export type SubmitState =
   | { status: "idle" }
-  | { status: "done" }
+  | { status: "done"; fileNames?: string[] }
   | { status: "error"; message: string };
 
 export type OfferResponseState =
   | { status: "idle" }
-  | { status: "done"; action: "ACCEPT" | "COUNTER" | "ASK" }
+  | {
+      status: "done";
+      action: "ACCEPT" | "COUNTER" | "ASK";
+      annualRent?: number;
+      paymentSchedule?: string;
+      note?: string;
+    }
   | { status: "error"; message: string };
 
 export async function respondToOfferAction(
@@ -35,13 +44,15 @@ export async function respondToOfferAction(
     return { status: "error", message: "Choose accept, counter, or ask." };
   }
   const rent = String(formData.get("annualRent") ?? "").trim();
+  const paymentSchedule = String(formData.get("paymentSchedule") ?? "").trim() || undefined;
+  const note = String(formData.get("note") ?? "").trim() || undefined;
   try {
     await respondToOfferViaLink(validation.link, {
       action,
       annualRent: rent ? Number(rent) : undefined,
-      paymentSchedule: String(formData.get("paymentSchedule") ?? "").trim() || undefined,
+      paymentSchedule,
       paymentMethod: String(formData.get("paymentMethod") ?? "").trim() || undefined,
-      note: String(formData.get("note") ?? "").trim() || undefined,
+      note,
     });
   } catch (e) {
     return { status: "error", message: e instanceof Error ? e.message : "Could not record your response." };
@@ -53,7 +64,13 @@ export async function respondToOfferAction(
       /* opt-in is best-effort; never fail the response on it */
     }
   }
-  return { status: "done", action };
+  return {
+    status: "done",
+    action,
+    annualRent: rent ? Number(rent) : undefined,
+    paymentSchedule,
+    note,
+  };
 }
 
 // H5 upload caps — the numbers live in src/lib/uploadLimits so the hint text
@@ -116,7 +133,7 @@ export async function submitProofAction(_prev: SubmitState, formData: FormData):
       device: h.get("user-agent") ?? undefined,
     },
   );
-  return { status: "done" };
+  return { status: "done", fileNames: files.map((f) => f.name) };
 }
 
 export async function submitEnquiryAction(_prev: SubmitState, formData: FormData): Promise<SubmitState> {

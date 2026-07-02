@@ -208,7 +208,16 @@ export default async function RenewalReportPage({
           ) : (
             <Table headers={["v", "Party", "Annual rent", "Payment", "Status", ""]}>
               {risk!.offers.map((o) => (
-                <tr key={o.id} className={o.status === "ACCEPTED" ? "bg-verde-100/40" : ""}>
+                <tr
+                  key={o.id}
+                  className={
+                    o.status === "ACCEPTED"
+                      ? "bg-verde-100/40"
+                      : o.status === "SENT" || o.status === "COUNTERED"
+                        ? "bg-amber-100/30"
+                        : ""
+                  }
+                >
                   <Td className="figure">{o.version}</Td>
                   <Td><Badge value={o.party} /></Td>
                   <Td>
@@ -216,7 +225,12 @@ export default async function RenewalReportPage({
                     <div className="text-[11px] text-muted">{deltaOnCurrent(o.annualRent, Number(t.annualRent))}</div>
                   </Td>
                   <Td>{o.paymentSchedule}{o.paymentMethod ? ` · ${o.paymentMethod}` : ""}</Td>
-                  <Td><Badge value={o.status} /></Td>
+                  <Td>
+                    <Badge value={o.status} />
+                    {(o.status === "SENT" || o.status === "COUNTERED") && (
+                      <div className="mt-0.5 text-[11px] text-amber-700">awaiting response</div>
+                    )}
+                  </Td>
                   <Td>
                     {(o.status === "SENT" || o.status === "COUNTERED") && (
                       <div className="flex gap-3">

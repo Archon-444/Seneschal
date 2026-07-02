@@ -155,8 +155,17 @@ export default async function CalendarPage({
             : "";
           const items = day ? (byDay.get(key) ?? []) : [];
           const shown = items.slice(0, 3);
-          const extra = items.length - shown.length;
+          const rest = items.slice(3);
           const isToday = key === isoDate(today);
+          const chip = (d: (typeof all)[number]) => (
+            <div
+              key={d.id}
+              className={`mt-1 truncate rounded px-1 py-0.5 text-[10px] ${isManual(d) ? "bg-gold-100 text-gold-700" : "bg-navy-50 text-navy-700"}`}
+              title={deadlineLabel(d)}
+            >
+              {deadlineLabel(d)}
+            </div>
+          );
           return (
             <div
               key={i}
@@ -169,17 +178,17 @@ export default async function CalendarPage({
                   >
                     {day}
                   </span>
-                  {shown.map((d) => (
-                    <div
-                      key={d.id}
-                      className={`mt-1 truncate rounded px-1 py-0.5 text-[10px] ${isManual(d) ? "bg-gold-100 text-gold-700" : "bg-navy-50 text-navy-700"}`}
-                      title={deadlineLabel(d)}
-                    >
-                      {deadlineLabel(d)}
-                    </div>
-                  ))}
-                  {extra > 0 && (
-                    <div className="mt-1 text-[10px] font-semibold text-muted">+{extra} more</div>
+                  {shown.map(chip)}
+                  {rest.length > 0 && (
+                    // Expands in place (<details> = zero JS, keyboard-native)
+                    // rather than floating a popover the grid would clip.
+                    <details className="group">
+                      <summary className="mt-1 inline-block cursor-pointer list-none rounded text-[10px] font-semibold text-muted hover:text-navy-900 [&::-webkit-details-marker]:hidden">
+                        <span className="group-open:hidden">+{rest.length} more</span>
+                        <span className="hidden group-open:inline">show less</span>
+                      </summary>
+                      {rest.map(chip)}
+                    </details>
                   )}
                 </>
               )}

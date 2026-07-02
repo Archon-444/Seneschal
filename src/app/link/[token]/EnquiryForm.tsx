@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { inputClass } from "@/components/ui";
+import { Field, FormStatus, inputClass } from "@/components/ui";
 import { submitEnquiryAction } from "./actions";
 
 // Public "register interest" form on a shared listing. No account; on success the
@@ -20,11 +20,19 @@ export function EnquiryForm({ token }: { token: string }) {
   return (
     <form action={action} className="space-y-3">
       <input type="hidden" name="token" value={token} />
-      <input name="name" required placeholder="Your name" className={inputClass} />
-      <input name="email" type="email" placeholder="Email (optional)" className={inputClass} />
-      <input name="phone" placeholder="Phone (optional)" className={inputClass} />
-      <textarea name="message" rows={3} placeholder="Your message (optional)" className={inputClass} />
-      {state.status === "error" && <p className="text-sm text-claret-700">{state.message}</p>}
+      <Field label="Your name" required>
+        <input name="name" required className={inputClass} />
+      </Field>
+      <Field label="Email (optional)">
+        <input name="email" type="email" className={inputClass} />
+      </Field>
+      <Field label="Phone (optional)">
+        <input name="phone" className={inputClass} />
+      </Field>
+      <Field label="Your message (optional)">
+        <textarea name="message" rows={3} className={inputClass} />
+      </Field>
+      {state.status === "error" && <FormStatus error={state.message} />}
       <button
         type="submit"
         disabled={pending}
