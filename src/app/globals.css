@@ -149,7 +149,7 @@ dialog.seneschal-dialog[open] {
   animation: seneschal-pop-in 0.15s ease-out;
 }
 dialog.seneschal-dialog::backdrop {
-  background: rgba(22, 38, 63, 0.4);
+  background: color-mix(in srgb, var(--color-navy-900) 40%, transparent);
 }
 .seneschal-toast {
   animation: seneschal-pop-in 0.18s ease-out;
