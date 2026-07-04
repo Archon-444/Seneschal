@@ -40,6 +40,24 @@ export function SkeletonTable({ rows = 6, cols = 4 }: { rows?: number; cols?: nu
   );
 }
 
+/** Timeline placeholder matching the dashboard "Upcoming" ribbon (an <ol>
+ *  with a left rule and date-chipped rows) so the skeleton holds the real
+ *  layout instead of flashing a generic table. */
+export function SkeletonTimeline({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
+      <div className="relative ml-1 space-y-4 border-l border-line pl-5">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="space-y-1.5">
+            <div className="skeleton h-3 w-16" />
+            <div className="skeleton h-4 w-3/4" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Generic page skeleton: a header line, an optional KPI row, then a table. */
 export function SkeletonPage({ kpis = true, children }: { kpis?: boolean; children?: ReactNode }) {
   return (

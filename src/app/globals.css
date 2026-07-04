@@ -140,6 +140,21 @@ textarea:focus-visible,
   border-radius: 6px;
 }
 
+/* ── Dialog & toast entrances (neutralized by the reduced-motion rule below) ── */
+@keyframes seneschal-pop-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+dialog.seneschal-dialog[open] {
+  animation: seneschal-pop-in 0.15s ease-out;
+}
+dialog.seneschal-dialog::backdrop {
+  background: color-mix(in srgb, var(--color-navy-900) 40%, transparent);
+}
+.seneschal-toast {
+  animation: seneschal-pop-in 0.18s ease-out;
+}
+
 /* ── Respect reduced-motion as a floor (without announcing it) ──────────────── */
 @media (prefers-reduced-motion: reduce) {
   *,

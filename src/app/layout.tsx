@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, IBM_Plex_Mono, Public_Sans } from "next/font/google";
+import { ToastProvider } from "@/components/Toast";
 import "./globals.css";
 
 // Design language: Fraunces (serif display) · Public Sans (UI body) ·
@@ -36,7 +37,9 @@ export default function RootLayout({
       lang="en"
       className={`${fraunces.variable} ${publicSans.variable} ${plexMono.variable}`}
     >
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

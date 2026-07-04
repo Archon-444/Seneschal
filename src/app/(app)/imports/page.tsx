@@ -27,15 +27,39 @@ export default async function ImportsPage() {
         </Card>
         <Card>
           <h2 className="font-display mb-3 text-lg text-navy-900">Excel / CSV import</h2>
-          <p className="mb-3 text-xs text-navy-500">
-            Template columns: community, building, unitNo, ejariNo, startDate, endDate, annualRent,
-            depositAmount, noticePeriodDays, tenantName, landlordName, propertyType, bedrooms.
+          <p className="mb-2 text-xs text-navy-500">
+            Column headers must match the template exactly — there is no mapping step. Rows are
+            staged into a batch for per-row review before anything commits.
           </p>
+          <div className="mb-3 flex flex-wrap gap-1">
+            {[
+              "community",
+              "building",
+              "unitNo",
+              "ejariNo",
+              "startDate",
+              "endDate",
+              "annualRent",
+              "depositAmount",
+              "noticePeriodDays",
+              "tenantName",
+              "landlordName",
+              "propertyType",
+              "bedrooms",
+            ].map((col) => (
+              <code
+                key={col}
+                className="figure rounded border border-line bg-ivory-100 px-1.5 py-0.5 text-[11px] text-navy-700"
+              >
+                {col}
+              </code>
+            ))}
+          </div>
           <form action={importCsvAction} className="flex items-end gap-3">
             <Field label="CSV file">
               <input type="file" name="file" accept=".csv" required className="text-sm" />
             </Field>
-            <Button type="submit" variant="secondary">Upload & map</Button>
+            <Button type="submit" variant="secondary">Upload CSV</Button>
           </form>
         </Card>
       </div>

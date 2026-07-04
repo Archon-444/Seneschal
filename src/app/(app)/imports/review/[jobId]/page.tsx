@@ -23,8 +23,12 @@ const SCALAR_FIELDS: { key: string; label: string; type?: string }[] = [
 
 function confidenceTone(c: number | undefined): string {
   if (c == null) return "text-navy-300";
-  if (c >= 0.95) return "text-verde-700";
-  if (c >= 0.85) return "text-gold-700";
+  // Bucket on the ROUNDED percentage — the same number the row displays —
+  // so a raw 0.9451 (displays "95%") doesn't get colored as if it were below
+  // the 95% band the legend describes.
+  const pct = Math.round(c * 100);
+  if (pct >= 95) return "text-verde-700";
+  if (pct >= 85) return "text-gold-700";
   return "text-claret-500";
 }
 
@@ -56,6 +60,21 @@ export default async function ExtractionReviewPage({
         title="Review extracted fields"
         subtitle={`Model: ${job!.model ?? "—"} · AI proposes, you decide. Nothing is written until you confirm.`}
       />
+      <div className="mb-3 flex max-w-3xl flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+        <span className="t-label">Confidence</span>
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-verde-500" />
+          ≥95% — reads clean, verify at a glance
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-gold-500" />
+          85–94% — check against the source snippet
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-claret-500" />
+          &lt;85% — likely needs correcting
+        </span>
+      </div>
       <form action={commitReviewedExtractionAction}>
         <input type="hidden" name="jobId" value={jobId} />
         <Card className="max-w-3xl">
