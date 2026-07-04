@@ -23,8 +23,12 @@ const SCALAR_FIELDS: { key: string; label: string; type?: string }[] = [
 
 function confidenceTone(c: number | undefined): string {
   if (c == null) return "text-navy-300";
-  if (c >= 0.95) return "text-verde-700";
-  if (c >= 0.85) return "text-gold-700";
+  // Bucket on the ROUNDED percentage — the same number the row displays —
+  // so a raw 0.9451 (displays "95%") doesn't get colored as if it were below
+  // the 95% band the legend describes.
+  const pct = Math.round(c * 100);
+  if (pct >= 95) return "text-verde-700";
+  if (pct >= 85) return "text-gold-700";
   return "text-claret-500";
 }
 

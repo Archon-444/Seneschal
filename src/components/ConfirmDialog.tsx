@@ -3,6 +3,7 @@
 import { useId, useRef, type ReactNode } from "react";
 import { Button } from "./ui";
 import { SubmitButton } from "./SubmitButton";
+import { useToast } from "./Toast";
 
 /**
  * Confirmation gate for irreversible one-click actions. Wraps an EXISTING
@@ -24,6 +25,7 @@ export function ConfirmDialog({
   tone = "default",
   action,
   hiddenFields,
+  successMessage,
 }: {
   /** Content of the button that opens the dialog. */
   trigger: ReactNode;
@@ -37,10 +39,22 @@ export function ConfirmDialog({
   action: (formData: FormData) => void | Promise<void>;
   /** Fields the action expects, rendered as hidden inputs. */
   hiddenFields?: Record<string, string>;
+  /** Toasted once the action resolves; omit for silent success. */
+  successMessage?: string;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const messageId = useId();
+  const { show } = useToast();
+
+  // Awaits the real action before closing, so SubmitButton's pending state is
+  // visible for the whole round-trip and a thrown error reaches the nearest
+  // error boundary with the dialog still open rather than already dismissed.
+  async function confirmAndClose(formData: FormData) {
+    await action(formData);
+    if (successMessage) show({ tone: "success", message: successMessage });
+    dialogRef.current?.close();
+  }
 
   return (
     <>
@@ -64,11 +78,7 @@ export function ConfirmDialog({
         <div id={messageId} className="mt-2 text-sm text-muted">
           {message}
         </div>
-        <form
-          action={action}
-          onSubmit={() => dialogRef.current?.close()}
-          className="mt-5 flex justify-end gap-2"
-        >
+        <form action={confirmAndClose} className="mt-5 flex justify-end gap-2">
           {hiddenFields &&
             Object.entries(hiddenFields).map(([k, v]) => (
               <input key={k} type="hidden" name={k} value={v} />

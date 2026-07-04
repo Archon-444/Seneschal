@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -36,9 +37,18 @@ const DOT: Record<ToastTone, string> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const nextId = useRef(1);
+  // Auto-dismiss timers, keyed by toast id, so a manual dismiss can cancel the
+  // pending timeout instead of leaving it to fire (and force a no-op re-render)
+  // against a toast that's already gone.
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
   const dismiss = useCallback((id: number) => {
-    setToasts((current) => current.filter((t) => t.id !== id));
+    const timer = timers.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timers.current.delete(id);
+    }
+    setToasts((current) => (current.some((t) => t.id === id) ? current.filter((t) => t.id !== id) : current));
   }, []);
 
   const show = useCallback<ShowToast>(
@@ -47,18 +57,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setToasts((current) => [...current, { id, tone, message }]);
       // Errors linger longer so they can be read; everything auto-dismisses.
       const ms = duration ?? (tone === "error" ? 8000 : 5000);
-      setTimeout(() => dismiss(id), ms);
+      timers.current.set(id, setTimeout(() => dismiss(id), ms));
     },
     [dismiss],
   );
 
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      pending.forEach(clearTimeout);
+      pending.clear();
+    };
+  }, []);
+
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div
-        aria-live="polite"
-        className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-full max-w-xs flex-col gap-2"
-      >
+      {/* No aria-live here — each toast below already carries role="alert"
+          (implicit assertive live region) or role="status" (implicit polite),
+          so a wrapping aria-live would double-announce or fight priority. */}
+      <div className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-full max-w-xs flex-col gap-2">
         {toasts.map((t) => (
           <div
             key={t.id}

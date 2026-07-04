@@ -21,6 +21,19 @@ import { addCalendarEntryAction, completeDeadlineAction } from "../actions";
 // Entries come from tenancies (notice gate, expiry, renewal, cheques — incl.
 // those from a scanned/onboarded Ejari) and from manual entries added here.
 
+/** Shared tone mapping for a deadline chip — one definition used by both the
+ *  mobile per-day list and the desktop grid, at their own densities. */
+function DeadlineChip({ label, manual, dense = false }: { label: string; manual: boolean; dense?: boolean }) {
+  const tone = manual ? "bg-gold-100 text-gold-700" : "bg-navy-50 text-navy-700";
+  return dense ? (
+    <div className={`mt-1 truncate rounded px-1 py-0.5 text-[10px] ${tone}`} title={label}>
+      {label}
+    </div>
+  ) : (
+    <div className={`mt-1 rounded px-1.5 py-0.5 text-xs ${tone}`}>{label}</div>
+  );
+}
+
 export default async function CalendarPage({
   searchParams,
 }: {
@@ -89,6 +102,11 @@ export default async function CalendarPage({
 
   const isManual = (d: (typeof all)[number]) => isManualDeadline(d);
   const navLink = "focus-ring rounded-md border border-line bg-white px-2.5 py-1 text-navy-500 hover:bg-ivory-100 hover:text-navy-900";
+  // Defined once per render (not per grid cell) — every cell's shown/rest
+  // items map through this same reference.
+  const chip = (d: (typeof all)[number]) => (
+    <DeadlineChip key={d.id} label={deadlineLabel(d)} manual={isManual(d)} dense />
+  );
 
   return (
     <>
@@ -156,12 +174,7 @@ export default async function CalendarPage({
                   {dayKey === isoDate(today) && " · today"}
                 </div>
                 {dayItems.map((d) => (
-                  <div
-                    key={d.id}
-                    className={`mt-1 rounded px-1.5 py-0.5 text-xs ${isManual(d) ? "bg-gold-100 text-gold-700" : "bg-navy-50 text-navy-700"}`}
-                  >
-                    {deadlineLabel(d)}
-                  </div>
+                  <DeadlineChip key={d.id} label={deadlineLabel(d)} manual={isManual(d)} />
                 ))}
               </div>
             ))
@@ -185,15 +198,6 @@ export default async function CalendarPage({
           const shown = items.slice(0, 3);
           const rest = items.slice(3);
           const isToday = key === isoDate(today);
-          const chip = (d: (typeof all)[number]) => (
-            <div
-              key={d.id}
-              className={`mt-1 truncate rounded px-1 py-0.5 text-[10px] ${isManual(d) ? "bg-gold-100 text-gold-700" : "bg-navy-50 text-navy-700"}`}
-              title={deadlineLabel(d)}
-            >
-              {deadlineLabel(d)}
-            </div>
-          );
           return (
             <div
               key={i}

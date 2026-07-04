@@ -1,5 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import { Button, Card, Field, inputClass } from "@/components/ui";
-import { MAX_UPLOAD_LABEL } from "@/lib/uploadLimits";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/uploadLimits";
 import { uploadDocumentAction } from "../../actions";
 
 const KINDS = [
@@ -27,14 +30,25 @@ export function UploadForm({
   back: string;
   allowExtract?: boolean;
 }) {
+  const [sizeError, setSizeError] = useState<string | null>(null);
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    setSizeError(
+      file && file.size > MAX_UPLOAD_BYTES
+        ? `${file.name} is larger than ${MAX_UPLOAD_LABEL} — choose a smaller file.`
+        : null,
+    );
+  }
+
   return (
     <Card>
       <form action={uploadDocumentAction} className="flex flex-wrap items-end gap-4">
         <input type="hidden" name="scopeType" value={scopeType} />
         <input type="hidden" name="scopeId" value={scopeId} />
         <input type="hidden" name="back" value={back} />
-        <Field label="File" hint={`Up to ${MAX_UPLOAD_LABEL} per file.`}>
-          <input type="file" name="file" required className="text-sm" />
+        <Field label="File" hint={`Up to ${MAX_UPLOAD_LABEL} per file.`} error={sizeError ?? undefined}>
+          <input type="file" name="file" required onChange={onFileChange} className="text-sm" />
         </Field>
         <Field label="Kind">
           <select name="kind" className={inputClass}>
@@ -49,7 +63,7 @@ export function UploadForm({
             Extract fields (review before commit)
           </label>
         )}
-        <Button type="submit" variant="secondary">Upload</Button>
+        <Button type="submit" variant="secondary" disabled={!!sizeError}>Upload</Button>
       </form>
     </Card>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
 /**
  * Keyboard-accessible tooltip for short explanations of derived figures
@@ -22,6 +22,19 @@ export function Tooltip({
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
+
+  // Document-level (not just the trigger's) so Escape dismisses a
+  // hover-revealed tooltip too, not only a focus-revealed one — the trigger
+  // itself never receives the keydown when the pointer, not focus, opened it.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
     <span
       className="relative inline-flex"
@@ -29,9 +42,6 @@ export function Tooltip({
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
       onBlur={() => setOpen(false)}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") setOpen(false);
-      }}
     >
       <span tabIndex={0} aria-label={triggerLabel} aria-describedby={open ? id : undefined}>
         {children}
@@ -40,7 +50,7 @@ export function Tooltip({
         <span
           role="tooltip"
           id={id}
-          className="absolute bottom-full left-1/2 z-50 mb-1.5 w-max max-w-56 -translate-x-1/2 rounded-lg border border-line bg-navy-900 px-3 py-2 text-xs text-ivory-50 shadow-md"
+          className="absolute bottom-full left-1/2 z-50 mb-1.5 w-max max-w-56 -translate-x-1/2 rounded-lg border border-line bg-navy-900 px-3 py-2 text-xs font-normal leading-normal normal-case tracking-normal text-ivory-50 shadow-md"
         >
           {label}
         </span>

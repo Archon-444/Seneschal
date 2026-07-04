@@ -52,6 +52,7 @@ export function PaymentRow({ item, propertyId }: { item: PaymentRowData; propert
                 tone="danger"
                 action={transitionPaymentAction}
                 hiddenFields={{ paymentItemId: item.id, propertyId, to: a.to }}
+                successMessage={`Cheque ${item.chequeNo ?? `#${item.seq}`} recorded as bounced.`}
               />
             ) : (
               <form key={a.to} action={transitionPaymentAction}>

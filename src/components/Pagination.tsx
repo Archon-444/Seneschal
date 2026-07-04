@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { LinkButton } from "./ui";
 
 // Server-component-friendly pagination: plain links that set ?page=N on the
 // current path, preserving other query params. Pair with paginate() below for
@@ -26,16 +26,14 @@ export function Pagination({
     params.set("page", String(p));
     return `${basePath}?${params.toString()}`;
   };
-  const linkClass =
-    "rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-bold text-navy-700 transition hover:bg-ivory-100";
+  // Disabled state has no equivalent in the shared kit (LinkButton always
+  // renders a real, navigable <Link>), so it stays a look-alike span here.
   const disabledClass =
     "rounded-lg border border-line bg-ivory-100 px-3 py-1.5 text-sm font-bold text-muted opacity-50";
   return (
     <nav aria-label="Pagination" className="mt-4 flex items-center justify-between gap-3">
       {page > 1 ? (
-        <Link href={href(page - 1)} className={linkClass}>
-          ← Previous
-        </Link>
+        <LinkButton href={href(page - 1)} variant="secondary">← Previous</LinkButton>
       ) : (
         <span aria-hidden="true" className={disabledClass}>
           ← Previous
@@ -45,9 +43,7 @@ export function Pagination({
         Page {page} of {totalPages}
       </span>
       {page < totalPages ? (
-        <Link href={href(page + 1)} className={linkClass}>
-          Next →
-        </Link>
+        <LinkButton href={href(page + 1)} variant="secondary">Next →</LinkButton>
       ) : (
         <span aria-hidden="true" className={disabledClass}>
           Next →
