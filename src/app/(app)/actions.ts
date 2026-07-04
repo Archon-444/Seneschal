@@ -25,6 +25,7 @@ import * as imports from "@/server/services/imports";
 import * as extraction from "@/server/services/extraction";
 import * as risk from "@/server/services/risk";
 import * as reports from "@/server/services/reports";
+import { globalSearch, type SearchHit } from "@/server/services/search";
 import { onboardTenancy, type PartyInput } from "@/server/services/onboarding";
 import { dispatchPending } from "@/server/outbox";
 import { handlers } from "@/server/outbox/runner";
@@ -549,4 +550,10 @@ export async function generateReportAction(formData: FormData) {
   const clientId = s(formData, "clientPrincipalId");
   const { report } = await reports.generateClientReport(ctx, clientId);
   redirect(`/reports/${report.id}`);
+}
+
+/** ⌘K palette lookup — read-only; scoping lives in globalSearch's services. */
+export async function globalSearchAction(q: string): Promise<SearchHit[]> {
+  const ctx = await requireCtx();
+  return globalSearch(ctx, q);
 }

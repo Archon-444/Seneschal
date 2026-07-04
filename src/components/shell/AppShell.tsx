@@ -7,6 +7,8 @@ import { NAV_ICONS } from "./navIcons";
 import { type NavItem } from "./nav";
 import { UserMenu } from "./UserMenu";
 import { NotificationBell } from "./NotificationBell";
+import { CommandPalette } from "./CommandPalette";
+import type { SearchHit } from "@/server/services/search";
 import { Dropdown } from "../menu";
 import { CloseIcon, MenuIcon, PanelLeftIcon } from "../icons";
 import { Logo } from "../Logo";
@@ -22,6 +24,7 @@ export function AppShell({
   initialCollapsed,
   initialUnread,
   signOut,
+  search,
   children,
 }: {
   nav: NavItem[];
@@ -33,6 +36,8 @@ export function AppShell({
   initialCollapsed: boolean;
   initialUnread: number;
   signOut: () => Promise<void>;
+  /** Global-search action; presence mounts the ⌘K palette (operator surface only). */
+  search?: (q: string) => Promise<SearchHit[]>;
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -120,6 +125,7 @@ export function AppShell({
             <PanelLeftIcon />
           </button>
           <div className="flex-1" />
+          {search && <CommandPalette search={search} />}
           {creates.length > 0 && (
             <Dropdown
               label="Create new"
