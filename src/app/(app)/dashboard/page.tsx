@@ -1,19 +1,23 @@
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
-import { dashboardKpis } from "@/server/services/dashboard";
+import { hasCapability } from "@/server/authz";
+import { activationStatus, dashboardKpis } from "@/server/services/dashboard";
 import { listDeadlines } from "@/server/services/deadlines";
 import { listRiskFlags } from "@/server/services/risk";
 import { listRenewalPipeline } from "@/server/services/renewals";
 import { formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
 import { Badge, Card, EmptyState, Eyebrow, KpiCard, Money, PageHeader, resolveScopeLink, Table, Td } from "@/components/ui";
+import { GettingStarted } from "./GettingStarted";
 
 export default async function DashboardPage() {
   const ctx = await requireCtx();
-  const [kpis, deadlines, flags, pipeline] = await Promise.all([
+  const canOnboard = hasCapability(ctx, "clients.write");
+  const [kpis, deadlines, flags, pipeline, activation] = await Promise.all([
     dashboardKpis(ctx),
     listDeadlines(ctx),
     listRiskFlags(ctx),
     listRenewalPipeline(ctx),
+    canOnboard ? activationStatus(ctx) : null,
   ]);
   const today = todayInDubai();
   const upliftAtRisk = pipeline.reduce((sum, r) => sum + (r.valueAtRisk ?? 0), 0);
@@ -26,6 +30,15 @@ export default async function DashboardPage() {
         title="Dashboard"
         subtitle="Know what is due. Know who owns it. Keep the proof."
       />
+
+      {activation && (
+        <GettingStarted
+          hasClient={activation.hasClient}
+          hasTenancy={activation.hasTenancy}
+          hasTeam={activation.hasTeam}
+          showTeamStep={hasCapability(ctx, "members.read")}
+        />
+      )}
 
       {/* Tier 1 — what costs money if it's ignored. Loud only when non-zero. */}
       <section className="mb-8">

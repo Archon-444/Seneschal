@@ -69,3 +69,20 @@ export async function dashboardKpis(ctx: AuthzContext) {
 
   return { properties, tenancies, upcomingDeadlines, overdueDeadlines, openFlags, openProofs, latePayments };
 }
+
+/** First-run activation state for the dashboard's getting-started card.
+ *  Workspace-wide by design — the card only renders for roles holding
+ *  clients.write, which are never client- or contact-scoped. */
+export async function activationStatus(ctx: AuthzContext) {
+  require_(ctx, "clients.write");
+  const [clients, tenancies, activeMembers] = await Promise.all([
+    prisma.clientPrincipal.count({ where: { ...scope(ctx), archivedAt: null } }),
+    prisma.tenancy.count({ where: { ...scope(ctx), archivedAt: null } }),
+    prisma.membership.count({ where: { ...scope(ctx), revokedAt: null } }),
+  ]);
+  return {
+    hasClient: clients > 0,
+    hasTenancy: tenancies > 0,
+    hasTeam: activeMembers > 1,
+  };
+}
