@@ -1,7 +1,7 @@
 import type { Prisma, ScopeType } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, isDelegateRole } from "../authz";
-import { resolveClientScopeIds, scopeMatchClauses, type ClientScopeIds } from "./clientScope";
+import { contactIdsForScope, resolveClientScopeIds, scopeMatchClauses, type ClientScopeIds } from "./clientScope";
 
 // Execution-delegate (MANAGING_AGENT) scoping — F0d. A delegate reads AND writes,
 // but every path is confined to the set of ClientPrincipals on its membership
@@ -18,10 +18,6 @@ import { resolveClientScopeIds, scopeMatchClauses, type ClientScopeIds } from ".
 // need the resolved id-set; the rest fall out of the same struct.
 
 type Db = Prisma.TransactionClient;
-
-function unique(ids: (string | null)[]): string[] {
-  return [...new Set(ids.filter((x): x is string => !!x))];
-}
 
 function assertDelegate(ctx: AuthzContext): void {
   if (!isDelegateRole(ctx.role) || ctx.delegateClientIds.length === 0) {
@@ -40,26 +36,12 @@ export function resolveDelegateScopeIds(ctx: AuthzContext, db: Db = prisma): Pro
  * creator column, so scope is derived from the assigned clients' rows — a delegate
  * that attaches a contact to an in-scope tenancy makes it visible automatically.
  */
-export async function resolveDelegateContactIds(
+export function resolveDelegateContactIds(
   ctx: AuthzContext,
   ids: ClientScopeIds,
   db: Db = prisma,
 ): Promise<string[]> {
-  const ws = ctx.workspaceId;
-  const props = ids.propertyIds.length
-    ? await db.property.findMany({ where: { workspaceId: ws, id: { in: ids.propertyIds } }, select: { ownerContactId: true } })
-    : [];
-  const tens = ids.tenancyIds.length
-    ? await db.tenancy.findMany({
-        where: { workspaceId: ws, id: { in: ids.tenancyIds } },
-        select: { tenantContactId: true, landlordContactId: true },
-      })
-    : [];
-  return unique([
-    ...props.map((p) => p.ownerContactId),
-    ...tens.map((t) => t.tenantContactId),
-    ...tens.map((t) => t.landlordContactId),
-  ]);
+  return contactIdsForScope(ctx.workspaceId, ids, db);
 }
 
 /** Models a delegate read can be scoped against via `clientSetScopedWhere`. */
