@@ -4,6 +4,7 @@ import * as clients from "@/server/services/clients";
 import * as contacts from "@/server/services/contacts";
 import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
+import * as proofs from "@/server/services/proofs";
 import { globalSearch } from "@/server/services/search";
 
 // F1 (audit) — a CLIENT_VIEWER is scoped to a single ClientPrincipal, but the
@@ -21,6 +22,9 @@ interface Bundle {
   clientId: string;
   ownerContactId: string;
   tenantContactId: string;
+  // A VENDOR who is only the assignee of an in-scope proof request, not a
+  // tenancy party — the case Codex flagged as dropped by the F1 derivation.
+  vendorContactId: string;
 }
 let A: Bundle;
 let B: Bundle;
@@ -33,6 +37,7 @@ async function makeBundle(label: string): Promise<Bundle> {
     name: `${label} Tenant`,
     email: `${label.toLowerCase()}-tenant@test.example`,
   });
+  const vendor = await contacts.createContact(W.ctx, { kind: "VENDOR", name: `${label} Vendor` });
   const property = await properties.createProperty(W.ctx, {
     clientPrincipalId: client.id,
     ownerContactId: owner.id,
@@ -48,7 +53,22 @@ async function makeBundle(label: string): Promise<Bundle> {
     annualRent: 72000,
     ejariNo: `${label}-0001`,
   });
-  return { clientId: client.id, ownerContactId: owner.id, tenantContactId: tenant.id };
+  // A proof request scoped to the property, assigned to the vendor. The client
+  // viewer sees this proof row via listProofRequests, so the vendor assignee
+  // must resolve in the contact directory too.
+  await proofs.createProofRequest(W.ctx, {
+    scopeType: "PROPERTY",
+    scopeId: property.id,
+    title: `${label} maintenance invoice`,
+    requiredEvidence: "Signed invoice",
+    assignedContactId: vendor.id,
+  });
+  return {
+    clientId: client.id,
+    ownerContactId: owner.id,
+    tenantContactId: tenant.id,
+    vendorContactId: vendor.id,
+  };
 }
 
 beforeAll(async () => {
@@ -76,6 +96,17 @@ describe("CLIENT_VIEWER contact scope (F1)", () => {
 
   it("getContact on a sibling client's contact 404s (no existence leak)", async () => {
     await expect(contacts.getContact(CV.ctx, B.ownerContactId)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("sees the vendor assignee of its own proof request, not a sibling's (Codex P2)", async () => {
+    const ids = (await contacts.listContacts(CV.ctx)).map((c) => c.id);
+    // The assignee of an in-scope proof request resolves in the directory, so
+    // the /proofs assignee column and by-id lookup are not blank/404 for a
+    // legitimately visible proof row.
+    expect(ids).toContain(A.vendorContactId);
+    expect(ids).not.toContain(B.vendorContactId);
+    await expect(contacts.getContact(CV.ctx, A.vendorContactId)).resolves.toMatchObject({ id: A.vendorContactId });
+    await expect(contacts.getContact(CV.ctx, B.vendorContactId)).rejects.toMatchObject({ status: 404 });
   });
 
   it("getContactDetail on a sibling client's contact 404s", async () => {
