@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
-import { makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
+import { addMember, makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
 import * as clients from "@/server/services/clients";
 import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
@@ -134,6 +134,19 @@ describe("end-to-end Stage-2 renewal walkthrough", () => {
     const rcAfter = await prisma.renewalCase.findUnique({ where: { id: rc.id } });
     expect(rcAfter!.status).toBe("AGREED");
     await new Promise((r) => setTimeout(r, 5));
+
+    // --- Gate: completing the renewal needs renewals.decide. The new
+    //     mintRenewedTenancyAction is a thin pass-through to this service call,
+    //     so a role without the capability (AGENT) is refused before any write.
+    const agent = await addMember(W.workspaceId, "AGENT");
+    await expect(
+      mintRenewedTenancy(agent.ctx, {
+        renewalCaseId: rc.id,
+        startDate: daysFromNow(61),
+        endDate: daysFromNow(425),
+        annualRent: 84_000,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
 
     // --- 8. Proposal risk was evaluated by the offer/response production path.
     const aboveBand = await prisma.riskFlag.findFirst({

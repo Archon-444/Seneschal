@@ -232,6 +232,20 @@ export async function acceptOfferAction(formData: FormData) {
   revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
 }
 
+/** Complete an AGREED renewal: mint the successor tenancy. Thin pass-through —
+ *  the service gates on renewals.decide and rejects a non-AGREED case (422). */
+export async function mintRenewedTenancyAction(formData: FormData) {
+  const ctx = await requireCtx();
+  await renewals.mintRenewedTenancy(ctx, {
+    renewalCaseId: s(formData, "renewalCaseId"),
+    startDate: new Date(s(formData, "startDate")),
+    endDate: new Date(s(formData, "endDate")),
+    annualRent: Number(s(formData, "annualRent")),
+    paymentTermsNote: opt(formData, "paymentTermsNote"),
+  });
+  revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
+}
+
 /** Upload an optional proof-of-service document scoped to the renewal case and
  *  return its id, so the notice flow can attach real evidence. */
 async function uploadNoticeProof(
