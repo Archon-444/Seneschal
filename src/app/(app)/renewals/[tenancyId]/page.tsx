@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
+import { hasCapability } from "@/server/authz";
 import { getRenewalRisk } from "@/server/services/renewals";
-import { daysBetween, formatDubaiDate } from "@/server/calculators/dates";
+import { daysBetween, formatDubaiDate, isoDate } from "@/server/calculators/dates";
 import { Badge, Button, Card, Field, FormActions, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import { SubmitButton } from "@/components/SubmitButton";
 import { InfoTooltip } from "@/components/Tooltip";
 import {
   acceptOfferAction,
   captureIndexAction,
   confirmNoticeServiceAction,
+  mintRenewedTenancyAction,
   openRenewalCaseAction,
   proposeOfferAction,
   sendOfferToTenantAction,
@@ -42,6 +45,16 @@ export default async function RenewalReportPage({
   const total = Math.max(1, daysBetween(t.startDate, t.endDate));
   const pct = (d: Date) => Math.min(100, Math.max(0, (daysBetween(t.startDate, d) / total) * 100));
   const gateLeft = pct(risk!.noticeGateAt);
+
+  // Complete-renewal (mint successor) affordance: only when the case is AGREED
+  // and the caller can decide. The successor defaults to the day after the
+  // current term for a one-year renewal, at the accepted offer's rent.
+  const canDecide = hasCapability(ctx, "renewals.decide");
+  const acceptedOffer = risk!.offers.find((o) => o.status === "ACCEPTED");
+  const successorStart = new Date(t.endDate.getTime() + 86_400_000);
+  const successorEnd = new Date(
+    Date.UTC(successorStart.getUTCFullYear() + 1, successorStart.getUTCMonth(), successorStart.getUTCDate()),
+  );
 
   return (
     <>
@@ -275,7 +288,7 @@ export default async function RenewalReportPage({
             </Table>
           )}
 
-          {risk!.renewalCase.status !== "AGREED" && (
+          {risk!.renewalCase.status !== "AGREED" && risk!.renewalCase.status !== "RENEWED" && (
             <form action={proposeOfferAction} className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4">
               <input type="hidden" name="renewalCaseId" value={risk!.renewalCase.id} />
               <input type="hidden" name="tenancyId" value={tenancyId} />
@@ -297,6 +310,59 @@ export default async function RenewalReportPage({
               <Button type="submit">Add terms</Button>
             </form>
           )}
+
+          {risk!.renewalCase.status === "RENEWED" && (
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-verde-100 bg-verde-100/40 p-3 text-sm text-verde-700">
+              <span aria-hidden>✓</span>
+              <span>Renewal complete. The successor tenancy has been created and this unit is renewed.</span>
+            </div>
+          )}
+
+          {risk!.renewalCase.status === "AGREED" &&
+            (canDecide ? (
+              <form action={mintRenewedTenancyAction} className="mt-4 space-y-3 border-t border-line pt-4">
+                <div>
+                  <h3 className="font-display text-base text-navy-900">Complete renewal</h3>
+                  <p className="text-xs text-muted">
+                    The offer is accepted. Create the successor tenancy to move this unit to renewed and
+                    close the case. Dates default to a one-year term from the day after the current
+                    contract; adjust if the agreed term differs.
+                  </p>
+                </div>
+                <input type="hidden" name="renewalCaseId" value={risk!.renewalCase.id} />
+                <input type="hidden" name="tenancyId" value={tenancyId} />
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field label="Successor start" required>
+                    <input name="startDate" type="date" required defaultValue={isoDate(successorStart)} className={inputClass} />
+                  </Field>
+                  <Field label="Successor end" required>
+                    <input name="endDate" type="date" required defaultValue={isoDate(successorEnd)} className={inputClass} />
+                  </Field>
+                  <Field label="Annual rent (AED)" required>
+                    <input
+                      name="annualRent"
+                      type="number"
+                      min="1"
+                      step="1"
+                      required
+                      defaultValue={acceptedOffer ? String(acceptedOffer.annualRent) : ""}
+                      className={inputClass}
+                    />
+                  </Field>
+                  <Field label="Payment terms (optional)">
+                    <input name="paymentTermsNote" className={inputClass} placeholder="e.g. 4 cheques" />
+                  </Field>
+                </div>
+                <FormActions note="Mints the successor tenancy and records a renewal-completed evidence event.">
+                  <SubmitButton pendingLabel="Completing…">Complete renewal</SubmitButton>
+                </FormActions>
+              </form>
+            ) : (
+              <p className="mt-4 border-t border-line pt-4 text-xs text-muted">
+                The offer is accepted. Completing the renewal (creating the successor tenancy) is done by
+                a fiduciary or manager.
+              </p>
+            ))}
         </Card>
       )}
 
