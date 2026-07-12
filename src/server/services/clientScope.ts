@@ -67,6 +67,49 @@ export async function resolveClientScopeIds(
   };
 }
 
+/**
+ * The contact ids a client scope (one CLIENT_VIEWER client, or a delegate's
+ * assigned set) may see: the owner of an in-scope property, the tenant or
+ * landlord on an in-scope tenancy, and the assignee of an in-scope proof
+ * request (an agent/vendor who is not otherwise a tenancy party). `Contact`
+ * carries no client column, so scope is derived from the assigned clients'
+ * rows. Single derivation shared by the delegate door (resolveDelegateContactIds)
+ * and the CLIENT_VIEWER contact reads, so the two read boundaries cannot drift
+ * apart. The proof-assignee ids come from `ids.proofRequestIds`, which is the
+ * caller's own scoped proof set, so this never reaches a sibling client.
+ */
+export async function contactIdsForScope(
+  workspaceId: string,
+  ids: ClientScopeIds,
+  db: Db = prisma,
+): Promise<string[]> {
+  const props = ids.propertyIds.length
+    ? await db.property.findMany({
+        where: { workspaceId, id: { in: ids.propertyIds } },
+        select: { ownerContactId: true },
+      })
+    : [];
+  const tens = ids.tenancyIds.length
+    ? await db.tenancy.findMany({
+        where: { workspaceId, id: { in: ids.tenancyIds } },
+        select: { tenantContactId: true, landlordContactId: true },
+      })
+    : [];
+  const proofs = ids.proofRequestIds.length
+    ? await db.proofRequest.findMany({
+        where: { workspaceId, id: { in: ids.proofRequestIds } },
+        select: { assignedContactId: true },
+      })
+    : [];
+  const all = [
+    ...props.map((p) => p.ownerContactId),
+    ...tens.map((t) => t.tenantContactId),
+    ...tens.map((t) => t.landlordContactId),
+    ...proofs.map((p) => p.assignedContactId),
+  ];
+  return [...new Set(all.filter((x): x is string => !!x))];
+}
+
 /** All scopeIds (across scope types) a client viewer/delegate may see, including the client(s). */
 export function allScopeIds(ids: ClientScopeIds): string[] {
   return [

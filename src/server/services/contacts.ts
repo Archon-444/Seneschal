@@ -1,4 +1,4 @@
-import type { ContactKind } from "@prisma/client";
+import type { ContactKind, Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
@@ -7,13 +7,14 @@ import {
   resolveDelegateContactIds,
   resolveDelegateScopeIds,
 } from "./delegateScope";
+import { contactIdsForScope, resolveClientScopeIds } from "./clientScope";
 
 // Contact directory (T2.2). Agent/vendor contacts are the assignees of proof requests.
 
 /**
  * A delegate (MANAGING_AGENT) by-id contact gate: the contact must be one referenced
  * on an assigned client's tenancy/property (Contact carries no client column). Throws
- * 404 fail-closed otherwise. Operators/CLIENT_VIEWER keep the workspace check.
+ * 404 fail-closed otherwise. Operators keep the workspace check.
  */
 async function assertContactInDelegateScope(ctx: AuthzContext, contact: { id: string; workspaceId: string } | null) {
   if (!contact || contact.workspaceId !== ctx.workspaceId) throw new AuthzError("Not found", 404);
@@ -22,13 +23,37 @@ async function assertContactInDelegateScope(ctx: AuthzContext, contact: { id: st
   if (!contactIds.includes(contact.id)) throw new AuthzError("Not found", 404);
 }
 
+/**
+ * A CLIENT_VIEWER by-id contact gate: the contact must be referenced on the viewer's
+ * one client's tenancy/property, via the SAME derivation the delegate uses. 404
+ * fail-closed otherwise, so a sibling client's contact is not even confirmed to exist.
+ */
+async function assertContactInClientScope(ctx: AuthzContext, contact: { id: string; workspaceId: string } | null) {
+  if (!contact || contact.workspaceId !== ctx.workspaceId) throw new AuthzError("Not found", 404);
+  const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId!);
+  const contactIds = await contactIdsForScope(ctx.workspaceId, ids);
+  if (!contactIds.includes(contact.id)) throw new AuthzError("Not found", 404);
+}
+
+/** The contact-directory `where` for the caller: delegate assigned-set, CLIENT_VIEWER
+ *  own client, else workspace. `scope(ctx)` throws for delegate/persona, so this is the
+ *  choke point that keeps an un-branched read fail-closed. */
+async function contactScopeWhere(ctx: AuthzContext): Promise<Prisma.ContactWhereInput> {
+  if (isDelegateRole(ctx.role)) return clientSetScopedWhere(ctx, "CONTACT");
+  if (ctx.clientPrincipalId) {
+    const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId);
+    return { workspaceId: ctx.workspaceId, id: { in: await contactIdsForScope(ctx.workspaceId, ids) } };
+  }
+  return { ...scope(ctx) };
+}
+
 export async function listContacts(
   ctx: AuthzContext,
   opts?: { kind?: ContactKind; includeArchived?: boolean; q?: string },
 ) {
   require_(ctx, "contacts.read");
   const q = opts?.q?.trim();
-  const base = isDelegateRole(ctx.role) ? await clientSetScopedWhere(ctx, "CONTACT") : { ...scope(ctx) };
+  const base = await contactScopeWhere(ctx);
   return prisma.contact.findMany({
     where: {
       ...base,
@@ -54,6 +79,7 @@ export async function getContact(ctx: AuthzContext, id: string) {
   require_(ctx, "contacts.read");
   const contact = await prisma.contact.findUnique({ where: { id } });
   if (isDelegateRole(ctx.role)) await assertContactInDelegateScope(ctx, contact);
+  else if (ctx.clientPrincipalId) await assertContactInClientScope(ctx, contact);
   else assertSameWorkspace(ctx, contact);
   return contact;
 }
@@ -63,6 +89,7 @@ export async function getContactDetail(ctx: AuthzContext, id: string) {
   require_(ctx, "contacts.read");
   const contact = await prisma.contact.findUnique({ where: { id } });
   if (isDelegateRole(ctx.role)) await assertContactInDelegateScope(ctx, contact);
+  else if (ctx.clientPrincipalId) await assertContactInClientScope(ctx, contact);
   else assertSameWorkspace(ctx, contact);
 
   // Restrict the contact's tenancies to the caller's client scope: a CLIENT_VIEWER to

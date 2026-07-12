@@ -936,12 +936,34 @@ async function applyTenantOfferResponse(
       payload: { version: created.version, annualRent: input.annualRent, paymentSchedule: input.paymentSchedule, viaLink },
     });
   } else if (input.action === "ACCEPT") {
-    await prisma.offer.updateMany({
-      where: { renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offer.id } },
-      data: { status: "SUPERSEDED" },
-    });
-    await prisma.offer.update({ where: { id: offer.id }, data: { status: "ACCEPTED" } });
-    await prisma.renewalCase.update({ where: { id: renewalCaseId }, data: { status: "AGREED", decidedOfferId: offer.id, currentOfferId: offer.id } });
+    // Same hardening as acceptOffer: a guarded claim so only a still-open offer
+    // can be accepted (a stale/forwarded link pinned to a SUPERSEDED offer 409s
+    // instead of resurrecting it), the whole transition atomic, and the
+    // Offer_one_accepted_per_case unique index as the concurrency backstop
+    // surfaced as a clean 409 rather than a raw 500. Stage 2 W2 should later
+    // unify this with acceptOffer behind one guarded transitions writer.
+    try {
+      await prisma.$transaction(async (tx) => {
+        const claim = await tx.offer.updateMany({
+          where: { id: offer.id, status: { in: ["SENT", "COUNTERED"] } },
+          data: { status: "ACCEPTED" },
+        });
+        if (claim.count !== 1) throw new AuthzError("This offer is no longer open", 409);
+        await tx.offer.updateMany({
+          where: { renewalCaseId, status: { in: ["SENT", "COUNTERED"] }, id: { not: offer.id } },
+          data: { status: "SUPERSEDED" },
+        });
+        await tx.renewalCase.update({
+          where: { id: renewalCaseId },
+          data: { status: "AGREED", decidedOfferId: offer.id, currentOfferId: offer.id },
+        });
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw new AuthzError("Another offer has already been accepted for this case", 409);
+      }
+      throw e;
+    }
     const tenancy = await prisma.tenancy.findUnique({ where: { id: tenancyId } });
     if (tenancy && RENEW_FROM.has(tenancy.status)) {
       await prisma.tenancy.update({ where: { id: tenancyId }, data: { status: "RENEWED" } });
