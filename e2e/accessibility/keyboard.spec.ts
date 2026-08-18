@@ -79,8 +79,8 @@ test.describe("operator keyboard primitives", () => {
     const details = page.locator("details").filter({ hasText: "Technical details" }).first();
     const technical = details.locator("summary");
     await technical.focus();
-    await page.keyboard.press("Enter");
-    await expect(details).toHaveAttribute("open", "");
+    await page.keyboard.press("Space");
+    await expect(details).toHaveJSProperty("open", true);
   });
 
   test("confirmation dialog traps Escape and returns to its trigger", async ({ page }) => {

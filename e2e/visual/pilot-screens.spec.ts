@@ -36,22 +36,23 @@ test.describe("operator visual contract", () => {
     });
   }
 
-  test("renewal task states visual", async ({ page }) => {
-    const manifest = await readManifest();
-    for (const [name, tenancyId, view] of [
-      ["renewal-source-missing", manifest.sourceMissingTenancyId, "case"],
-      ["renewal-awaiting-evidence", manifest.pendingEvidenceTenancyId, "case"],
-      ["renewal-awaiting-tenant", manifest.awaitingTenantTenancyId, "terms"],
-      ["renewal-ready-to-complete", manifest.readyToCompleteTenancyId, "terms"],
-      ["renewal-completed", manifest.completedTenancyId, "evidence"],
-    ] as const) {
+  for (const [name, tenancyKey, view] of [
+    ["renewal-source-missing", "sourceMissingTenancyId", "case"],
+    ["renewal-awaiting-evidence", "pendingEvidenceTenancyId", "case"],
+    ["renewal-awaiting-tenant", "awaitingTenantTenancyId", "terms"],
+    ["renewal-ready-to-complete", "readyToCompleteTenancyId", "terms"],
+    ["renewal-completed", "completedTenancyId", "evidence"],
+  ] as const) {
+    test(`${name} visual`, async ({ page }) => {
+      const manifest = await readManifest();
+      const tenancyId = manifest[tenancyKey];
       await page.goto(`/renewals/${tenancyId}?view=${view}`);
       await expect(page).toHaveScreenshot(`${name}.png`, {
         fullPage: true,
         mask: dynamicDateMasks(page),
       });
-    }
-  });
+    });
+  }
 });
 
 test("read-only proof layout visual", async ({ browser, baseURL }) => {

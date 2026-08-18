@@ -1,13 +1,15 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { sha256Hex } from "../../src/server/crypto";
+import { resetAndSeedE2E } from "../fixtures/globalSetup";
 import { readManifest } from "../fixtures/manifest";
 import { authState } from "../fixtures/paths";
 
-test.use({ storageState: authState.workspaceAdmin });
-
-test("operator completes the renewal loop and can inspect the successor evidence", async ({ page }) => {
+test("operator completes the renewal loop and can inspect the successor evidence", async ({ browser, baseURL }) => {
   test.setTimeout(120_000);
+  await resetAndSeedE2E(String(baseURL ?? "http://127.0.0.1:3000"));
+  const context = await browser.newContext({ storageState: authState.workspaceAdmin, baseURL });
+  const page = await context.newPage();
   const prisma = new PrismaClient();
   const manifest = await readManifest();
   const tenancyId = manifest.workflowTenancyId;
@@ -15,6 +17,7 @@ test("operator completes the renewal loop and can inspect the successor evidence
   await page.goto(`/renewals/${tenancyId}`);
   await expect(page.getByRole("heading", { name: "Capture index source" }).first()).toBeVisible();
   await page.getByLabel("Index average market rent (AED/yr)").fill("100000");
+  await page.getByLabel("Captured on").fill(new Date().toISOString().slice(0, 10));
   await page.locator('select[name="indexSource"]').selectOption("SMART_RENTAL_INDEX_2025");
   await page.getByLabel("Source reference (URL / screenshot id)").fill("https://dubailand.gov.ae/e2e-workflow");
   await page.getByRole("button", { name: "Save index figure" }).click();
@@ -81,4 +84,5 @@ test("operator completes the renewal loop and can inspect the successor evidence
   expect(Number(successor.annualRent)).toBe(84_000);
   expect(await prisma.evidenceEvent.count({ where: { type: "RENEWAL_COMPLETED", scopeId: offer.renewalCaseId! } })).toBe(1);
   await prisma.$disconnect();
+  await context.close();
 });

@@ -22,7 +22,6 @@ export default defineConfig({
     ? [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]]
     : [["line"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   outputDir: "test-results",
-  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}{ext}",
   use: {
     baseURL: process.env.APP_BASE_URL ?? "http://127.0.0.1:3000",
     locale: "en-AE",
