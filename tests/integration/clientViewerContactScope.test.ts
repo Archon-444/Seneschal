@@ -41,6 +41,7 @@ async function makeBundle(label: string): Promise<Bundle> {
   const property = await properties.createProperty(W.ctx, {
     clientPrincipalId: client.id,
     ownerContactId: owner.id,
+    assignedAgentId: vendor.id,
     community: `Community ${label}`,
     unitNo: "101",
   });

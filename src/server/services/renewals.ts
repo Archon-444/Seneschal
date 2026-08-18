@@ -1,4 +1,4 @@
-import { Prisma, type ActorType, type NoticeStatus, type OfferParty, type RenewalStatus, type SecureLink, type ServiceMethod, type TenancyStatus } from "@prisma/client";
+import { Prisma, type ActorType, type NoticeStatus, type OfferParty, type OfferStatus, type RenewalStatus, type SecureLink, type ServiceMethod, type TenancyStatus } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
@@ -11,6 +11,7 @@ import { resolveClientScopeIds } from "./clientScope";
 import { resolveDelegateScopeIds } from "./delegateScope";
 import { createSecureLink, consumeLinkUse } from "./secureLinks";
 import { getTenancy, setTenancyStatus } from "./tenancies";
+import { deriveRenewalNextAction, type RenewalNextAction } from "./renewalNextAction";
 import { DECREE_43_CALCULATOR_VERSION, decree43, type RentPositionResult } from "../calculators/rent";
 import {
   contractExpiry,
@@ -221,9 +222,10 @@ export interface OfferView {
   paymentSchedule: string;
   paymentMethod: string | null;
   termMonths: number | null;
-  status: string;
+  status: OfferStatus;
   note: string | null;
   createdAt: Date;
+  sentToTenant: boolean;
 }
 
 export interface RenewalRisk {
@@ -241,6 +243,7 @@ export interface RenewalRisk {
    *  proof and the case did NOT advance. */
   currentNotice: { id: string; status: NoticeStatus; serviceMethod: ServiceMethod | null } | null;
   offers: OfferView[];
+  nextAction: RenewalNextAction;
 }
 
 export interface EffectiveIndex {
@@ -391,6 +394,18 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
         orderBy: { version: "asc" },
       })
     : [];
+  const tenantLinks = offers.length
+    ? await prisma.secureLink.findMany({
+        where: {
+          workspaceId: ctx.workspaceId,
+          purpose: "TENANT_OFFER",
+          scopeType: "OFFER",
+          scopeId: { in: offers.map((offer) => offer.id) },
+        },
+        select: { scopeId: true },
+      })
+    : [];
+  const sentOfferIds = new Set(tenantLinks.map((link) => link.scopeId));
 
   const currentNotice = renewalCase
     ? await prisma.notice.findFirst({
@@ -408,6 +423,26 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
   const position = latestIndex
     ? decree43(Number(tenancy!.annualRent), latestIndex.marketRentAvg)
     : null;
+  const latestOffer = offers.at(-1) ?? null;
+  const nextAction = deriveRenewalNextAction({
+    tenancyId,
+    noticeGateAt: gate.date,
+    daysToGate,
+    gatePassed: daysToGate < 0,
+    hasIndex: latestIndex != null,
+    provisionalIndex: latestIndex?.provisional ?? false,
+    caseStatus: renewalCase?.status ?? null,
+    noticeStatus: currentNotice?.status ?? null,
+    currentOffer: latestOffer
+      ? {
+          party: latestOffer.party,
+          status: latestOffer.status,
+          sentToTenant: sentOfferIds.has(latestOffer.id),
+        }
+      : null,
+    hasAcceptedOffer: offers.some((offer) => offer.status === "ACCEPTED"),
+    renewedTenancyId: renewalCase?.renewedTenancyId ?? null,
+  });
 
   return {
     tenancy: tenancy!,
@@ -435,7 +470,9 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
       status: o.status,
       note: o.note,
       createdAt: o.createdAt,
+      sentToTenant: sentOfferIds.has(o.id),
     })),
+    nextAction,
   };
 }
 
@@ -451,13 +488,31 @@ export interface PipelineRow {
   gapPct: number | null;
   valueAtRisk: number | null;
   isBenchmark: boolean;
+  indexState: "MISSING" | "PROVISIONAL" | "VERIFIED";
   stage: RenewalStatus | null;
+  nextAction: RenewalNextAction;
 }
+
+export type RenewalPipelineView =
+  | "all"
+  | "urgent"
+  | "missing-index"
+  | "awaiting-evidence"
+  | "awaiting-tenant"
+  | "ready-to-complete"
+  | "completed";
+
+export type RenewalPipelineSort = "notice-gate" | "renewal-date" | "urgency" | "uplift" | "property";
 
 /** Tenancies approaching renewal (or with an open case), with computed position. */
 export async function listRenewalPipeline(
   ctx: AuthzContext,
-  opts?: { withinDays?: number; clientPrincipalId?: string },
+  opts?: {
+    withinDays?: number;
+    clientPrincipalId?: string;
+    view?: RenewalPipelineView;
+    sort?: RenewalPipelineSort;
+  },
 ): Promise<PipelineRow[]> {
   require_(ctx, "renewals.read");
   const within = opts?.withinDays ?? 120;
@@ -480,12 +535,20 @@ export async function listRenewalPipeline(
   // A delegate cannot call the fail-closed scope() — build the workspace filter directly.
   const wsFilter = isDelegateRole(ctx.role) ? { workspaceId: ctx.workspaceId } : scope(ctx);
 
-  // Tenancies with an open renewal case stay in the pipeline even past the horizon.
-  const openCases = await prisma.renewalCase.findMany({
-    where: { workspaceId: ctx.workspaceId, status: { notIn: TERMINAL } },
-    select: { tenancyId: true, status: true },
+  // Keep the latest case per tenancy. Active cases stay in the pipeline beyond
+  // the horizon; the completed view also keeps terminal cases discoverable.
+  const cases = await prisma.renewalCase.findMany({
+    where: { workspaceId: ctx.workspaceId, archivedAt: null },
+    select: { id: true, tenancyId: true, status: true, decidedOfferId: true, renewedTenancyId: true },
+    orderBy: { updatedAt: "desc" },
   });
-  const caseStage = new Map(openCases.map((c) => [c.tenancyId, c.status]));
+  const caseByTenancy = new Map<string, (typeof cases)[number]>();
+  for (const renewalCase of cases) {
+    if (!caseByTenancy.has(renewalCase.tenancyId)) caseByTenancy.set(renewalCase.tenancyId, renewalCase);
+  }
+  const retainedCaseTenancyIds = [...caseByTenancy.values()]
+    .filter((renewalCase) => !TERMINAL.includes(renewalCase.status) || opts?.view === "completed")
+    .map((renewalCase) => renewalCase.tenancyId);
 
   const tenancies = await prisma.tenancy.findMany({
     where: {
@@ -494,7 +557,7 @@ export async function listRenewalPipeline(
       ...(scopedTenancyIds ? { id: { in: scopedTenancyIds } } : {}),
       OR: [
         { endDate: { lte: horizon } },
-        { id: { in: [...caseStage.keys()] } },
+        { id: { in: retainedCaseTenancyIds } },
       ],
     },
     include: { property: true },
@@ -527,23 +590,81 @@ export async function listRenewalPipeline(
     where: { workspaceId: ctx.workspaceId },
     orderBy: { capturedAt: "desc" },
   });
+  const caseIds = tenancies
+    .map((tenancy) => caseByTenancy.get(tenancy.id)?.id)
+    .filter((id): id is string => !!id);
+  const [notices, offers] = caseIds.length
+    ? await Promise.all([
+        prisma.notice.findMany({
+          where: { workspaceId: ctx.workspaceId, renewalCaseId: { in: caseIds }, archivedAt: null },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.offer.findMany({
+          where: { workspaceId: ctx.workspaceId, renewalCaseId: { in: caseIds } },
+          orderBy: { version: "desc" },
+        }),
+      ])
+    : [[], []];
+  const noticeByCase = new Map<string, (typeof notices)[number]>();
+  for (const notice of notices) {
+    if (!noticeByCase.has(notice.renewalCaseId)) noticeByCase.set(notice.renewalCaseId, notice);
+  }
+  const offerByCase = new Map<string, (typeof offers)[number]>();
+  const acceptedCaseIds = new Set<string>();
+  for (const offer of offers) {
+    if (offer.renewalCaseId && !offerByCase.has(offer.renewalCaseId)) offerByCase.set(offer.renewalCaseId, offer);
+    if (offer.renewalCaseId && offer.status === "ACCEPTED") acceptedCaseIds.add(offer.renewalCaseId);
+  }
+  const offerIds = offers.map((offer) => offer.id);
+  const tenantLinks = offerIds.length
+    ? await prisma.secureLink.findMany({
+        where: {
+          workspaceId: ctx.workspaceId,
+          purpose: "TENANT_OFFER",
+          scopeType: "OFFER",
+          scopeId: { in: offerIds },
+        },
+        select: { scopeId: true },
+      })
+    : [];
+  const sentOfferIds = new Set(tenantLinks.map((link) => link.scopeId));
 
-  return tenancies.map((t) => {
+  let rows: PipelineRow[] = tenancies.map((t) => {
     const gate = noticeGate(t.endDate, t.noticePeriodDays);
     const daysToGate = daysBetween(today, gate.date);
     const p = t.property;
     const latest = latestByTenancy.get(t.id);
     let isBenchmark = false;
+    let provisionalIndex = latest?.indexSource === "MANUAL_CONCIERGE";
     let marketRentAvg: number | null = latest ? Number(latest.marketRentAvg) : null;
     if (marketRentAvg == null) {
       const b = pickBenchmark(benchmarks, p.community, p.building ?? null);
       if (b) {
         marketRentAvg = Number(b.marketRentAvg);
         isBenchmark = true;
+        provisionalIndex = false;
       }
     }
     const position = marketRentAvg != null ? decree43(Number(t.annualRent), marketRentAvg) : null;
     const unit = [p.community, p.building, p.unitNo].filter(Boolean).join(" · ");
+    const renewalCase = caseByTenancy.get(t.id) ?? null;
+    const notice = renewalCase ? noticeByCase.get(renewalCase.id) ?? null : null;
+    const offer = renewalCase ? offerByCase.get(renewalCase.id) ?? null : null;
+    const nextAction = deriveRenewalNextAction({
+      tenancyId: t.id,
+      noticeGateAt: gate.date,
+      daysToGate,
+      gatePassed: daysToGate < 0,
+      hasIndex: marketRentAvg != null,
+      provisionalIndex,
+      caseStatus: renewalCase?.status ?? null,
+      noticeStatus: notice?.status ?? null,
+      currentOffer: offer
+        ? { party: offer.party, status: offer.status, sentToTenant: sentOfferIds.has(offer.id) }
+        : null,
+      hasAcceptedOffer: renewalCase ? acceptedCaseIds.has(renewalCase.id) : false,
+      renewedTenancyId: renewalCase?.renewedTenancyId ?? null,
+    });
     return {
       tenancyId: t.id,
       unit,
@@ -556,9 +677,38 @@ export async function listRenewalPipeline(
       gapPct: position ? position.gapPct : null,
       valueAtRisk: position ? position.valueAtRisk : null,
       isBenchmark,
-      stage: caseStage.get(t.id) ?? null,
+      indexState: marketRentAvg == null ? "MISSING" : provisionalIndex ? "PROVISIONAL" : "VERIFIED",
+      stage: renewalCase?.status ?? null,
+      nextAction,
     };
   });
+
+  const view = opts?.view ?? "all";
+  const viewCodes: Partial<Record<RenewalPipelineView, RenewalNextAction["code"][]>> = {
+    urgent: ["CAPTURE_INDEX", "VERIFY_INDEX_SOURCE", "OPEN_CASE", "SERVE_NOTICE", "ADD_SERVICE_EVIDENCE", "REVIEW_CASE"],
+    "awaiting-evidence": ["ADD_SERVICE_EVIDENCE"],
+    "awaiting-tenant": ["AWAIT_TENANT"],
+    "ready-to-complete": ["COMPLETE_RENEWAL"],
+    completed: ["REVIEW_COMPLETED_CASE"],
+  };
+  if (view === "missing-index") {
+    rows = rows.filter((row) => row.indexState !== "VERIFIED");
+  } else if (view !== "all") {
+    const codes = viewCodes[view] ?? [];
+    rows = rows.filter((row) => codes.includes(row.nextAction.code));
+    if (view === "urgent") rows = rows.filter((row) => row.nextAction.urgency === "CRITICAL" || row.nextAction.urgency === "WARN");
+  }
+
+  const urgencyRank: Record<RenewalNextAction["urgency"], number> = { CRITICAL: 0, WARN: 1, NORMAL: 2, NONE: 3 };
+  const sort = opts?.sort ?? "notice-gate";
+  rows.sort((a, b) => {
+    if (sort === "renewal-date") return a.renewalDate.getTime() - b.renewalDate.getTime();
+    if (sort === "urgency") return urgencyRank[a.nextAction.urgency] - urgencyRank[b.nextAction.urgency] || a.noticeGateAt.getTime() - b.noticeGateAt.getTime();
+    if (sort === "uplift") return (b.valueAtRisk ?? -1) - (a.valueAtRisk ?? -1);
+    if (sort === "property") return a.unit.localeCompare(b.unit);
+    return a.noticeGateAt.getTime() - b.noticeGateAt.getTime();
+  });
+  return rows;
 }
 
 // ── Negotiation: offers, counters, decisions, notice

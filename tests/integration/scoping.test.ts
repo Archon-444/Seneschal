@@ -44,6 +44,7 @@ beforeAll(async () => {
   });
   const property = await properties.createProperty(A.ctx, {
     clientPrincipalId: client.id,
+    assignedAgentId: contact.id,
     community: "Dubai Marina",
     building: "Tower A",
     unitNo: "101",
@@ -202,6 +203,7 @@ describe("CLIENT_VIEWER scoping", () => {
     // sibling-scoped property invisible
     const siblingProperty = await properties.createProperty(A.ctx, {
       clientPrincipalId: sibling.id,
+      assignedAgentId: a.contactId,
       community: "JVC",
       unitNo: "9",
     });
@@ -230,6 +232,7 @@ describe("CLIENT_VIEWER scoping", () => {
     const sibling = await clients.createClient(A.ctx, { displayName: "Leak Sibling" });
     const siblingProperty = await properties.createProperty(A.ctx, {
       clientPrincipalId: sibling.id,
+      assignedAgentId: a.contactId,
       community: "Palm Jumeirah",
       unitNo: "77",
     });

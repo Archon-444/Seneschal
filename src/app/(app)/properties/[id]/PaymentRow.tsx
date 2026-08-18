@@ -25,7 +25,15 @@ export interface PaymentRowData {
   status: string;
 }
 
-export function PaymentRow({ item, propertyId }: { item: PaymentRowData; propertyId: string }) {
+export function PaymentRow({
+  item,
+  propertyId,
+  canWrite,
+}: {
+  item: PaymentRowData;
+  propertyId: string;
+  canWrite: boolean;
+}) {
   const actions = NEXT_ACTIONS[item.status] ?? [];
   return (
     <tr>
@@ -37,7 +45,7 @@ export function PaymentRow({ item, propertyId }: { item: PaymentRowData; propert
       <Td label="Bank">{item.bank ?? "—"}</Td>
       <Td label="Status"><Badge value={item.status} /></Td>
       <Td label="Actions">
-        <div className="flex gap-2">
+        {canWrite ? <div className="flex gap-2">
           {actions.map((a) =>
             a.to === "BOUNCED" ? (
               // Recording a bounce is a permanent register entry — gate it
@@ -65,7 +73,7 @@ export function PaymentRow({ item, propertyId }: { item: PaymentRowData; propert
               </form>
             ),
           )}
-        </div>
+        </div> : <span className="text-xs text-muted">Read only</span>}
       </Td>
     </tr>
   );

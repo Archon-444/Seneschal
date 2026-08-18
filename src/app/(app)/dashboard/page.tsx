@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { hasCapability } from "@/server/authz";
 import { activationStatus, dashboardKpis } from "@/server/services/dashboard";
-import { listDeadlines } from "@/server/services/deadlines";
+import { deadlineNextAction, listDeadlines } from "@/server/services/deadlines";
 import { listRiskFlags } from "@/server/services/risk";
 import { listRenewalPipeline } from "@/server/services/renewals";
 import { formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
@@ -22,6 +22,15 @@ export default async function DashboardPage() {
   const today = todayInDubai();
   const upliftAtRisk = pipeline.reduce((sum, r) => sum + (r.valueAtRisk ?? 0), 0);
   const upcoming = deadlines.filter((d) => d.dueAt >= today).slice(0, 8);
+  const urgencyRank = { CRITICAL: 0, WARN: 1, NORMAL: 2, NONE: 3 } as const;
+  const renewalActions = pipeline
+    .filter((row) => row.nextAction.urgency !== "NONE")
+    .sort(
+      (a, b) =>
+        urgencyRank[a.nextAction.urgency] - urgencyRank[b.nextAction.urgency] ||
+        a.noticeGateAt.getTime() - b.noticeGateAt.getTime(),
+    )
+    .slice(0, 8);
 
   return (
     <>
@@ -87,6 +96,39 @@ export default async function DashboardPage() {
         </div>
       </section>
 
+      <section className="mb-8">
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div>
+            <Eyebrow>Renewal queue</Eyebrow>
+            <h2 className="font-display text-xl text-navy-900">Next actions</h2>
+          </div>
+          <Link href="/renewals?sort=urgency" className="text-sm text-navy-500 hover:text-navy-900">
+            Full queue →
+          </Link>
+        </div>
+        {renewalActions.length === 0 ? (
+          <EmptyState message="No renewal action is currently due." />
+        ) : (
+          <Table stack headers={["Action", "Unit", "Notice gate", "Urgency"]}>
+            {renewalActions.map((row) => (
+              <tr key={row.tenancyId}>
+                <Td label="Action">
+                  <Link href={row.nextAction.href} className="font-semibold text-navy-900 hover:underline">
+                    {row.nextAction.label}
+                  </Link>
+                  <div className="mt-0.5 max-w-xl text-xs text-muted">{row.nextAction.reason}</div>
+                </Td>
+                <Td label="Unit" className="text-xs">{row.unit || "Unit"}</Td>
+                <Td label="Notice gate" className="figure whitespace-nowrap text-xs">
+                  {formatDubaiDate(row.noticeGateAt)}
+                </Td>
+                <Td label="Urgency"><Badge value={row.nextAction.urgency} /></Td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
           <h2 className="font-display mb-3 text-xl text-navy-900">Upcoming</h2>
@@ -97,21 +139,56 @@ export default async function DashboardPage() {
               <ol className="relative ml-1 space-y-4 border-l border-line pl-5">
                 {upcoming.map((d) => {
                   const hot = d.kind === "NOTICE_GATE";
+                  const renewal = d.tenancyId ? pipeline.find((row) => row.tenancyId === d.tenancyId) : null;
+                  const deadlinePresentation = deadlineNextAction(d);
+                  const canonical = renewal && ["NOTICE_GATE", "CONTRACT_EXPIRY", "RENEWAL_DATE", "TENANT_RESPONSE_DUE"].includes(d.kind)
+                    ? renewal.nextAction
+                    : null;
+                  const presentation = canonical
+                    ? {
+                        label: canonical.label,
+                        reason: canonical.reason,
+                        href: canonical.href,
+                        urgency: canonical.urgency,
+                        responsibleLayer: canonical.responsibleLayer,
+                      }
+                    : {
+                        ...deadlinePresentation,
+                        urgency: hot ? "CRITICAL" : "SCHEDULED",
+                        responsibleLayer: undefined,
+                      };
                   return (
                     <li key={d.id} className="relative">
                       <span
                         className={`absolute -left-[25px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white ${hot ? "bg-claret-500" : "bg-gold-500"}`}
                       />
-                      <div className="figure text-[11px] uppercase tracking-wide text-navy-300">
-                        {formatDubaiDate(d.dueAt)}
-                      </div>
-                      <div className="text-sm font-semibold text-navy-900">{d.kind.replace(/_/g, " ")}</div>
-                      {d.tenancy?.property && (
-                        <div className="text-xs text-muted">
-                          {d.tenancy.property.community}
-                          {d.tenancy.property.unitNo ? ` · ${d.tenancy.property.unitNo}` : ""}
+                      <Link
+                        href={presentation.href}
+                        className="group -m-2 block rounded-lg p-2 transition hover:bg-ivory-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="figure text-[11px] uppercase tracking-wide text-navy-300">
+                              {formatDubaiDate(d.dueAt)}
+                            </div>
+                            <div className="text-sm font-semibold text-navy-900 group-hover:underline">{presentation.label}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge value={presentation.urgency} />
+                            <span aria-hidden className="text-navy-300 transition group-hover:translate-x-0.5">→</span>
+                          </div>
                         </div>
-                      )}
+                        {d.tenancy?.property && (
+                          <div className="text-xs text-muted">
+                            {d.tenancy.property.community}
+                            {d.tenancy.property.unitNo ? ` · ${d.tenancy.property.unitNo}` : ""}
+                          </div>
+                        )}
+                        <div className="mt-0.5 text-xs text-muted">{presentation.reason}</div>
+                        {presentation.responsibleLayer && (
+                          <div className="mt-1 text-[11px] text-navy-500">Responsible: {presentation.responsibleLayer}</div>
+                        )}
+                      </Link>
                     </li>
                   );
                 })}

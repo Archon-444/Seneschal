@@ -1,6 +1,6 @@
 import type { DocumentKind, ScopeType, SecureLink } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, require_, scope } from "../authz";
+import { type AuthzContext, AuthzError, isDelegateRole, require_, scope } from "../authz";
 import { recordEvidence } from "../evidence";
 import { notify } from "../notify";
 import { ingestDocument, logDocumentAccess } from "./documents";
@@ -16,6 +16,179 @@ import { todayInDubai } from "../calculators/dates";
 
 export const PRIVACY_NOTICE_VERSION = "privacy_notice_v1";
 
+export interface ProofRequestAssigneeOption {
+  id: string;
+  label: string;
+  kind: string;
+}
+
+export interface ProofRequestScopeOption {
+  value: string;
+  scopeType: "CLIENT" | "PROPERTY";
+  scopeId: string;
+  label: string;
+  assignees: ProofRequestAssigneeOption[];
+}
+
+async function propertyProofContactIds(workspaceId: string, propertyId: string): Promise<string[]> {
+  // scope-audit: internal proof-option helper; callers require proofs.write and pass the authorized workspace.
+  const property = await prisma.property.findFirst({
+    where: { id: propertyId, workspaceId, archivedAt: null },
+    select: {
+      ownerContactId: true,
+      assignedAgentId: true,
+      tenancies: {
+        where: { archivedAt: null },
+        select: { landlordContactId: true, tenantContactId: true },
+      },
+    },
+  });
+  if (!property) return [];
+  return [...new Set([
+    property.ownerContactId,
+    property.assignedAgentId,
+    ...property.tenancies.flatMap((t) => [t.landlordContactId, t.tenantContactId]),
+  ].filter((id): id is string => !!id))];
+}
+
+async function proofScopeContactIds(
+  workspaceId: string,
+  scopeType: ScopeType,
+  scopeId?: string,
+): Promise<string[]> {
+  if (scopeType === "WORKSPACE") {
+    return (await prisma.contact.findMany({
+      where: { workspaceId, archivedAt: null },
+      select: { id: true },
+    })).map((c) => c.id);
+  }
+  if (!scopeId) return [];
+  if (scopeType === "PROPERTY") return propertyProofContactIds(workspaceId, scopeId);
+  if (scopeType === "CLIENT") {
+    // scope-audit: internal proof-option helper; caller has proofs.write and the query is workspace constrained.
+    const properties = await prisma.property.findMany({
+      where: { workspaceId, clientPrincipalId: scopeId, archivedAt: null },
+      select: { id: true },
+    });
+    return [...new Set((await Promise.all(properties.map((p) => propertyProofContactIds(workspaceId, p.id)))).flat())];
+  }
+  if (scopeType === "TENANCY") {
+    // scope-audit: internal proof-selection helper; caller has proofs.write and validates the resulting assignee set.
+    const tenancy = await prisma.tenancy.findFirst({
+      where: { id: scopeId, workspaceId, archivedAt: null },
+      select: { propertyId: true },
+    });
+    return tenancy ? propertyProofContactIds(workspaceId, tenancy.propertyId) : [];
+  }
+  if (scopeType === "PAYMENT_ITEM") {
+    // scope-audit: internal proof-selection helper; caller has proofs.write and validates the resulting assignee set.
+    const item = await prisma.paymentItem.findFirst({
+      where: { id: scopeId, workspaceId },
+      select: { tenancy: { select: { propertyId: true } } },
+    });
+    return item ? propertyProofContactIds(workspaceId, item.tenancy.propertyId) : [];
+  }
+  if (scopeType === "RENEWAL_CASE") {
+    const renewalCase = await prisma.renewalCase.findFirst({
+      where: { id: scopeId, workspaceId },
+      select: { propertyId: true },
+    });
+    return renewalCase ? propertyProofContactIds(workspaceId, renewalCase.propertyId) : [];
+  }
+  if (scopeType === "OFFER") {
+    // scope-audit: internal proof-selection helper; caller has proofs.write and validates the resulting assignee set.
+    const offer = await prisma.offer.findFirst({
+      where: { id: scopeId, workspaceId },
+      select: { tenancyId: true },
+    });
+    if (!offer?.tenancyId) return [];
+    // scope-audit: internal proof-selection helper; offer tenancy id and workspace both constrain the lookup.
+    const tenancy = await prisma.tenancy.findFirst({
+      where: { id: offer.tenancyId, workspaceId },
+      select: { propertyId: true },
+    });
+    return tenancy ? propertyProofContactIds(workspaceId, tenancy.propertyId) : [];
+  }
+  return [];
+}
+
+async function assertProofRequestSelection(
+  ctx: AuthzContext,
+  args: { scopeType: ScopeType; scopeId?: string; assignedContactId: string },
+) {
+  const contact = await prisma.contact.findFirst({
+    where: { id: args.assignedContactId, workspaceId: ctx.workspaceId, archivedAt: null },
+    select: { id: true },
+  });
+  if (!contact) throw new AuthzError("Not found", 404);
+  const allowedContactIds = await proofScopeContactIds(ctx.workspaceId, args.scopeType, args.scopeId);
+  if (!allowedContactIds.includes(contact.id)) throw new AuthzError("Not found", 404);
+}
+
+/** Minimum-data, scope-aware options for the proof creation form. */
+export async function proofRequestOptions(ctx: AuthzContext): Promise<ProofRequestScopeOption[]> {
+  require_(ctx, "proofs.write");
+  const clientIds = isDelegateRole(ctx.role) ? ctx.delegateClientIds : null;
+  const [clients, properties] = await Promise.all([
+    prisma.clientPrincipal.findMany({
+      where: {
+        workspaceId: ctx.workspaceId,
+        archivedAt: null,
+        ...(clientIds ? { id: { in: clientIds } } : {}),
+      },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: "asc" },
+    }),
+    // scope-audit: proofRequestOptions requires proofs.write and applies delegate client ids before reading properties.
+    prisma.property.findMany({
+      where: {
+        workspaceId: ctx.workspaceId,
+        archivedAt: null,
+        ...(clientIds ? { clientPrincipalId: { in: clientIds } } : {}),
+      },
+      select: { id: true, clientPrincipalId: true, community: true, building: true, unitNo: true },
+      orderBy: [{ community: "asc" }, { building: "asc" }, { unitNo: "asc" }],
+    }),
+  ]);
+
+  const propertyContactEntries = await Promise.all(
+    properties.map(async (property) => [property.id, await propertyProofContactIds(ctx.workspaceId, property.id)] as const),
+  );
+  const propertyContacts = new Map(propertyContactEntries);
+  const allContactIds = [...new Set(propertyContactEntries.flatMap(([, ids]) => ids))];
+  const contacts = await prisma.contact.findMany({
+    where: { workspaceId: ctx.workspaceId, archivedAt: null, id: { in: allContactIds } },
+    select: { id: true, name: true, kind: true },
+    orderBy: { name: "asc" },
+  });
+  const contactById = new Map(contacts.map((contact) => [contact.id, contact]));
+  const assignees = (ids: string[]): ProofRequestAssigneeOption[] => ids
+    .map((id) => contactById.get(id))
+    .filter((contact): contact is NonNullable<typeof contact> => !!contact)
+    .map((contact) => ({ id: contact.id, label: contact.name, kind: contact.kind }));
+
+  const clientOptions = clients.map((client) => {
+    const ids = properties
+      .filter((property) => property.clientPrincipalId === client.id)
+      .flatMap((property) => propertyContacts.get(property.id) ?? []);
+    return {
+      value: `CLIENT:${client.id}`,
+      scopeType: "CLIENT" as const,
+      scopeId: client.id,
+      label: `Client — ${client.displayName}`,
+      assignees: assignees([...new Set(ids)]),
+    };
+  });
+  const propertyOptions = properties.map((property) => ({
+    value: `PROPERTY:${property.id}`,
+    scopeType: "PROPERTY" as const,
+    scopeId: property.id,
+    label: `Property — ${[property.community, property.building, property.unitNo].filter(Boolean).join(" · ")}`,
+    assignees: assignees(propertyContacts.get(property.id) ?? []),
+  }));
+  return [...clientOptions, ...propertyOptions].filter((option) => option.assignees.length > 0);
+}
+
 export async function createProofRequest(
   ctx: AuthzContext,
   args: {
@@ -28,14 +201,6 @@ export async function createProofRequest(
   },
 ) {
   require_(ctx, "proofs.write");
-  const contact = await prisma.contact.findUnique({ where: { id: args.assignedContactId } });
-  if (isDelegateRole(ctx.role)) {
-    // Assignee just needs to be in the workspace (assigning sends an email, leaks no
-    // client data); the security boundary is the scope target below.
-    if (!contact || contact.workspaceId !== ctx.workspaceId) throw new AuthzError("Not found", 404);
-  } else {
-    assertSameWorkspace(ctx, contact);
-  }
   // a scoped request without a target id is invisible to client-scoped viewers
   if (args.scopeType !== "WORKSPACE" && !args.scopeId) {
     throw new AuthzError(`scopeId required for ${args.scopeType}-scoped proof requests`, 422);
@@ -46,6 +211,7 @@ export async function createProofRequest(
     const clientId = await clientOfScope(ctx.workspaceId, args.scopeType, args.scopeId ?? null);
     assertDelegateClientId(ctx, clientId);
   }
+  await assertProofRequestSelection(ctx, args);
 
   const request = await prisma.proofRequest.create({
     data: {
@@ -131,10 +297,22 @@ export async function listProofRequests(ctx: AuthzContext) {
             ? { id: { in: (await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId)).proofRequestIds } }
             : {}),
         };
-  return prisma.proofRequest.findMany({
+  const requests = await prisma.proofRequest.findMany({
     where: base,
     orderBy: { createdAt: "desc" },
   });
+  const contacts = await prisma.contact.findMany({
+    where: {
+      workspaceId: ctx.workspaceId,
+      id: { in: [...new Set(requests.map((request) => request.assignedContactId))] },
+    },
+    select: { id: true, name: true },
+  });
+  const contactName = new Map(contacts.map((contact) => [contact.id, contact.name]));
+  return requests.map((request) => ({
+    ...request,
+    assignedContactName: contactName.get(request.assignedContactId) ?? "Related contact unavailable",
+  }));
 }
 
 /**

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
+import { hasCapability } from "@/server/authz";
 import { getProofRequest } from "@/server/services/proofs";
 import { listSecureLinks } from "@/server/services/secureLinks";
 import { listDocuments } from "@/server/services/documents";
@@ -13,6 +14,8 @@ import { decideProofAction, resendProofAction, revokeLinkAction } from "../../ac
 export default async function ProofDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ctx = await requireCtx();
+  const canWrite = hasCapability(ctx, "proofs.write");
+  const canDecide = hasCapability(ctx, "proofs.decide");
 
   let request;
   try {
@@ -33,12 +36,12 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
       <PageHeader
         title={request!.title}
         subtitle={`Due ${request!.dueAt ? formatDubaiDate(request!.dueAt) : "—"}`}
-        actions={
+        actions={canWrite ? (
           <form action={resendProofAction}>
             <input type="hidden" name="id" value={id} />
             <SubmitButton variant="secondary" pendingLabel="Sending…">Send new link</SubmitButton>
           </form>
-        }
+        ) : undefined}
       />
       <Card className="mb-6 max-w-3xl">
         <div className="flex items-center gap-3">
@@ -55,7 +58,7 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
         )}
       </Card>
 
-      {decidable && (
+      {decidable && canDecide && (
         <Card className="mb-6 max-w-3xl">
           <h2 className="font-display mb-3 text-lg text-navy-900">Review submission</h2>
           <form action={decideProofAction} className="flex items-end gap-3">
@@ -98,7 +101,7 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
                   <Badge value={l.revokedAt ? "REJECTED" : l.expiresAt < new Date() ? "OVERDUE" : "ACTIVE"} />
                 </Td>
                 <Td>
-                  {!l.revokedAt && (
+                  {!l.revokedAt && canWrite && (
                     <form action={revokeLinkAction}>
                       <input type="hidden" name="linkId" value={l.id} />
                       <input type="hidden" name="proofId" value={id} />
