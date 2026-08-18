@@ -234,6 +234,66 @@ describe("mintRenewedTenancy — single event, lineage stamped, no back-filled c
       }),
     ).rejects.toThrow(/AGREED|already been minted/);
   });
+
+  it("re-arms the successor with an even-split cheque schedule, deadlines and risk", async () => {
+    const rc = await makeAgreedCase();
+    const successor = await mintRenewedTenancy(W.ctx, {
+      renewalCaseId: rc.id,
+      startDate: daysFromNow(61),
+      endDate: daysFromNow(425),
+      annualRent: 84_000,
+      chequeCount: 4,
+    });
+    const items = await prisma.paymentItem.findMany({
+      where: { tenancyId: successor.id },
+      orderBy: { seq: "asc" },
+    });
+    expect(items).toHaveLength(4);
+    const total = items.reduce((s, i) => s + Number(i.amount), 0);
+    expect(total).toBe(84_000);
+    expect(await prisma.riskFlag.findFirst({
+      where: { code: "CHEQUE_TOTAL_MISMATCH", scopeId: successor.id, status: "OPEN" },
+    })).toBeNull();
+
+    const deadlines = await prisma.deadline.findMany({
+      where: { tenancyId: successor.id, status: "OPEN" },
+    });
+    const kinds = deadlines.map((d) => d.kind);
+    expect(kinds).toEqual(expect.arrayContaining(["NOTICE_GATE", "CONTRACT_EXPIRY", "RENEWAL_DATE"]));
+    expect(kinds.filter((k) => k === "CHEQUE_DUE")).toHaveLength(4);
+
+    const reloaded = await prisma.tenancy.findUnique({ where: { id: successor.id } });
+    expect(reloaded!.noticeGateAt).not.toBeNull();
+    expect(reloaded!.ejariNo).toBeNull();
+    expect(await prisma.riskFlag.findFirst({
+      where: { code: "MISSING_EJARI", scopeId: successor.id, status: "OPEN" },
+    })).toBeTruthy();
+
+    const completed = await prisma.evidenceEvent.findFirst({
+      where: { type: "RENEWAL_COMPLETED", scopeId: rc.id },
+    });
+    expect(completed!.payload).toMatchObject({ chequeCount: 4, generatedItemCount: 4 });
+  });
+
+  it("mints without chequeCount still regenerates deadlines and raises MISSING_EJARI", async () => {
+    const rc = await makeAgreedCase();
+    const successor = await mintRenewedTenancy(W.ctx, {
+      renewalCaseId: rc.id,
+      startDate: daysFromNow(61),
+      endDate: daysFromNow(425),
+      annualRent: 84_000,
+    });
+    expect(await prisma.paymentItem.count({ where: { tenancyId: successor.id } })).toBe(0);
+    const kinds = (
+      await prisma.deadline.findMany({ where: { tenancyId: successor.id, status: "OPEN" } })
+    ).map((d) => d.kind);
+    expect(kinds).toEqual(expect.arrayContaining(["NOTICE_GATE", "CONTRACT_EXPIRY", "RENEWAL_DATE"]));
+    expect(kinds.filter((k) => k === "CHEQUE_DUE")).toHaveLength(0);
+    expect((await prisma.tenancy.findUnique({ where: { id: successor.id } }))!.noticeGateAt).not.toBeNull();
+    expect(await prisma.riskFlag.findFirst({
+      where: { code: "MISSING_EJARI", scopeId: successor.id, status: "OPEN" },
+    })).toBeTruthy();
+  });
 });
 
 describe("renewal risk wiring — production paths raise flags", () => {

@@ -4,7 +4,7 @@ import { requireCtx } from "@/server/auth/request";
 import { hasCapability } from "@/server/authz";
 import { getRenewalRisk } from "@/server/services/renewals";
 import { daysBetween, formatDubaiDate, isoDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, Field, FormActions, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Button, Card, Field, FormActions, inputClass, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { InfoTooltip } from "@/components/Tooltip";
 import {
@@ -17,6 +17,7 @@ import {
   sendOfferToTenantAction,
   serveNoticeAction,
 } from "../../actions";
+import { RequestOwnerApprovalForm } from "./RequestOwnerApprovalForm";
 
 // Renewal risk report (Renewal Risk Desk). Notice-gate countdown + the index-based
 // Decree 43 position from a captured index. Estimates for review — not legal advice.
@@ -55,6 +56,13 @@ export default async function RenewalReportPage({
   const successorEnd = new Date(
     Date.UTC(successorStart.getUTCFullYear() + 1, successorStart.getUTCMonth(), successorStart.getUTCDate()),
   );
+  const chequeCountDefault = (() => {
+    const m = acceptedOffer?.paymentSchedule.match(/\d+/);
+    if (!m) return "";
+    const n = Number(m[0]);
+    return Number.isInteger(n) && n >= 0 && n <= 12 ? String(n) : "";
+  })();
+  const ownerContactId = t.landlordContactId ?? p.ownerContactId;
 
   return (
     <>
@@ -66,14 +74,21 @@ export default async function RenewalReportPage({
         title={unit}
         subtitle={`Contract ${formatDubaiDate(t.startDate)} → ${formatDubaiDate(t.endDate)}${t.ejariNo ? ` · Ejari ${t.ejariNo}` : ""}`}
         actions={
-          risk!.renewalCase ? (
-            <Badge value={risk!.renewalCase.status} />
-          ) : (
-            <form action={openRenewalCaseAction}>
-              <input type="hidden" name="tenancyId" value={tenancyId} />
-              <Button type="submit">Open renewal case</Button>
-            </form>
-          )
+          <div className="flex flex-wrap items-center gap-2">
+            {hasCapability(ctx, "evidence.export") && (
+              <LinkButton href={`/api/v1/tenancies/${tenancyId}/evidence-pack.pdf`}>
+                Download evidence pack
+              </LinkButton>
+            )}
+            {risk!.renewalCase ? (
+              <Badge value={risk!.renewalCase.status} />
+            ) : (
+              <form action={openRenewalCaseAction}>
+                <input type="hidden" name="tenancyId" value={tenancyId} />
+                <Button type="submit">Open renewal case</Button>
+              </form>
+            )}
+          </div>
         }
       />
 
@@ -262,26 +277,37 @@ export default async function RenewalReportPage({
                     )}
                   </Td>
                   <Td>
-                    {(o.status === "SENT" || o.status === "COUNTERED") && (
-                      <div className="flex gap-3">
-                        <form action={acceptOfferAction}>
-                          <input type="hidden" name="offerId" value={o.id} />
-                          <input type="hidden" name="tenancyId" value={tenancyId} />
-                          <button className="text-xs text-navy-500 underline-offset-2 hover:text-verde-700 hover:underline">
-                            Accept
-                          </button>
-                        </form>
-                        {o.party === "LANDLORD" && (
-                          <form action={sendOfferToTenantAction}>
+                    <div className="flex flex-col items-start gap-1">
+                      {(o.status === "SENT" || o.status === "COUNTERED") && (
+                        <div className="flex gap-3">
+                          <form action={acceptOfferAction}>
                             <input type="hidden" name="offerId" value={o.id} />
                             <input type="hidden" name="tenancyId" value={tenancyId} />
-                            <button className="text-xs text-navy-500 underline-offset-2 hover:text-gold-700 hover:underline">
-                              Send to tenant
+                            <button className="text-xs text-navy-500 underline-offset-2 hover:text-verde-700 hover:underline">
+                              Accept
                             </button>
                           </form>
+                          {o.party === "LANDLORD" && (
+                            <form action={sendOfferToTenantAction}>
+                              <input type="hidden" name="offerId" value={o.id} />
+                              <input type="hidden" name="tenancyId" value={tenancyId} />
+                              <button className="text-xs text-navy-500 underline-offset-2 hover:text-gold-700 hover:underline">
+                                Send to tenant
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      )}
+                      {canDecide &&
+                        ownerContactId &&
+                        (o.status === "SENT" || o.status === "COUNTERED" || o.status === "ACCEPTED") && (
+                          <RequestOwnerApprovalForm
+                            offerId={o.id}
+                            tenancyId={tenancyId}
+                            contactId={ownerContactId}
+                          />
                         )}
-                      </div>
-                    )}
+                    </div>
                   </Td>
                 </tr>
               ))}
@@ -352,8 +378,18 @@ export default async function RenewalReportPage({
                   <Field label="Payment terms (optional)">
                     <input name="paymentTermsNote" className={inputClass} placeholder="e.g. 4 cheques" />
                   </Field>
+                  <Field label="Generate cheques (count)">
+                    <input
+                      name="chequeCount"
+                      type="number"
+                      min="0"
+                      max="12"
+                      defaultValue={chequeCountDefault}
+                      className={inputClass}
+                    />
+                  </Field>
                 </div>
-                <FormActions note="Mints the successor tenancy and records a renewal-completed evidence event.">
+                <FormActions note="Mints the successor tenancy and records a renewal-completed evidence event. Cheques are split evenly across the term and sum to the annual rent.">
                   <SubmitButton pendingLabel="Completing…">Complete renewal</SubmitButton>
                 </FormActions>
               </form>

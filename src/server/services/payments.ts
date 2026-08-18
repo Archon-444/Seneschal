@@ -2,7 +2,7 @@ import { Prisma, type EvidenceType, type Instrument, type PaymentStatus } from "
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, require_, scope } from "../authz";
 import { recordEvidence } from "../evidence";
-import { formatDubaiDate, toUtcDateOnly, todayInDubai } from "../calculators/dates";
+import { daysBetween, formatDubaiDate, toUtcDateOnly, todayInDubai } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
 import { clearPaymentLate, evaluateRiskForTenancy, raisePaymentLate } from "./risk";
 import { recordNotification } from "../notify/record";
@@ -24,6 +24,29 @@ export interface PaymentItemInput {
   chequeNo?: string;
   bank?: string;
   notes?: string;
+}
+
+/**
+ * Even-split cheque schedule across a term. Last item absorbs rounding so the
+ * amounts sum exactly to annualRent (avoids CHEQUE_TOTAL_MISMATCH). Count is
+ * clamped to 12; a non-positive count yields an empty schedule.
+ */
+export function evenChequeSchedule(args: {
+  startDate: Date;
+  endDate: Date;
+  annualRent: number;
+  chequeCount: number;
+}): PaymentItemInput[] {
+  const n = Math.min(Math.max(0, Math.floor(args.chequeCount)), 12);
+  if (n <= 0) return [];
+  const termDays = daysBetween(args.startDate, args.endDate);
+  const per = Math.round(args.annualRent / n);
+  return Array.from({ length: n }, (_, i) => {
+    const due = toUtcDateOnly(args.startDate);
+    due.setUTCDate(due.getUTCDate() + Math.round((i * termDays) / n));
+    const amount = i === n - 1 ? args.annualRent - per * (n - 1) : per;
+    return { seq: i + 1, dueDate: due, amount };
+  });
 }
 
 /** Replace a tenancy's payment schedule (T4.1). Σ≠annualRent warns, never blocks. */

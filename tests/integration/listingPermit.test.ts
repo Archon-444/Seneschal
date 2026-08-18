@@ -51,7 +51,7 @@ async function openPermitDeadlines(listingId: string) {
 
 describe("permit-expiry deadline sync", () => {
   it("creates a property-scoped PERMIT_EXPIRY deadline the landlord can see", async () => {
-    const listing = await listings.createListing(landlord.ctx, propertyId, {
+    const listing = await listings.createListing(W.ctx, propertyId, {
       permitRef: "RERA-7781234",
       permitExpiry: daysFromToday(45),
     });
@@ -65,32 +65,32 @@ describe("permit-expiry deadline sync", () => {
   });
 
   it("cancels the deadline when the expiry is cleared", async () => {
-    const listing = await listings.createListing(landlord.ctx, propertyId, {
+    const listing = await listings.createListing(W.ctx, propertyId, {
       permitRef: "RERA-1",
       permitExpiry: daysFromToday(45),
     });
-    await listings.updateListing(landlord.ctx, listing.id, { permitExpiry: null });
+    await listings.updateListing(W.ctx, listing.id, { permitExpiry: null });
     expect(await openPermitDeadlines(listing.id)).toHaveLength(0);
   });
 
   it("cancels the deadline when the listing is archived", async () => {
-    const listing = await listings.createListing(landlord.ctx, propertyId, {
+    const listing = await listings.createListing(W.ctx, propertyId, {
       permitRef: "RERA-1",
       permitExpiry: daysFromToday(45),
     });
-    await listings.archiveListing(landlord.ctx, listing.id);
+    await listings.archiveListing(W.ctx, listing.id);
     expect(await openPermitDeadlines(listing.id)).toHaveLength(0);
   });
 
   it("does not create a deadline when there is no expiry date", async () => {
-    const listing = await listings.createListing(landlord.ctx, propertyId, { permitRef: "RERA-1" });
+    const listing = await listings.createListing(W.ctx, propertyId, { permitRef: "RERA-1" });
     expect(await openPermitDeadlines(listing.id)).toHaveLength(0);
   });
 });
 
 describe("permit-expiry alert ladder", () => {
   it("fires the T-30 rung once with property-scoped REMINDER_SENT evidence", async () => {
-    await listings.createListing(landlord.ctx, propertyId, {
+    await listings.createListing(W.ctx, propertyId, {
       permitRef: "RERA-7781234",
       permitExpiry: daysFromToday(30), // exactly T-30
     });

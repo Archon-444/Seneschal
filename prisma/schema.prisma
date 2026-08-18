@@ -107,13 +107,13 @@ enum Role {
   FIDUCIARY
   ORG_ADMIN         // F-Admin: people/config power, ZERO data caps (onboards staff, wires delegate assignments, cannot open a tenancy)
   CLIENT_VIEWER
-  AGENT
+  AGENT             // reserved; not seated in the pilot gallery (Postgres cannot drop enum values without a type rewrite)
   MANAGING_AGENT    // execution delegate: read + broad write, confined to its live ClientAssignment rows
-  LICENSED_PARTNER
-  VENDOR
+  LICENSED_PARTNER  // reserved marketplace role; read-only in the capability matrix, not seated in the pilot gallery
+  VENDOR            // reserved marketplace role; proofs.read only; real vendors act via VENDOR_LINK, not a membership
   AUDITOR
   LANDLORD          // self-service supply-side persona; scoped to one Contact via Membership.subjectContactId
-  TENANT            // self-service demand-side persona; scoped to one Contact via Membership.subjectContactId
+  TENANT            // membership value retained; the product seats tenants as link-parties, not members
 }
 
 // F-Admin (D1): capability bundles, unioned OVER the role map (effective = roleMap ∪ grants).

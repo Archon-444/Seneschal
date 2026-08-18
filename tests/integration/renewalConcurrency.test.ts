@@ -94,6 +94,30 @@ describe("renewal concurrency", () => {
     expect(reloaded!.renewedTenancyId).not.toBeNull();
   });
 
+  it("mintRenewedTenancy — losing concurrent mint with chequeCount leaves no orphan schedule rows", async () => {
+    const rc = await makeAgreedCase();
+
+    const results = await Promise.allSettled([
+      mintRenewedTenancy(W.ctx, { ...mintArgs(rc.id), chequeCount: 4 }),
+      mintRenewedTenancy(W.ctx, { ...mintArgs(rc.id), chequeCount: 4 }),
+    ]);
+    const ok = results.filter((r) => r.status === "fulfilled") as PromiseFulfilledResult<{ id: string }>[];
+    const failed = results.filter((r) => r.status === "rejected");
+    expect(ok).toHaveLength(1);
+    expect(failed).toHaveLength(1);
+    const loser = (failed[0] as PromiseRejectedResult).reason;
+    expect(loser).toBeInstanceOf(AuthzError);
+    expect((loser as AuthzError).status).toBe(409);
+
+    const successors = await prisma.tenancy.findMany({ where: { renewsFromTenancyId: tenancyId } });
+    expect(successors).toHaveLength(1);
+    const items = await prisma.paymentItem.findMany({
+      where: { tenancy: { renewsFromTenancyId: tenancyId } },
+    });
+    expect(items).toHaveLength(4);
+    expect(items.every((i) => i.tenancyId === ok[0].value.id)).toBe(true);
+  });
+
   it("openRenewalCase — N concurrent opens collapse to one active case", async () => {
     const results = await Promise.all(
       Array.from({ length: 5 }, () => openRenewalCase(W.ctx, tenancyId)),

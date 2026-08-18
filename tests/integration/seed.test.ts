@@ -46,14 +46,15 @@ describe("runSeed — access-model gallery", () => {
     expect(await prisma.offer.findUnique({ where: { id: offerLink.scopeId } })).toBeTruthy();
   });
 
-  it("seats one member per RECURRING role and none for TENANT (enum-driven, so nothing is omitted)", async () => {
+  it("seats one member per taught recurring role and none for TENANT or deferred marketplace roles", async () => {
     await runSeed({ adminEmail: "pilot@example.com" });
     const ws = await gallery();
     const seated = new Set(
       (await prisma.membership.findMany({ where: { workspaceId: ws.id, revokedAt: null } })).map((m) => m.role),
     );
+    const notTaught = new Set<Role>(["TENANT", "AGENT", "LICENSED_PARTNER", "VENDOR"]);
     for (const role of Object.keys(ROLE_CAPABILITIES) as Role[]) {
-      if (role === "TENANT") expect(seated.has("TENANT")).toBe(false);
+      if (notTaught.has(role)) expect(seated.has(role)).toBe(false);
       else expect(seated.has(role)).toBe(true);
     }
   });
@@ -64,9 +65,13 @@ describe("runSeed — access-model gallery", () => {
     const m = await prisma.membership.findFirstOrThrow({ where: { userId: viewer.id, revokedAt: null } });
     expect(m.role).toBe("CLIENT_VIEWER");
     expect(m.clientPrincipalId).toBeTruthy(); // scoped to the managed client
-    // No APPROVAL link is seeded: the public /link APPROVAL handler isn't built, so seeding one would
-    // only mint a dead 404. The member plane is the live demonstration.
-    expect(await prisma.secureLink.count({ where: { purpose: "APPROVAL", revokedAt: null } })).toBe(0);
+    expect(await prisma.secureLink.count({ where: { purpose: "APPROVAL", revokedAt: null } })).toBe(1);
+    const approvalLink = await prisma.secureLink.findFirstOrThrow({ where: { purpose: "APPROVAL", revokedAt: null } });
+    expect(approvalLink.scopeType).toBe("OFFER");
+    expect(await prisma.offer.findUnique({ where: { id: approvalLink.scopeId } })).toBeTruthy();
+    expect(await prisma.approval.findFirst({
+      where: { subjectType: "offer", subjectId: approvalLink.scopeId, decision: null },
+    })).toBeTruthy();
   });
 
   it("the MANAGING_AGENT delegate is scoped through a live ClientAssignment row (the normalised join table)", async () => {

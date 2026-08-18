@@ -7,16 +7,13 @@ import * as listings from "@/server/services/listings";
 
 // 1B issue #1 — Listings scoping + readiness + evidence.
 //
-// A Listing is a NEW persona-accessible model. Per the recurring scope-audit gate,
-// every read must flow through the F0a helpers (contactScopedWhere "LISTING" /
-// assertReadable "listing"), never a hand-rolled workspace clause. This suite proves
-// a LANDLORD sees only listings on the properties THEY own, a sibling owner's listing
-// is denied, TENANT has no listings surface at all, and the readiness gate governs
-// publication — with evidence written on each lifecycle event.
+// Listings are quarantined from the product surface. The operator (FIDUCIARY) still
+// holds listings.* so this suite can prove the archived module's logic intact.
+// LANDLORD/TENANT no longer hold those caps (pilot role shrink).
 
 let W: TestActor; // operator (FIDUCIARY)
-let landlord: TestActor; // scoped to landlordContact
-let tenant: TestActor; // scoped to a tenant contact (no listings capability)
+let landlord: TestActor;
+let tenant: TestActor;
 
 let ownPropertyId: string;
 let siblingPropertyId: string;
@@ -53,7 +50,6 @@ beforeAll(async () => {
   });
   siblingPropertyId = siblingProperty.id;
 
-  // The sibling owner's listing, created by the operator — must be invisible to our landlord.
   const siblingListing = await listings.createListing(W.ctx, siblingProperty.id, {
     headline: "Sibling unit",
     askingRent: 70000,
@@ -65,8 +61,8 @@ beforeAll(async () => {
 });
 
 describe("create + scope", () => {
-  it("landlord creates a listing on an owned property and gets a readiness score", async () => {
-    const created = await listings.createListing(landlord.ctx, ownPropertyId, {
+  it("operator creates a listing and gets a readiness score", async () => {
+    const created = await listings.createListing(W.ctx, ownPropertyId, {
       headline: "Marina 2BR",
       askingRent: 95000,
     });
@@ -80,22 +76,16 @@ describe("create + scope", () => {
     expect(evidence).toBeTruthy();
   });
 
-  it("landlord CANNOT create a listing on a property they do not own", async () => {
+  it("LANDLORD has no listings write surface", async () => {
     await expect(
       listings.createListing(landlord.ctx, siblingPropertyId, { headline: "nope" }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/listings\.write/);
   });
 
-  it("listListings returns only the landlord's own-property listings", async () => {
-    const rows = await listings.listListings(landlord.ctx);
-    const ids = rows.map((r) => r.id);
-    expect(ids).toContain(ownListingId);
-    expect(ids).not.toContain(siblingListingId);
-  });
-
-  it("getListing: own resolves, sibling denied", async () => {
-    await expect(listings.getListing(landlord.ctx, ownListingId)).resolves.toBeTruthy();
-    await expect(listings.getListing(landlord.ctx, siblingListingId)).rejects.toThrow();
+  it("LANDLORD has no listings read surface", async () => {
+    await expect(listings.listListings(landlord.ctx)).rejects.toThrow(/listings\.read/);
+    await expect(listings.getListing(landlord.ctx, ownListingId)).rejects.toThrow(/listings\.read/);
+    await expect(listings.getListing(landlord.ctx, siblingListingId)).rejects.toThrow(/listings\.read/);
   });
 
   it("operator sees every listing in the workspace", async () => {
@@ -112,17 +102,17 @@ describe("create + scope", () => {
 
 describe("readiness gate governs publication", () => {
   it("refuses to publish a listing missing a required check (no permit)", async () => {
-    await expect(listings.publishListing(landlord.ctx, ownListingId)).rejects.toThrow(/not ready/i);
+    await expect(listings.publishListing(W.ctx, ownListingId)).rejects.toThrow(/not ready/i);
   });
 
   it("publishes once required checks pass and score clears the threshold", async () => {
-    await listings.updateListing(landlord.ctx, ownListingId, {
+    await listings.updateListing(W.ctx, ownListingId, {
       permitRef: "RERA-7781234",
       availableFrom: new Date("2026-08-01"),
       furnished: true,
       description: "Bright corner two-bed with full Marina view and covered parking included.",
     });
-    const published = await listings.publishListing(landlord.ctx, ownListingId);
+    const published = await listings.publishListing(W.ctx, ownListingId);
     expect(published.status).toBe("PUBLISHED");
     expect(published.publishedAt).toBeTruthy();
 

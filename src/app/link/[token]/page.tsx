@@ -2,10 +2,12 @@ import { validateLinkToken } from "@/server/services/secureLinks";
 import { isQuarantined } from "@/server/config/features";
 import { getProofRequestForLink } from "@/server/services/externalProof";
 import { getOfferForLink } from "@/server/services/renewals";
+import { getApprovalForLink } from "@/server/services/approvals";
 import { getListingForLink } from "@/server/services/listings";
 import { getPassportForLink } from "@/server/services/tenantPassport";
 import { UploadProofForm } from "./UploadProofForm";
 import { TenantOfferForm } from "./TenantOfferForm";
+import { ApprovalForm } from "./ApprovalForm";
 import { EnquiryForm } from "./EnquiryForm";
 
 // Screen 13 — external proof upload. Mobile-first, no login. The token lives
@@ -189,6 +191,45 @@ export default async function ExternalLinkPage({ params }: { params: Promise<{ t
             Seneschal is a technology platform, not a broker or legal adviser. This proposal is based on
             landlord-provided data and, where shown, an official index figure captured on its own date. You
             may seek independent advice before responding. Your interaction with this link is recorded.
+          </p>
+        </div>
+      </SafeShell>
+    );
+  }
+
+  if (validation.link.purpose === "APPROVAL") {
+    const approval = await getApprovalForLink(validation.link);
+    if (!approval) {
+      return (
+        <SafeShell>
+          <h1 className="font-display text-2xl text-navy-900">This link is no longer available</h1>
+        </SafeShell>
+      );
+    }
+    const fmt = (n: number) => `AED ${n.toLocaleString("en-AE")}`;
+    return (
+      <SafeShell>
+        <h1 className="font-display text-2xl text-navy-900">Owner sign-off</h1>
+        <p className="mt-1 text-sm text-navy-500">{approval.unit} · proposed renewal terms</p>
+        <dl className="mt-5 divide-y divide-ivory-200 rounded-md border border-ivory-300">
+          <Row label="Party" value={approval.party === "LANDLORD" ? "Landlord proposal" : "Tenant counter"} />
+          <Row label="Version" value={`v${approval.version}`} />
+          <Row label="Proposed annual rent" value={fmt(approval.annualRent)} />
+          <Row
+            label="Payment"
+            value={`${approval.paymentSchedule}${approval.paymentMethod ? ` · ${approval.paymentMethod}` : ""}`}
+          />
+          {approval.termMonths != null && <Row label="Term" value={`${approval.termMonths} months`} />}
+        </dl>
+        <div className="mt-6">
+          <ApprovalForm token={token} />
+        </div>
+        <div className="mt-8 rounded-md bg-ivory-100 p-4 text-xs leading-relaxed text-navy-500">
+          <p className="font-medium text-navy-700">About this page</p>
+          <p className="mt-1">
+            Seneschal is a technology platform, not a broker or legal adviser. This is a recorded
+            sign-off on the terms shown, based on supplied data. Review before action. Your
+            interaction with this link is recorded.
           </p>
         </div>
       </SafeShell>

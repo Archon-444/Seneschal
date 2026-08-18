@@ -16,7 +16,7 @@ let publishedId: string;
 let draftId: string;
 
 async function linkFor(id: string): Promise<Awaited<ReturnType<typeof prisma.secureLink.findUniqueOrThrow>>> {
-  const { url } = await listings.createListingShareLink(landlord.ctx, id);
+  const { url } = await listings.createListingShareLink(W.ctx, id);
   const token = url.slice(url.lastIndexOf("/") + 1);
   // helper mirrors validateLinkToken but returns the row for the service call
   const { validateLinkToken } = await import("@/server/services/secureLinks");
@@ -40,17 +40,17 @@ beforeEach(async () => {
   });
   landlord = await addMember(W.workspaceId, "LANDLORD", undefined, owner.id);
 
-  const published = await listings.createListing(landlord.ctx, property.id, {
+  const published = await listings.createListing(W.ctx, property.id, {
     askingRent: 95000,
     permitRef: "RERA-1",
     availableFrom: new Date("2026-08-01"),
     furnished: true,
     description: "Bright corner two-bed with full Marina view and covered parking included.",
   });
-  await listings.publishListing(landlord.ctx, published.id);
+  await listings.publishListing(W.ctx, published.id);
   publishedId = published.id;
 
-  const draft = await listings.createListing(landlord.ctx, property.id, { askingRent: 80000 });
+  const draft = await listings.createListing(W.ctx, property.id, { askingRent: 80000 });
   draftId = draft.id;
 });
 
@@ -78,10 +78,10 @@ describe("enquiries", () => {
   });
 
   it("a draft listing cannot even be shared, and an unpublished listing rejects enquiries", async () => {
-    await expect(listings.createListingShareLink(landlord.ctx, draftId)).rejects.toThrow(/published/i);
+    await expect(listings.createListingShareLink(W.ctx, draftId)).rejects.toThrow(/published/i);
     // A link minted while published must stop accepting enquiries once archived.
     const link = await linkFor(publishedId);
-    await listings.archiveListing(landlord.ctx, publishedId);
+    await listings.archiveListing(W.ctx, publishedId);
     await expect(enquiries.createEnquiryFromLink(link, { name: "Too late" })).rejects.toThrow(/no longer/i);
   });
 

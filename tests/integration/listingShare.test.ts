@@ -7,12 +7,12 @@ import * as listings from "@/server/services/listings";
 import * as landlords from "@/server/services/landlords";
 import { validateLinkToken } from "@/server/services/secureLinks";
 
-// 1B #4 — Public listing link. A landlord mints a no-login LISTING_VIEW link for a
+// 1B #4 — Public listing link. The operator mints a no-login LISTING_VIEW link for a
 // PUBLISHED listing; the link/[token] dispatcher renders marketing fields only,
 // records a LISTING_VIEWED event, and never exposes a draft/archived listing.
+// LANDLORD no longer holds listings.publish (pilot role shrink).
 
 let W: TestActor;
-let landlord: TestActor;
 let ownerContactId: string;
 let listingId: string;
 
@@ -35,9 +35,8 @@ beforeEach(async () => {
     bedrooms: 2,
     sizeSqft: 1180,
   });
-  landlord = await addMember(W.workspaceId, "LANDLORD", undefined, owner.id);
 
-  const listing = await listings.createListing(landlord.ctx, property.id, {
+  const listing = await listings.createListing(W.ctx, property.id, {
     headline: "Marina 2BR",
     askingRent: 95000,
     availableFrom: new Date("2026-08-01"),
@@ -50,7 +49,7 @@ beforeEach(async () => {
 
 describe("createListingShareLink", () => {
   it("refuses to share a draft listing", async () => {
-    await expect(listings.createListingShareLink(landlord.ctx, listingId)).rejects.toThrow(/published/i);
+    await expect(listings.createListingShareLink(W.ctx, listingId)).rejects.toThrow(/published/i);
   });
 
   it("a role without listings.publish cannot mint a link", async () => {
@@ -60,9 +59,9 @@ describe("createListingShareLink", () => {
 
   it("mints a link for a published listing; the public view records LISTING_VIEWED", async () => {
     await landlords.verifyLandlord(W.ctx, ownerContactId);
-    await listings.publishListing(landlord.ctx, listingId);
+    await listings.publishListing(W.ctx, listingId);
 
-    const { url } = await listings.createListingShareLink(landlord.ctx, listingId);
+    const { url } = await listings.createListingShareLink(W.ctx, listingId);
     expect(url).toContain("/link/");
 
     const validation = await validateLinkToken(tokenOf(url));
@@ -87,9 +86,9 @@ describe("createListingShareLink", () => {
   });
 
   it("never exposes a listing once it is archived", async () => {
-    await listings.publishListing(landlord.ctx, listingId);
-    const { url } = await listings.createListingShareLink(landlord.ctx, listingId);
-    await listings.archiveListing(landlord.ctx, listingId);
+    await listings.publishListing(W.ctx, listingId);
+    const { url } = await listings.createListingShareLink(W.ctx, listingId);
+    await listings.archiveListing(W.ctx, listingId);
 
     const validation = await validateLinkToken(tokenOf(url));
     if (!validation.ok) throw new Error("link invalid");

@@ -3,8 +3,7 @@ import { recordAudit } from "../audit";
 import { createContact, getContact } from "./contacts";
 import { createProperty, getProperty } from "./properties";
 import { createTenancy } from "./tenancies";
-import { setPaymentSchedule } from "./payments";
-import { toUtcDateOnly, daysBetween } from "../calculators/dates";
+import { evenChequeSchedule, setPaymentSchedule } from "./payments";
 
 // Combined tenancy onboarding (Ejari-shaped). Creates landlord + tenant + asset
 // + tenancy from one form, reusing existing records where chosen. Each step goes
@@ -130,16 +129,16 @@ export async function onboardTenancy(ctx: AuthzContext, input: OnboardInput): Pr
   // ── optional cheque schedule: even split, evenly spaced across the term,
   // last cheque absorbs rounding so Σ == annualRent (no CHEQUE_TOTAL_MISMATCH).
   if (input.chequeCount && input.chequeCount > 0) {
-    const n = Math.min(input.chequeCount, 12);
-    const termDays = daysBetween(input.startDate, input.endDate);
-    const per = Math.round(input.annualRent / n);
-    const items = Array.from({ length: n }, (_, i) => {
-      const due = toUtcDateOnly(input.startDate);
-      due.setUTCDate(due.getUTCDate() + Math.round((i * termDays) / n));
-      const amount = i === n - 1 ? input.annualRent - per * (n - 1) : per;
-      return { seq: i + 1, dueDate: due, amount };
-    });
-    await setPaymentSchedule(ctx, tenancy.id, items);
+    await setPaymentSchedule(
+      ctx,
+      tenancy.id,
+      evenChequeSchedule({
+        startDate: input.startDate,
+        endDate: input.endDate,
+        annualRent: input.annualRent,
+        chequeCount: input.chequeCount,
+      }),
+    );
   }
 
   await recordAudit({

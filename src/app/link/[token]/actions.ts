@@ -1,16 +1,19 @@
 "use server";
 
 import { headers } from "next/headers";
+import { AuthzError } from "@/server/authz";
 import { validateLinkToken, consumeLinkUse } from "@/server/services/secureLinks";
 import { consumeRateLimit } from "@/server/services/rateLimit";
 import { isQuarantined } from "@/server/config/features";
 import { submitProofViaLink } from "@/server/services/proofs";
 import { respondToOfferViaLink } from "@/server/services/renewals";
+import { decideApprovalViaLink } from "@/server/services/approvals";
 import { createEnquiryFromLink } from "@/server/services/enquiries";
 import { recordLinkMessagingOptIn } from "@/server/services/consent";
 import { dispatchPending } from "@/server/outbox";
 import { handlers } from "@/server/outbox/runner";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, MAX_FILES_PER_REQUEST } from "@/lib/uploadLimits";
+import { APPROVAL_COMMENT_MAX } from "@/lib/approvalLimits";
 
 // Success states echo back WHAT was submitted so the external party gets a
 // concrete receipt, not a generic thank-you. They must never carry the link
@@ -30,6 +33,46 @@ export type OfferResponseState =
       note?: string;
     }
   | { status: "error"; message: string };
+
+export type ApprovalDecisionState =
+  | { status: "idle" }
+  | { status: "done"; decision: "APPROVED" | "REJECTED"; comment?: string }
+  | { status: "error"; message: string };
+
+export async function decideApprovalAction(
+  _prev: ApprovalDecisionState,
+  formData: FormData,
+): Promise<ApprovalDecisionState> {
+  const token = String(formData.get("token") ?? "");
+  const validation = await validateLinkToken(token);
+  if (!validation.ok) return { status: "error", message: "This link is no longer available." };
+  if (validation.link.purpose !== "APPROVAL") {
+    return { status: "error", message: "This link is no longer available." };
+  }
+
+  const decision = String(formData.get("decision") ?? "");
+  if (decision !== "APPROVED" && decision !== "REJECTED") {
+    return { status: "error", message: "Choose approve or reject." };
+  }
+  const commentRaw = String(formData.get("comment") ?? "").trim();
+  const comment = commentRaw ? commentRaw.slice(0, APPROVAL_COMMENT_MAX) : undefined;
+
+  const h = await headers();
+  const ip = (h.get("x-forwarded-for") ?? "unknown").split(",")[0].trim() || "unknown";
+  const rl = await consumeRateLimit(`approval:${validation.link.id}:${ip}`, 10, 5 * 60_000);
+  if (!rl.ok) {
+    return { status: "error", message: "Too many attempts. Please wait a few minutes and try again." };
+  }
+
+  try {
+    await decideApprovalViaLink(token, decision, comment);
+  } catch (e) {
+    const status = e instanceof AuthzError ? e.status : 500;
+    if (status === 409) return { status: "error", message: "This decision has already been recorded." };
+    return { status: "error", message: "This link is no longer available." };
+  }
+  return { status: "done", decision, comment };
+}
 
 export async function respondToOfferAction(
   _prev: OfferResponseState,
