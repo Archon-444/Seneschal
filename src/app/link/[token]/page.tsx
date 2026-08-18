@@ -151,6 +151,10 @@ export default async function ExternalLinkPage({ params }: { params: Promise<{ t
       return (
         <SafeShell>
           <h1 className="font-display text-2xl text-navy-900">This link is no longer available</h1>
+          <p className="mt-3 text-sm text-navy-500">
+            The link may have expired, been used already, or been withdrawn. Please contact the person
+            who sent it to request a new one.
+          </p>
         </SafeShell>
       );
     }

@@ -15,6 +15,7 @@ import {
 } from "@/server/services/renewals";
 import { approveNotice, prepareNotice, serveNoticeFormal } from "@/server/services/notice";
 import { validateLinkToken } from "@/server/services/secureLinks";
+import { getEvidenceTimeline } from "@/server/services/evidenceReadModel";
 
 // PR6c — end-to-end walkthrough of the Stage-2 renewal pipeline. This is the
 // acceptance test the plan calls for: an operator drives one tenancy from open
@@ -180,6 +181,17 @@ describe("end-to-end Stage-2 renewal walkthrough", () => {
       where: { type: "RENEWAL_COMPLETED", scopeId: rc.id },
     });
     expect(completedRows).toHaveLength(1);
+
+    // The predecessor's human-readable timeline follows related case scopes,
+    // so its final completion receipt remains visible even though the raw row
+    // links to the successor tenancy.
+    const presentedTimeline = await getEvidenceTimeline(W.ctx, {
+      tenancy: tenancyId,
+      category: "renewals",
+      pageSize: 100,
+      sort: "asc",
+    });
+    expect(presentedTimeline.events.at(-1)?.title).toBe("Successor tenancy created");
 
     // --- THE TIMELINE ASSERTION. Pull every evidence row attached to the case
     //     (notice rows) and the predecessor (open/index/offer/tenant), then the

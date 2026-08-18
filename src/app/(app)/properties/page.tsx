@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
+import { hasCapability } from "@/server/authz";
 import { listProperties } from "@/server/services/properties";
 import { listClients } from "@/server/services/clients";
 import { formatDubaiDate } from "@/server/calculators/dates";
@@ -8,8 +9,15 @@ import { Badge, EmptyState, LinkButton, Money, PageHeader, SearchForm, Table, Td
 export default async function PropertiesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
   const ctx = await requireCtx();
-  const [properties, clients] = await Promise.all([listProperties(ctx, { q }), listClients(ctx)]);
-  const clientName = (id: string | null) => clients.find((c) => c.id === id)?.displayName ?? "—";
+  const canReadClients = hasCapability(ctx, "clients.read");
+  const canWriteClients = hasCapability(ctx, "clients.write");
+  const canWriteProperties = hasCapability(ctx, "properties.write");
+  const [properties, clients] = await Promise.all([
+    listProperties(ctx, { q }),
+    canReadClients ? listClients(ctx) : Promise.resolve([]),
+  ]);
+  const clientName = (id: string | null) =>
+    canReadClients ? clients.find((c) => c.id === id)?.displayName ?? "—" : id ? "Assigned scope" : "—";
 
   return (
     <>
@@ -18,8 +26,8 @@ export default async function PropertiesPage({ searchParams }: { searchParams: P
         subtitle={`${properties.length} under oversight`}
         actions={
           <>
-            <LinkButton href="/properties/new">Add property</LinkButton>
-            <LinkButton href="/onboarding/new" variant="primary">Onboard tenancy</LinkButton>
+            {canWriteProperties && <LinkButton href="/properties/new">Add property</LinkButton>}
+            {canWriteClients && <LinkButton href="/onboarding/new" variant="primary">Onboard tenancy</LinkButton>}
           </>
         }
       />

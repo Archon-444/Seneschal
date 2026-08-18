@@ -1,10 +1,22 @@
 import { redirect } from "next/navigation";
-import { currentUser } from "@/server/auth/request";
+import { currentUser, homePathFor, requireCtx } from "@/server/auth/request";
 import { Logo } from "@/components/Logo";
 import { LoginForm } from "./LoginForm";
 
 export default async function LoginPage() {
-  if (await currentUser()) redirect("/dashboard");
+  const user = await currentUser();
+  if (user?.isPlatformAdmin) redirect("/admin");
+  if (user) {
+    let target: string | null = null;
+    try {
+      const ctx = await requireCtx();
+      target = homePathFor(ctx.role);
+    } catch {
+      // A signed-in account without a current membership remains at the safe
+      // sign-in boundary instead of entering a redirect loop.
+    }
+    if (target) redirect(target);
+  }
   return (
     <main className="flex min-h-screen items-center justify-center bg-ivory-100 px-4">
       <div className="w-full max-w-md">

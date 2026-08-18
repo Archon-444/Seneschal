@@ -14,7 +14,7 @@
 
   --color-navy-50: #eef1f6;
   --color-navy-100: #d5dce8;
-  --color-navy-300: #7d8aa3;
+  --color-navy-300: #8794ad;   /* secondary ink on navy surfaces · WCAG AA */
   --color-navy-500: #30415f;   /* secondary ink */
   --color-navy-700: #233252;
   --color-navy-800: #1b2a45;
@@ -22,7 +22,7 @@
 
   --color-gold-300: #e3c882;
   --color-gold-500: #bf9b53;   /* accent */
-  --color-gold-700: #8a743e;   /* gold text on tint */
+  --color-gold-700: #705a28;   /* gold text on tint · WCAG AA */
   --color-gold-100: #f0e6d2;   /* gold tint */
 
   --color-verde-100: #e3f0e9;  /* green tint */
@@ -39,7 +39,7 @@
 
   /* semantic helpers */
   --color-line: #e4decf;
-  --color-muted: #6b7385;
+  --color-muted: #5f687b;      /* secondary text on ivory/white · WCAG AA */
 
   --radius: 12px;
 
@@ -52,6 +52,16 @@ body {
   background-color: var(--color-ivory-50);
   color: var(--color-navy-900);
   font-family: var(--font-sans);
+}
+
+/* navy-300 is intentionally the on-navy secondary token. A few legacy views
+   use its utility on light surfaces; resolve those to the light-surface muted
+   token without weakening the dark shell's contrast. */
+.text-navy-300 {
+  color: var(--color-muted);
+}
+.bg-navy-900 .text-navy-300 {
+  color: var(--color-navy-300);
 }
 
 .font-display {
