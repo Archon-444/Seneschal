@@ -55,6 +55,12 @@ export default async function RenewalReportPage({
   const successorEnd = new Date(
     Date.UTC(successorStart.getUTCFullYear() + 1, successorStart.getUTCMonth(), successorStart.getUTCDate()),
   );
+  const chequeCountDefault = (() => {
+    const m = acceptedOffer?.paymentSchedule.match(/\d+/);
+    if (!m) return "";
+    const n = Number(m[0]);
+    return Number.isInteger(n) && n >= 0 && n <= 12 ? String(n) : "";
+  })();
 
   return (
     <>
@@ -352,8 +358,18 @@ export default async function RenewalReportPage({
                   <Field label="Payment terms (optional)">
                     <input name="paymentTermsNote" className={inputClass} placeholder="e.g. 4 cheques" />
                   </Field>
+                  <Field label="Generate cheques (count)">
+                    <input
+                      name="chequeCount"
+                      type="number"
+                      min="0"
+                      max="12"
+                      defaultValue={chequeCountDefault}
+                      className={inputClass}
+                    />
+                  </Field>
                 </div>
-                <FormActions note="Mints the successor tenancy and records a renewal-completed evidence event.">
+                <FormActions note="Mints the successor tenancy and records a renewal-completed evidence event. Cheques are split evenly across the term and sum to the annual rent.">
                   <SubmitButton pendingLabel="Completing…">Complete renewal</SubmitButton>
                 </FormActions>
               </form>

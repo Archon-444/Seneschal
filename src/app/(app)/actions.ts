@@ -242,6 +242,7 @@ export async function mintRenewedTenancyAction(formData: FormData) {
     endDate: new Date(s(formData, "endDate")),
     annualRent: Number(s(formData, "annualRent")),
     paymentTermsNote: opt(formData, "paymentTermsNote"),
+    chequeCount: num(formData, "chequeCount"),
   });
   revalidatePath(`/renewals/${s(formData, "tenancyId")}`);
 }

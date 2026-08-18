@@ -4,7 +4,9 @@ import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, req
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
 import { notify } from "../notify";
-import { evaluateRenewalRisk } from "./risk";
+import { evaluateRenewalRisk, evaluateRiskForTenancy } from "./risk";
+import { evenChequeSchedule, setPaymentSchedule } from "./payments";
+import { regenerateDeadlinesForTenancy } from "./deadlines";
 import { resolveClientScopeIds } from "./clientScope";
 import { resolveDelegateScopeIds } from "./delegateScope";
 import { createSecureLink, consumeLinkUse } from "./secureLinks";
@@ -1052,6 +1054,8 @@ export interface MintRenewedTenancyInput {
   contractDocId?: string;
   paymentTermsNote?: string;
   noticePeriodDays?: number;
+  /** Optional even-split cheque count (clamped to 12). 0/omitted skips the schedule. */
+  chequeCount?: number;
 }
 
 /**
@@ -1120,6 +1124,27 @@ export async function mintRenewedTenancy(ctx: AuthzContext, input: MintRenewedTe
     await tx.renewalCase.update({ where: { id: rc!.id }, data: { renewedTenancyId: created.id } });
     return created;
   });
+  // Re-arm the successor after the mint commits: cheque schedule (when asked)
+  // plus next-year deadlines and risk. Losing concurrent mints throw inside the
+  // transaction, so they never reach this post-commit work (no orphan rows).
+  // Deadlines before risk: evaluateRiskForTenancy reads the OPEN NOTICE_GATE row.
+  // recordEvidence stays last so RENEWAL_COMPLETED remains the final case-scoped row.
+  const chequeCount =
+    input.chequeCount && input.chequeCount > 0 ? Math.min(Math.floor(input.chequeCount), 12) : 0;
+  let generatedItemCount = 0;
+  if (chequeCount > 0) {
+    const items = evenChequeSchedule({
+      startDate: input.startDate,
+      endDate: input.endDate,
+      annualRent: input.annualRent,
+      chequeCount,
+    });
+    await setPaymentSchedule(ctx, successor.id, items);
+    generatedItemCount = items.length;
+  } else {
+    await regenerateDeadlinesForTenancy(successor.id);
+    await evaluateRiskForTenancy(successor.id);
+  }
   await recordEvidence({
     workspaceId: ctx.workspaceId,
     type: "RENEWAL_COMPLETED",
@@ -1136,6 +1161,8 @@ export async function mintRenewedTenancy(ctx: AuthzContext, input: MintRenewedTe
       annualRent: input.annualRent,
       startDate: input.startDate.toISOString(),
       endDate: input.endDate.toISOString(),
+      chequeCount,
+      generatedItemCount,
     },
   });
   await recordAudit({
