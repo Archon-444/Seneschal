@@ -215,6 +215,39 @@ export function deadlineLabel(d: { kind: DeadlineKind; computedFrom: unknown }):
   return d.kind.replace(/_/g, " ");
 }
 
+/** Navigation-only presentation for the dashboard. This does not mutate or
+ * reinterpret deadline state; it gives each trusted deadline a human-readable
+ * review action and the most specific scoped destination available. */
+export function deadlineNextAction(d: {
+  kind: DeadlineKind;
+  tenancyId: string | null;
+  propertyId: string | null;
+  computedFrom: unknown;
+}) {
+  const renewalHref = d.tenancyId ? `/renewals/${d.tenancyId}` : null;
+  const propertyHref = d.propertyId ? `/properties/${d.propertyId}` : null;
+  const fallbackHref = propertyHref ?? "/calendar";
+  const title = deadlineLabel(d).toLowerCase();
+
+  switch (d.kind) {
+    case "NOTICE_GATE":
+      return { label: "Review renewal notice gate", reason: "Confirm the recorded source, notice position, and service evidence.", href: renewalHref ?? fallbackHref };
+    case "CONTRACT_EXPIRY":
+      return { label: "Review expiring tenancy", reason: "Confirm the recorded renewal or move-out position before expiry.", href: renewalHref ?? fallbackHref };
+    case "RENEWAL_DATE":
+      return { label: "Confirm renewal record", reason: "Check that agreed terms and any successor tenancy are recorded.", href: renewalHref ?? fallbackHref };
+    case "TENANT_RESPONSE_DUE":
+      return { label: "Review tenant response", reason: "The recorded response window is due for review.", href: renewalHref ?? fallbackHref };
+    case "CHEQUE_DUE":
+    case "CHEQUE_FOLLOWUP":
+      return { label: "Review payment register", reason: "Check the recorded payment status and supporting evidence.", href: "/payments" };
+    case "APPROVAL_DUE":
+      return { label: "Review pending approval", reason: "A recorded approval window is due for review.", href: fallbackHref };
+    default:
+      return { label: `Review ${title}`, reason: "Open the scoped record and confirm the next recorded step.", href: fallbackHref };
+  }
+}
+
 /** A manual calendar entry (as opposed to a tenancy/Ejari-derived deadline). */
 export function isManualDeadline(d: { computedFrom: unknown }): boolean {
   return (d.computedFrom as { rule?: string } | null)?.rule === "manual";

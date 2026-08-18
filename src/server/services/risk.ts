@@ -1,4 +1,4 @@
-import type { Prisma, RiskCode, ScopeType, Severity } from "@prisma/client";
+import type { FlagStatus, Prisma, RiskCode, ScopeType, Severity } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, require_, scope } from "../authz";
 import { allScopeIds, resolveClientScopeIds } from "./clientScope";
@@ -10,6 +10,27 @@ import { daysBetween, todayInDubai } from "../calculators/dates";
 // raise and clear both write evidence events. ruleVersion cited on every flag.
 
 export const RULE_VERSION = "1a.1";
+
+const RISK_REASON: Record<RiskCode, string> = {
+  MISSING_EJARI: "Confirm and record the tenancy's Ejari reference.",
+  MISSING_END_DATE: "Confirm the contractual end date before relying on renewal deadlines.",
+  CHEQUE_TOTAL_MISMATCH: "Review the payment schedule against the recorded annual rent.",
+  NOTICE_GATE_WITHIN_30D: "Review the renewal case and notice evidence before the recorded gate.",
+  PROOF_OVERDUE: "Review the proof request and follow up with the assigned contact.",
+  AGENT_UNRESPONSIVE: "Review the delegated request and confirm the appropriate follow-up.",
+  PAYMENT_LATE: "Review the payment register and record the latest supported status.",
+  INVOICE_WITHOUT_QUOTE: "Review the maintenance record and confirm the supporting quote.",
+  MAINTENANCE_DONE_WITHOUT_TENANT_CONFIRMATION: "Review the maintenance evidence and tenant confirmation.",
+  DOCUMENT_EXPIRED: "Review the expired document and record an updated version where available.",
+  APPROVAL_PENDING_TOO_LONG: "Review the pending approval and confirm the responsible decision-maker.",
+  TENANCY_OVERLAP: "Review the overlapping tenancy dates before relying on portfolio records.",
+  PROPOSED_INCREASE_ABOVE_INDEX_BAND: "Review the proposal against its frozen index citation and ceiling estimate.",
+  RENEWAL_NOTICE_WINDOW_MISSED: "Review the recorded notice position; do not infer that an increase is available.",
+};
+
+export function riskFlagReason(code: RiskCode) {
+  return RISK_REASON[code];
+}
 
 type Db = Prisma.TransactionClient;
 
@@ -316,7 +337,10 @@ export async function evaluateWorkspaceRisk(workspaceId: string) {
 
 // ── Queries + acknowledge
 
-export async function listRiskFlags(ctx: AuthzContext, opts?: { includeCleared?: boolean }) {
+export async function listRiskFlags(
+  ctx: AuthzContext,
+  opts?: { includeCleared?: boolean; statuses?: FlagStatus[] },
+) {
   require_(ctx, "riskflags.read");
   // CLIENT_VIEWER: flags are scope-polymorphic — restrict to the client's scopes.
   const clientIds = ctx.clientPrincipalId
@@ -326,7 +350,11 @@ export async function listRiskFlags(ctx: AuthzContext, opts?: { includeCleared?:
     where: {
       ...scope(ctx),
       ...(clientIds ? { scopeId: { in: clientIds } } : {}),
-      ...(opts?.includeCleared ? {} : { status: { in: ["OPEN", "ACKNOWLEDGED"] } }),
+      ...(opts?.statuses
+        ? { status: { in: opts.statuses } }
+        : opts?.includeCleared
+          ? {}
+          : { status: { in: ["OPEN", "ACKNOWLEDGED"] } }),
     },
     orderBy: { raisedAt: "desc" },
   });
