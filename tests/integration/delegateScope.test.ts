@@ -54,6 +54,7 @@ async function makeBundle(label: string, rent: number): Promise<Bundle> {
   const property = await properties.createProperty(W.ctx, {
     clientPrincipalId: client.id,
     ownerContactId: owner.id,
+    assignedAgentId: assignee.id,
     community: `Community ${label}`,
     building: `Tower ${label}`,
     unitNo: "101",
@@ -404,5 +405,33 @@ describe("writes allowed for assigned client A (and evidence/audit actually pers
     });
     expect(pr.id).toBeTruthy();
     await expect(proofs.sendProofRequest(D.ctx, pr.id)).resolves.toMatchObject({ url: expect.any(String) });
+  });
+
+  it("proof creation options expose only assigned-client scopes and related contacts", async () => {
+    const options = await proofs.proofRequestOptions(D.ctx);
+    const values = options.map((option) => option.value);
+    expect(values).toContain(`PROPERTY:${A.propertyId}`);
+    expect(values).not.toContain(`PROPERTY:${B.propertyId}`);
+    const property = options.find((option) => option.value === `PROPERTY:${A.propertyId}`);
+    expect(property?.assignees.map((contact) => contact.id)).toContain(A.assigneeContactId);
+    expect(property?.assignees.map((contact) => contact.id)).not.toContain(B.assigneeContactId);
+  });
+
+  it("rejects a forged out-of-scope assignee before writing any proof or evidence rows", async () => {
+    const proofCount = await prisma.proofRequest.count({ where: { workspaceId: W.workspaceId } });
+    const evidenceCount = await prisma.evidenceEvent.count({
+      where: { workspaceId: W.workspaceId, type: "PROOF_REQUESTED" },
+    });
+    await expect(proofs.createProofRequest(D.ctx, {
+      scopeType: "TENANCY",
+      scopeId: A.tenancyId,
+      title: "Forged assignee",
+      requiredEvidence: "x",
+      assignedContactId: B.assigneeContactId,
+    })).rejects.toThrow(/Not found/);
+    expect(await prisma.proofRequest.count({ where: { workspaceId: W.workspaceId } })).toBe(proofCount);
+    expect(await prisma.evidenceEvent.count({
+      where: { workspaceId: W.workspaceId, type: "PROOF_REQUESTED" },
+    })).toBe(evidenceCount);
   });
 });

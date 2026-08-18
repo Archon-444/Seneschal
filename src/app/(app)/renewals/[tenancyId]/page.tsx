@@ -50,6 +50,7 @@ export default async function RenewalReportPage({
   // Complete-renewal (mint successor) affordance: only when the case is AGREED
   // and the caller can decide. The successor defaults to the day after the
   // current term for a one-year renewal, at the accepted offer's rent.
+  const canWrite = hasCapability(ctx, "renewals.write");
   const canDecide = hasCapability(ctx, "renewals.decide");
   const acceptedOffer = risk!.offers.find((o) => o.status === "ACCEPTED");
   const successorStart = new Date(t.endDate.getTime() + 86_400_000);
@@ -82,11 +83,15 @@ export default async function RenewalReportPage({
             )}
             {risk!.renewalCase ? (
               <Badge value={risk!.renewalCase.status} />
-            ) : (
+            ) : canWrite ? (
               <form action={openRenewalCaseAction}>
                 <input type="hidden" name="tenancyId" value={tenancyId} />
                 <Button type="submit">Open renewal case</Button>
               </form>
+            ) : (
+              <span className="max-w-xs text-xs text-muted">
+                An authorized renewal operator opens the case.
+              </span>
             )}
           </div>
         }
@@ -165,7 +170,7 @@ export default async function RenewalReportPage({
               <Fact
                 label="Decree 43 band"
                 value={`${pos.bandPct}%`}
-                info="The maximum permissible increase for this gap under Decree No. (43) of 2013. An estimate anchored to the captured index — not legal advice."
+                info="The estimated permissible increase for this gap under Decree No. (43) of 2013. It is an upper boundary from a rule-based calculation, based on supplied data — not legal advice."
               />
               <Fact
                 label="Value at risk / yr"
@@ -179,14 +184,21 @@ export default async function RenewalReportPage({
               </span>
               <p>
                 {pos.bandPct === 0 ? (
-                  <>The rent sits within the top market band — no estimated permissible increase applies this renewal.</>
+                  <>
+                    Based on supplied data, the rule-based calculation produces no estimated permissible
+                    increase for this renewal. Review the captured source before action.
+                  </>
                 ) : (
                   <>
-                    An estimated <b>{pos.bandPct}%</b> increase applies, lifting the index-based ceiling estimate to{" "}
-                    <Money amount={pos.ceiling} />. Up to <Money amount={pos.valueAtRisk} />/yr is forgone
-                    if no valid notice is served by <b>{formatDubaiDate(risk!.noticeGateAt)}</b> — recurring
-                    until the next correct notice.
+                    Based on supplied data, the rule-based calculation produces an estimated permissible
+                    increase of up to <b>{pos.bandPct}%</b>, with an index-based ceiling estimate of{" "}
+                    <Money amount={pos.ceiling} />. A proposed rent is a separate human decision and may be
+                    lower. Review the captured source before action. Up to <Money amount={pos.valueAtRisk} />/yr
+                    is at risk if no valid notice is served by <b>{formatDubaiDate(risk!.noticeGateAt)}</b>.
                   </>
+                )}
+                {risk!.latestIndex?.provisional && (
+                  <> This calculation uses a provisional concierge figure awaiting verification; capture and review an official source before action.</>
                 )}
               </p>
             </div>
@@ -207,6 +219,7 @@ export default async function RenewalReportPage({
           Index / RERA) requires a source reference; without one the figure is saved as a concierge
           estimate marked “awaiting verification” — never as DLD-sourced.
         </p>
+        {canWrite ? (
         <form action={captureIndexAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="tenancyId" value={tenancyId} />
           <Field label="Index average market rent (AED/yr)">
@@ -230,6 +243,11 @@ export default async function RenewalReportPage({
           </Field>
           <Button type="submit">Save index figure</Button>
         </form>
+        ) : (
+          <p className="text-sm text-muted">
+            Index sources are captured by an authorized renewal operator. You can review the current source and calculation above.
+          </p>
+        )}
       </Card>
 
       {/* Notice service */}
@@ -238,6 +256,7 @@ export default async function RenewalReportPage({
           renewalCaseId={risk!.renewalCase.id}
           tenancyId={tenancyId}
           notice={risk!.currentNotice}
+          canDecide={canDecide}
         />
       )}
 
@@ -278,16 +297,16 @@ export default async function RenewalReportPage({
                   </Td>
                   <Td>
                     <div className="flex flex-col items-start gap-1">
-                      {(o.status === "SENT" || o.status === "COUNTERED") && (
+                      {(o.status === "SENT" || o.status === "COUNTERED") && (canWrite || canDecide) && (
                         <div className="flex gap-3">
-                          <form action={acceptOfferAction}>
+                          {canDecide && <form action={acceptOfferAction}>
                             <input type="hidden" name="offerId" value={o.id} />
                             <input type="hidden" name="tenancyId" value={tenancyId} />
                             <button className="text-xs text-navy-500 underline-offset-2 hover:text-verde-700 hover:underline">
                               Accept
                             </button>
-                          </form>
-                          {o.party === "LANDLORD" && (
+                          </form>}
+                          {canWrite && o.party === "LANDLORD" && (
                             <form action={sendOfferToTenantAction}>
                               <input type="hidden" name="offerId" value={o.id} />
                               <input type="hidden" name="tenancyId" value={tenancyId} />
@@ -314,7 +333,7 @@ export default async function RenewalReportPage({
             </Table>
           )}
 
-          {risk!.renewalCase.status !== "AGREED" && risk!.renewalCase.status !== "RENEWED" && (
+          {canWrite && risk!.renewalCase.status !== "AGREED" && risk!.renewalCase.status !== "RENEWED" && (
             <form action={proposeOfferAction} className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4">
               <input type="hidden" name="renewalCaseId" value={risk!.renewalCase.id} />
               <input type="hidden" name="tenancyId" value={tenancyId} />
@@ -455,10 +474,12 @@ function NoticeServiceCard({
   renewalCaseId,
   tenancyId,
   notice,
+  canDecide,
 }: {
   renewalCaseId: string;
   tenancyId: string;
   notice: { id: string; status: string; serviceMethod: string | null } | null;
+  canDecide: boolean;
 }) {
   const served = notice?.status === "SERVED";
   const pending = notice?.status === "SERVICE_RECORDED_PENDING_EVIDENCE";
@@ -480,7 +501,7 @@ function NoticeServiceCard({
             evidence on file.
           </span>
         </div>
-      ) : (
+      ) : canDecide ? (
         <>
           {pending && (
             <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-100/50 p-3 text-sm text-amber-700">
@@ -534,6 +555,11 @@ function NoticeServiceCard({
             </FormActions>
           </form>
         </>
+      ) : (
+        <p className="rounded-lg border border-line bg-ivory-100 p-3 text-sm text-muted">
+          Notice service and its proof are recorded by a decision-authorized fiduciary or manager.
+          You can review the current evidence state here.
+        </p>
       )}
     </Card>
   );
@@ -605,7 +631,8 @@ function CeilingScale({
   if (bandPct === 0 || ceiling <= current) {
     return (
       <div className="rounded-lg border border-line bg-white/60 p-4 text-sm text-navy-700">
-        No estimated permissible increase applies this renewal — the rent already sits within the top market band.
+        Based on supplied data, the rule-based calculation produces no estimated permissible increase for this renewal.
+        Review the captured source before action.
       </div>
     );
   }

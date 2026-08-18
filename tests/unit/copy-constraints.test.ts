@@ -40,6 +40,11 @@ describe("copy constraints (Gate 2)", () => {
     }
   });
 
+  it("rejects entitlement-like percentage language", () => {
+    expect(findBannedCopy("An estimated 10% increase applies this renewal.")).toBe("increase applies");
+    expect(findBannedCopy("An estimated permissible increase of up to 10% forms the ceiling estimate.")).toBeNull();
+  });
+
   it("no shipped string uses a banned legal term", () => {
     const offenders: string[] = [];
     for (const root of ROOTS) {

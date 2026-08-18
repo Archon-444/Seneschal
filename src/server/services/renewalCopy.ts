@@ -32,6 +32,7 @@ const PROHIBITED_PHRASES: readonly string[] = [
   "enforceable",
   "lawful increase",
   "legal rent",
+  "increase applies",
 ];
 
 const APPROVED_FRAMINGS: readonly string[] = [

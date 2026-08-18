@@ -29,6 +29,12 @@ export default async function PropertyDetailPage({
   const { id } = await params;
   const { tab = "tenancy" } = await searchParams;
   const ctx = await requireCtx();
+  const canWriteTenancies = hasCapability(ctx, "tenancies.write");
+  const canReadMoveIn = hasCapability(ctx, "movein.read");
+  const canWriteMoveIn = hasCapability(ctx, "movein.write");
+  const canAcknowledgeMoveIn = hasCapability(ctx, "movein.acknowledge");
+  const canWritePayments = hasCapability(ctx, "payments.write");
+  const canWriteDocuments = hasCapability(ctx, "documents.write");
 
   let property;
   try {
@@ -62,7 +68,7 @@ export default async function PropertyDetailPage({
   ]);
 
   const { listMyMoveIns } = await import("@/server/services/moveIn");
-  const moveIns = tenancyFull ? await listMyMoveIns(ctx) : [];
+  const moveIns = tenancyFull && canReadMoveIn ? await listMyMoveIns(ctx) : [];
   const moveIn = tenancyFull ? moveIns.find((m) => m.tenancyId === tenancyFull.id) ?? null : null;
 
   const title = `${property!.community}${property!.building ? ` · ${property!.building}` : ""}${property!.unitNo ? ` · ${property!.unitNo}` : ""}`;
@@ -78,7 +84,7 @@ export default async function PropertyDetailPage({
         title={title}
         subtitle={`${property!.propertyType ?? "property"}${property!.bedrooms != null ? ` · ${property!.bedrooms || "Studio"} BR` : ""}`}
         actions={
-          !tenancy ? (
+          !tenancy && canWriteTenancies ? (
             <LinkButton href={`/tenancies/new?propertyId=${id}`} variant="primary">Add tenancy</LinkButton>
           ) : tenancyFull && hasCapability(ctx, "evidence.export") ? (
             <LinkButton href={`/api/v1/tenancies/${tenancyFull.id}/evidence-pack.pdf`}>
@@ -97,13 +103,13 @@ export default async function PropertyDetailPage({
         </Link>
       )}
 
-      {tenancyFull && (
+      {tenancyFull && canReadMoveIn && (
         <Card className="mb-6 max-w-3xl">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="font-display text-lg text-navy-900">Move-in handover</h2>
             {moveIn ? <Badge value={moveIn.status} /> : null}
           </div>
-          {!moveIn ? (
+          {!moveIn && canWriteMoveIn ? (
             <form action={createMoveInAction} className="space-y-2">
               <input type="hidden" name="tenancyId" value={tenancyFull.id} />
               <input type="hidden" name="propertyId" value={id} />
@@ -112,7 +118,7 @@ export default async function PropertyDetailPage({
               </Field>
               <SubmitButton variant="secondary" pendingLabel="Recording…">Record move-in</SubmitButton>
             </form>
-          ) : (
+          ) : moveIn ? (
             <div className="space-y-3 text-sm">
               <div className="text-xs text-muted">
                 Landlord:{" "}
@@ -121,20 +127,29 @@ export default async function PropertyDetailPage({
                 {moveIn.tenantAckAt ? <>acknowledged <DubaiDate value={moveIn.tenantAckAt} /></> : "pending"}
               </div>
               <div className="flex flex-wrap gap-2">
-                {!moveIn.landlordAckAt && (
+                {canAcknowledgeMoveIn && !moveIn.landlordAckAt && (
                   <AckButton id={moveIn.id} propertyId={id} party="LANDLORD" label="Acknowledge as landlord" />
                 )}
-                {!moveIn.tenantAckAt && (
+                {canAcknowledgeMoveIn && !moveIn.tenantAckAt && (
                   <AckButton id={moveIn.id} propertyId={id} party="TENANT" label="Acknowledge as tenant" />
                 )}
               </div>
-              <form action={addMoveInPhotoAction} className="flex items-end gap-2">
+              {canWriteMoveIn && <form action={addMoveInPhotoAction} className="flex items-end gap-2">
                 <input type="hidden" name="id" value={moveIn.id} />
                 <input type="hidden" name="propertyId" value={id} />
                 <input name="file" type="file" required className={inputClass + " max-w-xs"} />
                 <SubmitButton variant="secondary" pendingLabel="Uploading…">Add photo</SubmitButton>
-              </form>
+              </form>}
+              {!canWriteMoveIn && !canAcknowledgeMoveIn && (
+                <p className="text-xs text-muted">
+                  Move-in changes and acknowledgements are completed by an authorized operator or party.
+                </p>
+              )}
             </div>
+          ) : (
+            <p className="text-sm text-muted">
+              No move-in record has been created. An authorized operator can record the handover.
+            </p>
           )}
         </Card>
       )}
@@ -241,7 +256,7 @@ export default async function PropertyDetailPage({
                   chequeNo: item.chequeNo,
                   bank: item.bank,
                   status: item.status,
-                }} propertyId={id} />
+                }} propertyId={id} canWrite={canWritePayments} />
               ))}
             </Table>
             <p className="mt-3 text-xs text-navy-300">
@@ -255,7 +270,13 @@ export default async function PropertyDetailPage({
 
       {tab === "documents" && (
         <div className="space-y-6">
-          <UploadForm scopeType={tenancy ? "TENANCY" : "PROPERTY"} scopeId={tenancy?.id ?? id} back={`/properties/${id}?tab=documents`} />
+          {canWriteDocuments ? (
+            <UploadForm scopeType={tenancy ? "TENANCY" : "PROPERTY"} scopeId={tenancy?.id ?? id} back={`/properties/${id}?tab=documents`} />
+          ) : (
+            <Card className="text-sm text-muted">
+              Documents can be uploaded by an authorized operator. You can review the files already on record below.
+            </Card>
+          )}
           {docs.length === 0 ? (
             <EmptyState title="No documents" message="No documents on file for this property." />
           ) : (

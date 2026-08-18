@@ -60,6 +60,7 @@ beforeAll(async () => {
   const ownProperty = await properties.createProperty(W.ctx, {
     clientPrincipalId: client.id,
     ownerContactId: landlordContact.id,
+    assignedAgentId: assignee.id,
     community: "Dubai Marina",
     building: "Tower A",
     unitNo: "101",
@@ -104,6 +105,7 @@ beforeAll(async () => {
   const siblingProperty = await properties.createProperty(W.ctx, {
     clientPrincipalId: client.id,
     ownerContactId: siblingLandlordContact.id,
+    assignedAgentId: assignee.id,
     community: "JLT",
     building: "Tower B",
     unitNo: "202",

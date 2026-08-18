@@ -1,10 +1,12 @@
 import { requireCtx } from "@/server/auth/request";
+import { hasCapability } from "@/server/authz";
 import { listRiskFlags } from "@/server/services/risk";
 import { Badge, DubaiDate, EmptyState, PageHeader, ScopeLink, Table, Td } from "@/components/ui";
 import { ackFlagAction } from "../actions";
 
 export default async function RiskPage() {
   const ctx = await requireCtx();
+  const canAcknowledge = hasCapability(ctx, "riskflags.ack");
   const flags = await listRiskFlags(ctx, { includeCleared: true });
 
   return (
@@ -35,7 +37,7 @@ export default async function RiskPage() {
                 {f.ruleVersion ?? "—"}
               </Td>
               <Td>
-                {f.status === "OPEN" && (
+                {f.status === "OPEN" && canAcknowledge && (
                   <form action={ackFlagAction}>
                     <input type="hidden" name="id" value={f.id} />
                     <button className="text-xs text-navy-500 hover:underline">Acknowledge</button>
@@ -45,6 +47,11 @@ export default async function RiskPage() {
             </tr>
           ))}
         </Table>
+      )}
+      {!canAcknowledge && flags.some((flag) => flag.status === "OPEN") && (
+        <p className="mt-3 text-xs text-muted">
+          Open flags can be acknowledged by an authorized manager or fiduciary.
+        </p>
       )}
     </>
   );
