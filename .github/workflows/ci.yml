@@ -59,5 +59,6 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            e2e/visual/pilot-screens.spec.ts-snapshots/*-linux.png
           if-no-files-found: ignore
           retention-days: 7
