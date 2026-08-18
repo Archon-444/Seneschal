@@ -3,6 +3,13 @@ import { resetAndSeedE2E } from "../fixtures/globalSetup";
 import { readManifest } from "../fixtures/manifest";
 import { authState } from "../fixtures/paths";
 
+// Visual baselines are committed for darwin only; CI runs linux, where every
+// contract fails as "snapshot doesn't exist" rather than as a real regression.
+// Opt-in until linux baselines are established and reviewed (see #99), so the
+// functional, accessibility and journey gates can protect main meanwhile.
+// Run locally with: E2E_VISUAL=1 pnpm test:e2e:visual
+test.skip(!process.env.E2E_VISUAL, "visual baselines not established for this platform (see #99)");
+
 const formattedDate = /\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept|Oct|Nov|Dec) \d{4}\b/;
 
 function dynamicDateMasks(page: Page) {
