@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { NAV_ICONS } from "./navIcons";
 import { type NavItem } from "./nav";
@@ -42,6 +43,50 @@ export function AppShell({
 }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerRef = useRef<HTMLDialogElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const drawerTitleId = useId();
+  const pathname = usePathname();
+
+  const closeDrawer = useCallback(() => {
+    if (drawerRef.current?.open) drawerRef.current.close();
+    else setDrawerOpen(false);
+  }, []);
+
+  function openDrawer() {
+    const drawer = drawerRef.current;
+    if (!drawer || drawer.open) return;
+    drawer.showModal();
+    setDrawerOpen(true);
+  }
+
+  // A native modal dialog makes the rest of the shell inert and owns the focus
+  // trap. These effects cover the mobile-shell lifecycle that <dialog> cannot:
+  // route changes, crossing the desktop breakpoint, and scroll restoration.
+  useEffect(() => {
+    closeDrawer();
+  }, [pathname, closeDrawer]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 768px)");
+    const closeAtDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) closeDrawer();
+    };
+    desktop.addEventListener("change", closeAtDesktop);
+    return () => desktop.removeEventListener("change", closeAtDesktop);
+  }, [closeDrawer]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const bodyOverflow = document.body.style.overflow;
+    const rootOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = bodyOverflow;
+      document.documentElement.style.overflow = rootOverflow;
+    };
+  }, [drawerOpen]);
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -51,8 +96,12 @@ export function AppShell({
     });
   }
 
-  const brand = (full: boolean) => (
-    <Link href="/dashboard" className={`flex items-center text-ivory-50 ${full ? "gap-2" : "justify-center"}`}>
+  const brand = (full: boolean, onNavigate?: () => void) => (
+    <Link
+      href="/dashboard"
+      onClick={onNavigate}
+      className={`flex items-center text-ivory-50 ${full ? "gap-2" : "justify-center"}`}
+    >
       <Logo className="h-8 w-8 shrink-0" />
       {full && <span className="font-display text-2xl">Seneschal</span>}
     </Link>
@@ -84,34 +133,56 @@ export function AppShell({
         <Sidebar nav={nav} isStaff={isStaff} collapsed={collapsed} />
       </aside>
 
-      {/* Mobile drawer */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-navy-900/40" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
-          <aside aria-label="Primary navigation" className="relative flex h-full w-64 flex-col bg-navy-900 text-ivory-100">
-            <div className="flex items-center justify-between border-b border-navy-700 px-5 py-5">
-              {brand(true)}
-              <button
-                type="button"
-                aria-label="Close menu"
-                onClick={() => setDrawerOpen(false)}
-                className="text-ivory-200 hover:text-ivory-50"
-              >
-                <CloseIcon />
-              </button>
-            </div>
-            <Sidebar nav={nav} isStaff={isStaff} collapsed={false} onNavigate={() => setDrawerOpen(false)} />
-          </aside>
-        </div>
-      )}
+      {/* Native modal semantics provide focus containment and inert background content. */}
+      <dialog
+        id="mobile-navigation-drawer"
+        ref={drawerRef}
+        aria-labelledby={drawerTitleId}
+        aria-modal="true"
+        onCancel={(event) => {
+          event.preventDefault();
+          closeDrawer();
+        }}
+        onClose={() => {
+          setDrawerOpen(false);
+          const trigger = menuTriggerRef.current;
+          if (trigger?.isConnected && window.getComputedStyle(trigger).display !== "none") {
+            trigger.focus();
+          }
+        }}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) closeDrawer();
+        }}
+        className="mobile-nav-drawer fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-64 max-w-[calc(100vw-3rem)] border-0 bg-transparent p-0 text-ivory-100 md:hidden"
+      >
+        <h2 id={drawerTitleId} className="sr-only">Navigation menu</h2>
+        <aside className="flex h-full flex-col bg-navy-900 text-ivory-100 shadow-xl">
+          <div className="flex min-h-14 items-center justify-between border-b border-navy-700 px-3 py-1.5 pl-5">
+            {brand(true, closeDrawer)}
+            <button
+              autoFocus
+              type="button"
+              aria-label="Close navigation menu"
+              onClick={closeDrawer}
+              className="grid h-11 w-11 place-items-center rounded-md text-ivory-200 hover:bg-navy-800 hover:text-ivory-50"
+            >
+              <CloseIcon />
+            </button>
+          </div>
+          <Sidebar nav={nav} isStaff={isStaff} collapsed={false} mobile onNavigate={closeDrawer} />
+        </aside>
+      </dialog>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center gap-2 border-b border-navy-800 bg-navy-900 px-3 text-ivory-100">
           <button
+            ref={menuTriggerRef}
             type="button"
-            aria-label="Open menu"
-            onClick={() => setDrawerOpen(true)}
-            className="grid h-9 w-9 place-items-center rounded-md hover:bg-navy-800 md:hidden"
+            aria-label="Open navigation menu"
+            aria-controls="mobile-navigation-drawer"
+            aria-expanded={drawerOpen}
+            onClick={openDrawer}
+            className="grid h-11 w-11 place-items-center rounded-md hover:bg-navy-800 md:hidden"
           >
             <MenuIcon />
           </button>
