@@ -60,6 +60,7 @@ export const CAPABILITIES = [
   "viewings.read",
   "viewings.write",
   "evidence.read",
+  "evidence.export",
   "riskflags.read",
   "riskflags.ack",
   "reports.generate",
@@ -172,6 +173,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "viewings.write",
     "riskflags.ack",
     "reports.generate",
+    "evidence.export",
     "notifications.read",
     "messaging.manage",
   ],
@@ -198,7 +200,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "documents.write",
   ],
   VENDOR: ["proofs.read", "documents.write"],
-  AUDITOR: [...READ_PORTFOLIO, "notifications.read"],
+  AUDITOR: [...READ_PORTFOLIO, "notifications.read", "evidence.export"],
   // Self-service personas, each additionally scoped to ONE Contact in authz via
   // Membership.subjectContactId (see services/contactScope.ts). F0a grants only
   // the read capabilities whose service paths are contact-scoped and tested here;

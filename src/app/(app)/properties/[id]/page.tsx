@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
+import { hasCapability } from "@/server/authz";
 import { getProperty } from "@/server/services/properties";
 import { getRenewalRisk } from "@/server/services/renewals";
 import { listDocuments } from "@/server/services/documents";
@@ -76,7 +77,15 @@ export default async function PropertyDetailPage({
       <PageHeader
         title={title}
         subtitle={`${property!.propertyType ?? "property"}${property!.bedrooms != null ? ` · ${property!.bedrooms || "Studio"} BR` : ""}`}
-        actions={!tenancy ? <LinkButton href={`/tenancies/new?propertyId=${id}`} variant="primary">Add tenancy</LinkButton> : undefined}
+        actions={
+          !tenancy ? (
+            <LinkButton href={`/tenancies/new?propertyId=${id}`} variant="primary">Add tenancy</LinkButton>
+          ) : tenancyFull && hasCapability(ctx, "evidence.export") ? (
+            <LinkButton href={`/api/v1/tenancies/${tenancyFull.id}/evidence-pack.pdf`}>
+              Download evidence pack
+            </LinkButton>
+          ) : undefined
+        }
       />
 
       {approachingRenewal && (

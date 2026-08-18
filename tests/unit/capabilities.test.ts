@@ -184,6 +184,11 @@ describe("role capability matrix", () => {
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: true,
       LANDLORD: false, TENANT: false,
     },
+    "evidence.export": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: true,
+      LANDLORD: false, TENANT: false,
+    },
     "reports.generate": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
@@ -214,7 +219,7 @@ describe("role capability matrix", () => {
     const data = [
       "clients.read", "clients.write", "contacts.read", "properties.read", "tenancies.read",
       "tenancies.write", "payments.read", "documents.read", "documents.write", "proofs.read",
-      "evidence.read", "renewals.read", "reports.read", "riskflags.read",
+      "evidence.read", "evidence.export", "renewals.read", "reports.read", "riskflags.read",
     ] as const;
     for (const cap of data) expect(roleHas("ORG_ADMIN", cap)).toBe(false);
   });

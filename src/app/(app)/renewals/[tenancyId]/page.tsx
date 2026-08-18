@@ -4,7 +4,7 @@ import { requireCtx } from "@/server/auth/request";
 import { hasCapability } from "@/server/authz";
 import { getRenewalRisk } from "@/server/services/renewals";
 import { daysBetween, formatDubaiDate, isoDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, Field, FormActions, inputClass, Money, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Button, Card, Field, FormActions, inputClass, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { InfoTooltip } from "@/components/Tooltip";
 import {
@@ -74,14 +74,21 @@ export default async function RenewalReportPage({
         title={unit}
         subtitle={`Contract ${formatDubaiDate(t.startDate)} → ${formatDubaiDate(t.endDate)}${t.ejariNo ? ` · Ejari ${t.ejariNo}` : ""}`}
         actions={
-          risk!.renewalCase ? (
-            <Badge value={risk!.renewalCase.status} />
-          ) : (
-            <form action={openRenewalCaseAction}>
-              <input type="hidden" name="tenancyId" value={tenancyId} />
-              <Button type="submit">Open renewal case</Button>
-            </form>
-          )
+          <div className="flex flex-wrap items-center gap-2">
+            {hasCapability(ctx, "evidence.export") && (
+              <LinkButton href={`/api/v1/tenancies/${tenancyId}/evidence-pack.pdf`}>
+                Download evidence pack
+              </LinkButton>
+            )}
+            {risk!.renewalCase ? (
+              <Badge value={risk!.renewalCase.status} />
+            ) : (
+              <form action={openRenewalCaseAction}>
+                <input type="hidden" name="tenancyId" value={tenancyId} />
+                <Button type="submit">Open renewal case</Button>
+              </form>
+            )}
+          </div>
         }
       />
 
