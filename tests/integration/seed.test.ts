@@ -46,14 +46,15 @@ describe("runSeed — access-model gallery", () => {
     expect(await prisma.offer.findUnique({ where: { id: offerLink.scopeId } })).toBeTruthy();
   });
 
-  it("seats one member per RECURRING role and none for TENANT (enum-driven, so nothing is omitted)", async () => {
+  it("seats one member per taught recurring role and none for TENANT or deferred marketplace roles", async () => {
     await runSeed({ adminEmail: "pilot@example.com" });
     const ws = await gallery();
     const seated = new Set(
       (await prisma.membership.findMany({ where: { workspaceId: ws.id, revokedAt: null } })).map((m) => m.role),
     );
+    const notTaught = new Set<Role>(["TENANT", "AGENT", "LICENSED_PARTNER", "VENDOR"]);
     for (const role of Object.keys(ROLE_CAPABILITIES) as Role[]) {
-      if (role === "TENANT") expect(seated.has("TENANT")).toBe(false);
+      if (notTaught.has(role)) expect(seated.has(role)).toBe(false);
       else expect(seated.has(role)).toBe(true);
     }
   });

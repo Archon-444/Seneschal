@@ -71,19 +71,19 @@ describe("role capability matrix", () => {
       LANDLORD: true, TENANT: false,
     },
     "listings.read": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
-      LANDLORD: true, TENANT: false,
+      LANDLORD: false, TENANT: false,
     },
     "listings.write": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
-      LANDLORD: true, TENANT: false,
+      LANDLORD: false, TENANT: false,
     },
     "listings.publish": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
-      LANDLORD: true, TENANT: false,
+      LANDLORD: false, TENANT: false,
     },
     "offers.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
@@ -101,9 +101,9 @@ describe("role capability matrix", () => {
       LANDLORD: false, TENANT: true,
     },
     "contracts.write": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
-      LANDLORD: true, TENANT: false,
+      LANDLORD: false, TENANT: false,
     },
     "movein.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
@@ -120,28 +120,33 @@ describe("role capability matrix", () => {
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
+    "passport.read": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
+      AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: false, TENANT: false,
+    },
     "passport.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
-      LANDLORD: false, TENANT: true,
+      LANDLORD: false, TENANT: false,
     },
     "passport.share": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
-      LANDLORD: false, TENANT: true,
+      LANDLORD: false, TENANT: false,
     },
     "enquiries.read": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "enquiries.write": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
     "viewings.write": {
-      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: false, CLIENT_VIEWER: false,
       AGENT: false, MANAGING_AGENT: false, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
       LANDLORD: false, TENANT: false,
     },
@@ -195,7 +200,12 @@ describe("role capability matrix", () => {
     },
     "documents.write": {
       WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
-      AGENT: false, MANAGING_AGENT: true, LICENSED_PARTNER: true, VENDOR: true, AUDITOR: false,
+      AGENT: false, MANAGING_AGENT: true, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+    },
+    "proofs.write": {
+      WORKSPACE_ADMIN: true, FIDUCIARY: true, MANAGER: true, CLIENT_VIEWER: false,
+      AGENT: false, MANAGING_AGENT: true, LICENSED_PARTNER: false, VENDOR: false, AUDITOR: false,
+      LANDLORD: false, TENANT: false,
     },
   };
 
@@ -247,17 +257,13 @@ describe("role capability matrix", () => {
     }
   });
 
-  // Self-service personas are read-only in F0a (offers.*/renewals.* arrive with
-  // their authenticated services in Stage 2). Scoping to one Contact is enforced
-  // separately in authz/contactScope.
-  // TENANT is read-only across the portfolio EXCEPT for managing/sharing its own
-  // rental passport (1C): passport.read/write/share. Scoping to one Contact is
-  // enforced separately in authz/contactScope.
-  it("TENANT is read-only apart from passport, move-in ack, tenancy upload and offer response", () => {
+  // TENANT is a link-party in the product. The membership is read-only across the
+  // portfolio except for the live exceptions: tenancy upload, offer response, and
+  // move-in acknowledge. Passport is quarantined and is no longer granted.
+  it("TENANT is read-only apart from upload, respond and acknowledge", () => {
     for (const cap of ROLE_CAPABILITIES.TENANT) {
       expect(
         cap.endsWith(".read") ||
-          cap.startsWith("passport.") ||
           cap.startsWith("movein.") ||
           cap === "tenancies.upload" ||
           cap === "offers.respond",
@@ -265,16 +271,13 @@ describe("role capability matrix", () => {
     }
   });
 
-  // LANDLORD is read-only across the portfolio EXCEPT for managing its own listings
-  // (1B supply side) and negotiating offers on them (2A): listings.* and offers.*.
-  // Scoping to one Contact's owned properties is enforced separately in contactScope.
-  it("LANDLORD is read-only apart from its own listings, offers, contracts and move-ins", () => {
+  // LANDLORD is read-only across the portfolio except for negotiating offers and
+  // acknowledging move-ins. Listings and contracts are quarantined and no longer granted.
+  it("LANDLORD is read-only apart from offers and move-ins", () => {
     for (const cap of ROLE_CAPABILITIES.LANDLORD) {
       expect(
         cap.endsWith(".read") ||
-          cap.startsWith("listings.") ||
           cap.startsWith("offers.") ||
-          cap.startsWith("contracts.") ||
           cap.startsWith("movein."),
       ).toBe(true);
     }

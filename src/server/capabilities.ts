@@ -141,18 +141,15 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   // Decorrelated people-admin: people/config only, zero data (F-Admin §2.2).
   ORG_ADMIN: ORG_ADMIN_CAPS,
   MANAGER: [
+    // Live operational caps only. Quarantined marketplace/passport verbs (listings.*,
+    // enquiries.*, viewings.*, contracts.*, passport.*) are not granted.
     ...READ_PORTFOLIO,
     "clients.write",
     "contacts.write",
     "properties.write",
-    "listings.read",
-    "listings.write",
-    "listings.publish",
     "offers.read",
     "offers.write",
     "offers.decide",
-    "contracts.read",
-    "contracts.write",
     "movein.read",
     "movein.write",
     "movein.acknowledge",
@@ -166,11 +163,6 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "imports.manage",
     "proofs.write",
     "proofs.decide",
-    "passport.read",
-    "enquiries.read",
-    "enquiries.write",
-    "viewings.read",
-    "viewings.write",
     "riskflags.ack",
     "reports.generate",
     "evidence.export",
@@ -179,6 +171,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   ],
   // CLIENT_VIEWER is additionally scoped to a single ClientPrincipal in authz.
   CLIENT_VIEWER: READ_PORTFOLIO,
+  // Reserved marketplace leftover. The Role enum value stays because Postgres cannot drop
+  // enum members without a destructive type rewrite; the demo gallery does not seat it.
   AGENT: [
     "contacts.read",
     "properties.read",
@@ -189,22 +183,23 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "documents.read",
   ],
   MANAGING_AGENT: DELEGATE_CAPS,
+  // Reserved marketplace leftover. Read-only: it has no scoping arm, so writes would have
+  // been workspace-wide. Not seated in the demo gallery.
   LICENSED_PARTNER: [
     "properties.read",
     "tenancies.read",
     "deadlines.read",
     "renewals.read",
     "proofs.read",
-    "proofs.write",
     "documents.read",
-    "documents.write",
   ],
-  VENDOR: ["proofs.read", "documents.write"],
+  // Reserved marketplace leftover. Real vendors act via VENDOR_LINK, not a membership.
+  VENDOR: ["proofs.read"],
   AUDITOR: [...READ_PORTFOLIO, "notifications.read", "evidence.export"],
   // Self-service personas, each additionally scoped to ONE Contact in authz via
-  // Membership.subjectContactId (see services/contactScope.ts). F0a grants only
-  // the read capabilities whose service paths are contact-scoped and tested here;
-  // offers.* / renewals.* arrive with their authenticated services in Stage 2.
+  // Membership.subjectContactId (see services/contactScope.ts). TENANT is a
+  // link-party in the product; the membership value is retained for fixtures.
+  // Live exceptions to read-only: tenancies.upload, offers.respond, movein.acknowledge.
   TENANT: [
     "tenancies.read",
     "tenancies.upload",
@@ -214,22 +209,14 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "proofs.read",
     "offers.read",
     "offers.respond",
-    "passport.read",
-    "passport.write",
-    "passport.share",
     "movein.read",
     "movein.acknowledge",
   ],
   LANDLORD: [
     "properties.read",
-    "listings.read",
-    "listings.write",
-    "listings.publish",
     "offers.read",
     "offers.write",
     "offers.decide",
-    "contracts.read",
-    "contracts.write",
     "movein.read",
     "movein.acknowledge",
     "tenancies.read",

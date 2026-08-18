@@ -830,9 +830,10 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
   });
   if (approvalUrl) linkUrls.push({ label: "Absentee owner sign-off (Marina offer)", url: approvalUrl });
 
-  // Orchestrator member gallery: one demo login per RECURRING role, iterating the capability matrix
-  // (the runtime role list) so adding a Role can't silently omit it. TENANT is never a member (it
-  // is a link-party, above); roles already seated with bespoke identity/scope are skipped here.
+  // Orchestrator member gallery: one demo login per taught recurring role. TENANT is a
+  // link-party (never a member). AGENT / LICENSED_PARTNER / VENDOR stay in the Role enum
+  // (Postgres cannot drop values without a type rewrite) but are not seated: the first
+  // workspace teaches four roles (orchestrator, scoped delegate, read-only owner, link-party).
   const SEATED_ELSEWHERE = new Set<Role>([
     "WORKSPACE_ADMIN", // builder
     "FIDUCIARY", // Farina
@@ -841,8 +842,9 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     "CLIENT_VIEWER", // absentee landlord (+ approval link)
     "TENANT", // link-party — never a member (boundary rule)
   ]);
+  const DEFERRED_MARKETPLACE = new Set<Role>(["AGENT", "LICENSED_PARTNER", "VENDOR"]);
   for (const role of Object.keys(ROLE_CAPABILITIES) as Role[]) {
-    if (SEATED_ELSEWHERE.has(role)) continue;
+    if (SEATED_ELSEWHERE.has(role) || DEFERRED_MARKETPLACE.has(role)) continue;
     const email = `${role.toLowerCase().replace(/_/g, "-")}@example.com`;
     const u = await demoUser(email);
     await seatSoleMembership(workspace.id, u.id, role);
