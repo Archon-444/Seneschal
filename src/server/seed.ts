@@ -8,6 +8,7 @@ import { evaluateRiskForTenancy } from "./services/risk";
 import { newStorageKey, storage } from "./storage";
 import { listingReadiness } from "./calculators/listingReadiness";
 import { ROLE_CAPABILITIES } from "./capabilities";
+import { offerApprovalSnapshot } from "./services/approvals";
 
 // Idempotent seed (T0.2): creates the demo workspace fixture set per the
 // build handoff. Safe to run repeatedly — every create is find-or-create.
@@ -91,11 +92,12 @@ async function demoUser(email: string) {
  *  returns null if a live link for the same (purpose, scope) already exists. */
 async function mintLink(args: {
   workspaceId: string;
-  purpose: "TENANT_OFFER" | "PROOF_UPLOAD";
+  purpose: "TENANT_OFFER" | "PROOF_UPLOAD" | "APPROVAL";
   scopeType: "PROOF_REQUEST" | "OFFER";
   scopeId: string;
   contactId: string;
   createdById: string;
+  maxUses?: number;
 }): Promise<string | null> {
   const existing = await prisma.secureLink.findFirst({
     where: {
@@ -117,7 +119,7 @@ async function mintLink(args: {
       contactId: args.contactId,
       tokenHash,
       expiresAt: new Date(Date.now() + LINK_TTL_MS),
-      maxUses: PROOF_LINK_DEFAULT_MAX_USES,
+      maxUses: args.maxUses ?? PROOF_LINK_DEFAULT_MAX_USES,
       createdById: args.createdById,
     },
   });
@@ -784,11 +786,49 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
 
   // Absentee landlord (managed by Farina): NOT a self-managing member — a passive CLIENT_VIEWER on
   // the Al Noor portfolio. The episodic APPROVAL sign-off link is the other half of the dual-plane
-  // model (see the reconciliation doc), but the public /link APPROVAL handler isn't built yet, so we
-  // do not seed a dead link for it here — the member plane is the live demonstration.
+  // model (see the reconciliation doc): a hashed one-use link on the Marina offer, no account.
   const absenteeUser = await demoUser("absentee-owner@example.com");
   await seatSoleMembership(workspace.id, absenteeUser.id, "CLIENT_VIEWER", { clientPrincipalId: alNoor.id });
   memberLogins.push({ email: "absentee-owner@example.com", role: "CLIENT_VIEWER", home: homeFor("CLIENT_VIEWER") });
+
+  const absenteeContact = await findOrCreate(
+    () => prisma.contact.findFirst({ where: { workspaceId: workspace.id, email: "absentee-owner@example.com" } }),
+    () =>
+      prisma.contact.create({
+        data: {
+          workspaceId: workspace.id,
+          kind: "OWNER",
+          name: "Layla Al Noor",
+          email: "absentee-owner@example.com",
+        },
+      }),
+  );
+  await findOrCreate(
+    () =>
+      prisma.approval.findFirst({
+        where: { workspaceId: workspace.id, subjectType: "offer", subjectId: renewalOffer.id },
+      }),
+    () =>
+      prisma.approval.create({
+        data: {
+          workspaceId: workspace.id,
+          subjectType: "offer",
+          subjectId: renewalOffer.id,
+          requestedOfContactId: absenteeContact.id,
+          payloadHash: sha256Hex(JSON.stringify(offerApprovalSnapshot(renewalOffer, marina))),
+        },
+      }),
+  );
+  const approvalUrl = await mintLink({
+    workspaceId: workspace.id,
+    purpose: "APPROVAL",
+    scopeType: "OFFER",
+    scopeId: renewalOffer.id,
+    contactId: absenteeContact.id,
+    createdById: operator.id,
+    maxUses: 1,
+  });
+  if (approvalUrl) linkUrls.push({ label: "Absentee owner sign-off (Marina offer)", url: approvalUrl });
 
   // Orchestrator member gallery: one demo login per RECURRING role, iterating the capability matrix
   // (the runtime role list) so adding a Role can't silently omit it. TENANT is never a member (it

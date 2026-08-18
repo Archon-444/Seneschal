@@ -64,9 +64,13 @@ describe("runSeed — access-model gallery", () => {
     const m = await prisma.membership.findFirstOrThrow({ where: { userId: viewer.id, revokedAt: null } });
     expect(m.role).toBe("CLIENT_VIEWER");
     expect(m.clientPrincipalId).toBeTruthy(); // scoped to the managed client
-    // No APPROVAL link is seeded: the public /link APPROVAL handler isn't built, so seeding one would
-    // only mint a dead 404. The member plane is the live demonstration.
-    expect(await prisma.secureLink.count({ where: { purpose: "APPROVAL", revokedAt: null } })).toBe(0);
+    expect(await prisma.secureLink.count({ where: { purpose: "APPROVAL", revokedAt: null } })).toBe(1);
+    const approvalLink = await prisma.secureLink.findFirstOrThrow({ where: { purpose: "APPROVAL", revokedAt: null } });
+    expect(approvalLink.scopeType).toBe("OFFER");
+    expect(await prisma.offer.findUnique({ where: { id: approvalLink.scopeId } })).toBeTruthy();
+    expect(await prisma.approval.findFirst({
+      where: { subjectType: "offer", subjectId: approvalLink.scopeId, decision: null },
+    })).toBeTruthy();
   });
 
   it("the MANAGING_AGENT delegate is scoped through a live ClientAssignment row (the normalised join table)", async () => {

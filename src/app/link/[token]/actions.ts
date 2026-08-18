@@ -1,11 +1,13 @@
 "use server";
 
 import { headers } from "next/headers";
+import { AuthzError } from "@/server/authz";
 import { validateLinkToken, consumeLinkUse } from "@/server/services/secureLinks";
 import { consumeRateLimit } from "@/server/services/rateLimit";
 import { isQuarantined } from "@/server/config/features";
 import { submitProofViaLink } from "@/server/services/proofs";
 import { respondToOfferViaLink } from "@/server/services/renewals";
+import { decideApprovalViaLink } from "@/server/services/approvals";
 import { createEnquiryFromLink } from "@/server/services/enquiries";
 import { recordLinkMessagingOptIn } from "@/server/services/consent";
 import { dispatchPending } from "@/server/outbox";
@@ -30,6 +32,45 @@ export type OfferResponseState =
       note?: string;
     }
   | { status: "error"; message: string };
+
+export type ApprovalDecisionState =
+  | { status: "idle" }
+  | { status: "done"; decision: "APPROVED" | "REJECTED"; comment?: string }
+  | { status: "error"; message: string };
+
+export async function decideApprovalAction(
+  _prev: ApprovalDecisionState,
+  formData: FormData,
+): Promise<ApprovalDecisionState> {
+  const token = String(formData.get("token") ?? "");
+  const validation = await validateLinkToken(token);
+  if (!validation.ok) return { status: "error", message: "This link is no longer available." };
+  if (validation.link.purpose !== "APPROVAL") {
+    return { status: "error", message: "This link is no longer available." };
+  }
+
+  const decision = String(formData.get("decision") ?? "");
+  if (decision !== "APPROVED" && decision !== "REJECTED") {
+    return { status: "error", message: "Choose approve or reject." };
+  }
+  const comment = String(formData.get("comment") ?? "").trim() || undefined;
+
+  const h = await headers();
+  const ip = (h.get("x-forwarded-for") ?? "unknown").split(",")[0].trim() || "unknown";
+  const rl = await consumeRateLimit(`approval:${validation.link.id}:${ip}`, 10, 5 * 60_000);
+  if (!rl.ok) {
+    return { status: "error", message: "Too many attempts. Please wait a few minutes and try again." };
+  }
+
+  try {
+    await decideApprovalViaLink(token, decision, comment);
+  } catch (e) {
+    const status = e instanceof AuthzError ? e.status : 500;
+    if (status === 409) return { status: "error", message: "This decision has already been recorded." };
+    return { status: "error", message: "This link is no longer available." };
+  }
+  return { status: "done", decision, comment };
+}
 
 export async function respondToOfferAction(
   _prev: OfferResponseState,

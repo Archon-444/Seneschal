@@ -17,6 +17,7 @@ import {
   sendOfferToTenantAction,
   serveNoticeAction,
 } from "../../actions";
+import { RequestOwnerApprovalForm } from "./RequestOwnerApprovalForm";
 
 // Renewal risk report (Renewal Risk Desk). Notice-gate countdown + the index-based
 // Decree 43 position from a captured index. Estimates for review — not legal advice.
@@ -61,6 +62,7 @@ export default async function RenewalReportPage({
     const n = Number(m[0]);
     return Number.isInteger(n) && n >= 0 && n <= 12 ? String(n) : "";
   })();
+  const ownerContactId = t.landlordContactId ?? p.ownerContactId;
 
   return (
     <>
@@ -268,26 +270,37 @@ export default async function RenewalReportPage({
                     )}
                   </Td>
                   <Td>
-                    {(o.status === "SENT" || o.status === "COUNTERED") && (
-                      <div className="flex gap-3">
-                        <form action={acceptOfferAction}>
-                          <input type="hidden" name="offerId" value={o.id} />
-                          <input type="hidden" name="tenancyId" value={tenancyId} />
-                          <button className="text-xs text-navy-500 underline-offset-2 hover:text-verde-700 hover:underline">
-                            Accept
-                          </button>
-                        </form>
-                        {o.party === "LANDLORD" && (
-                          <form action={sendOfferToTenantAction}>
+                    <div className="flex flex-col items-start gap-1">
+                      {(o.status === "SENT" || o.status === "COUNTERED") && (
+                        <div className="flex gap-3">
+                          <form action={acceptOfferAction}>
                             <input type="hidden" name="offerId" value={o.id} />
                             <input type="hidden" name="tenancyId" value={tenancyId} />
-                            <button className="text-xs text-navy-500 underline-offset-2 hover:text-gold-700 hover:underline">
-                              Send to tenant
+                            <button className="text-xs text-navy-500 underline-offset-2 hover:text-verde-700 hover:underline">
+                              Accept
                             </button>
                           </form>
+                          {o.party === "LANDLORD" && (
+                            <form action={sendOfferToTenantAction}>
+                              <input type="hidden" name="offerId" value={o.id} />
+                              <input type="hidden" name="tenancyId" value={tenancyId} />
+                              <button className="text-xs text-navy-500 underline-offset-2 hover:text-gold-700 hover:underline">
+                                Send to tenant
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      )}
+                      {canDecide &&
+                        ownerContactId &&
+                        (o.status === "SENT" || o.status === "COUNTERED" || o.status === "ACCEPTED") && (
+                          <RequestOwnerApprovalForm
+                            offerId={o.id}
+                            tenancyId={tenancyId}
+                            contactId={ownerContactId}
+                          />
                         )}
-                      </div>
-                    )}
+                    </div>
                   </Td>
                 </tr>
               ))}
