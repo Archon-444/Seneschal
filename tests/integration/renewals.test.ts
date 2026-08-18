@@ -14,7 +14,13 @@ import {
   proposeOffer,
   respondToOfferViaLink,
 } from "@/server/services/renewals";
-import { serveRenewalNotice } from "@/server/services/notice";
+import {
+  approveNotice,
+  confirmNoticeService,
+  prepareNotice,
+  serveNoticeFormal,
+  serveRenewalNotice,
+} from "@/server/services/notice";
 import { createSecureLink, validateLinkToken } from "@/server/services/secureLinks";
 
 let W: TestActor;
@@ -89,6 +95,34 @@ describe("renewal risk desk", () => {
     expect(row!.valueAtRisk).toBe(7_200);
     expect(row!.ownerName).toBe("Al Noor");
     expect(Math.round(row!.gapPct! * 100)).toBe(25);
+  });
+
+  it("filters persisted renewal states into distinct operational views", async () => {
+    expect((await listRenewalPipeline(W.ctx, { view: "missing-index" })).map((row) => row.tenancyId)).toContain(tenancyId);
+
+    await captureRentIndex(W.ctx, {
+      tenancyId,
+      marketRentAvg: 96_000,
+      indexSource: "SMART_RENTAL_INDEX_2025",
+      sourceRef: { url: "https://dubailand.gov.ae/index" },
+    });
+    expect((await listRenewalPipeline(W.ctx, { view: "missing-index" })).map((row) => row.tenancyId)).not.toContain(tenancyId);
+
+    const renewalCase = await openRenewalCase(W.ctx, tenancyId);
+    const notice = await prepareNotice(W.ctx, { renewalCaseId: renewalCase.id, kind: "RENEWAL_CHANGE" });
+    await approveNotice(W.ctx, notice.id);
+    await serveNoticeFormal(W.ctx, { noticeId: notice.id, serviceMethod: "EMAIL" });
+    expect((await listRenewalPipeline(W.ctx, { view: "awaiting-evidence" })).map((row) => row.tenancyId)).toContain(tenancyId);
+
+    await confirmNoticeService(W.ctx, { noticeId: notice.id, serviceRef: "inbox-ref" });
+    const offer = await proposeOffer(W.ctx, {
+      renewalCaseId: renewalCase.id,
+      party: "LANDLORD",
+      annualRent: 79_200,
+      paymentSchedule: "4 cheques",
+    });
+    await acceptOffer(W.ctx, offer.id);
+    expect((await listRenewalPipeline(W.ctx, { view: "ready-to-complete" })).map((row) => row.tenancyId)).toContain(tenancyId);
   });
 
   it("filters the pipeline to an explicit clientPrincipalId (fiduciary view)", async () => {

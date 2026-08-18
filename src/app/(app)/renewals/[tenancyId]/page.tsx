@@ -97,6 +97,21 @@ export default async function RenewalReportPage({
         }
       />
 
+      <Card className="mb-6 border-navy-900/20 bg-navy-900 text-ivory-50">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-gold-300">Next action</div>
+            <h2 className="font-display text-xl">{risk!.nextAction.label}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-ivory-100">{risk!.nextAction.reason}</p>
+          </div>
+          {risk!.nextAction.urgency !== "NONE" && <Badge value={risk!.nextAction.urgency} />}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ivory-100">
+          {risk!.nextAction.dueAt && <span>By {formatDubaiDate(risk!.nextAction.dueAt)}</span>}
+          {risk!.nextAction.responsibleLayer && <span>Responsible: {risk!.nextAction.responsibleLayer}</span>}
+        </div>
+      </Card>
+
       {/* Key dates */}
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KeyDate
