@@ -78,8 +78,16 @@ test.describe("operator keyboard primitives", () => {
     await page.goto("/evidence");
     const details = page.locator("details").filter({ hasText: "Technical details" }).first();
     const technical = details.locator("summary");
-    await technical.focus();
-    await page.keyboard.press("Space");
+    // Focus can be dropped by hydration reconciling the tree underneath us, so
+    // retry until it holds. Without this the key is dispatched to whatever else
+    // has focus and the disclosure silently never toggles (see #98 for the same
+    // interactive-before-hydrated family). Pressing on the locator keeps this an
+    // assertion about keyboard operability rather than a click.
+    await expect(async () => {
+      await technical.focus();
+      await expect(technical).toBeFocused();
+    }).toPass({ timeout: 10_000 });
+    await technical.press(" ");
     await expect(details).toHaveJSProperty("open", true);
   });
 
