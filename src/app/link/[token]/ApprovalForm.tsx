@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Field, FormStatus, inputClass } from "@/components/ui";
 import { decideApprovalAction, type ApprovalDecisionState } from "./actions";
+import { APPROVAL_COMMENT_MAX } from "@/lib/approvalLimits";
 
 export function ApprovalForm({ token }: { token: string }) {
   const [state, formAction, pending] = useActionState(
@@ -30,7 +31,7 @@ export function ApprovalForm({ token }: { token: string }) {
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="token" value={token} />
       <Field label="Note (optional)">
-        <textarea name="comment" rows={2} className={inputClass} />
+        <textarea name="comment" rows={2} maxLength={APPROVAL_COMMENT_MAX} className={inputClass} />
       </Field>
       {state.status === "error" && <FormStatus error={state.message} />}
       <div className="grid grid-cols-2 gap-2">

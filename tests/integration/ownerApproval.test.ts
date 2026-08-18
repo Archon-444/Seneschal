@@ -14,6 +14,7 @@ import {
 import { createSecureLink, validateLinkToken } from "@/server/services/secureLinks";
 import { AuthzError } from "@/server/authz";
 import { hashToken, sha256Hex } from "@/server/crypto";
+import { APPROVAL_COMMENT_MAX } from "@/lib/approvalLimits";
 
 // Absentee-owner APPROVAL link: a recorded sign-off on an offer's exact terms,
 // not a workflow gate. Consume-first (H4), guarded claim (F2), token never stored.
@@ -108,7 +109,13 @@ describe("absentee-owner APPROVAL link", () => {
     });
     expect(granted.actorType).toBe("TENANT_LINK");
     expect(granted.actorId).toBeNull();
-    expect(granted.payload).toMatchObject({ viaLink: true, decision: "APPROVED", offerVersion: offer.version });
+    expect(granted.propertyId).toBe(propertyId);
+    expect(granted.payload).toMatchObject({
+      viaLink: true,
+      decision: "APPROVED",
+      offerVersion: offer.version,
+      offerStatus: "SENT",
+    });
     expect(JSON.stringify(granted.payload)).not.toContain(token);
 
     const link = await prisma.secureLink.findFirstOrThrow({ where: { purpose: "APPROVAL", scopeId: offer.id } });
@@ -130,7 +137,12 @@ describe("absentee-owner APPROVAL link", () => {
       where: { type: "APPROVAL_REJECTED", scopeId: offer.id },
     });
     expect(rejected.actorType).toBe("TENANT_LINK");
-    expect(rejected.payload).toMatchObject({ decision: "REJECTED", comment: "too high" });
+    expect(rejected.propertyId).toBe(propertyId);
+    expect(rejected.payload).toMatchObject({
+      decision: "REJECTED",
+      comment: "too high",
+      offerStatus: "SENT",
+    });
     expect((await prisma.offer.findUniqueOrThrow({ where: { id: offer.id } })).status).toBe("SENT");
     expect((await prisma.renewalCase.findUniqueOrThrow({ where: { id: rc.id } })).status).toBe(caseBefore);
   });
@@ -219,5 +231,53 @@ describe("absentee-owner APPROVAL link", () => {
     });
     const other = await prisma.secureLink.findUniqueOrThrow({ where: { id: linkId } });
     expect(await getApprovalForLink(other)).toBeNull();
+  });
+
+  it("clamps the owner comment before it enters the insert-only evidence payload", async () => {
+    const { offer } = await openCaseAndOffer();
+    const { url } = await requestOwnerApproval(W.ctx, { offerId: offer.id, contactId: ownerId });
+    const token = url.split("/link/")[1]!;
+    await decideApprovalViaLink(token, "REJECTED", "x".repeat(APPROVAL_COMMENT_MAX + 1_000));
+    const rejected = await prisma.evidenceEvent.findFirstOrThrow({
+      where: { type: "APPROVAL_REJECTED", scopeId: offer.id },
+    });
+    expect((rejected.payload as { comment: string }).comment).toHaveLength(APPROVAL_COMMENT_MAX);
+  });
+
+  it("re-request supersedes the prior pending row and revokes the old link", async () => {
+    const { offer } = await openCaseAndOffer();
+    const first = await requestOwnerApproval(W.ctx, { offerId: offer.id, contactId: ownerId });
+    const firstToken = first.url.split("/link/")[1]!;
+    const firstRequested = await prisma.evidenceEvent.findFirstOrThrow({
+      where: { type: "APPROVAL_REQUESTED", scopeId: offer.id },
+    });
+
+    const second = await requestOwnerApproval(W.ctx, { offerId: offer.id, contactId: ownerId });
+    expect(second.approvalId).not.toBe(first.approvalId);
+
+    const prior = await prisma.approval.findUniqueOrThrow({ where: { id: first.approvalId } });
+    expect(prior.decision).toBeNull();
+    expect(prior.decidedAt).not.toBeNull();
+    const open = await prisma.approval.findMany({
+      where: { subjectId: offer.id, decision: null, decidedAt: null },
+    });
+    expect(open).toHaveLength(1);
+    expect(open[0]!.id).toBe(second.approvalId);
+
+    const requested = await prisma.evidenceEvent.findMany({
+      where: { type: "APPROVAL_REQUESTED", scopeId: offer.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(requested).toHaveLength(2);
+    expect(requested[0]!.supersedesId).toBeNull();
+    expect(requested[1]!.supersedesId).toBe(firstRequested.id);
+
+    await expect(decideApprovalViaLink(firstToken, "APPROVED")).rejects.toMatchObject({ status: 400 });
+    expect((await prisma.approval.findUniqueOrThrow({ where: { id: second.approvalId } })).decision).toBeNull();
+
+    const secondToken = second.url.split("/link/")[1]!;
+    const decided = await decideApprovalViaLink(secondToken, "APPROVED");
+    expect(decided.approvalId).toBe(second.approvalId);
+    expect((await prisma.approval.findUniqueOrThrow({ where: { id: second.approvalId } })).decision).toBe("APPROVED");
   });
 });

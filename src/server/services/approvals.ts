@@ -4,6 +4,7 @@ import { type AuthzContext, AuthzError, assertSameWorkspace, require_ } from "..
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
 import { sha256Hex } from "../crypto";
+import { APPROVAL_COMMENT_MAX } from "@/lib/approvalLimits";
 import { createSecureLink, consumeLinkUse, validateLinkToken } from "./secureLinks";
 import { getTenancy } from "./tenancies";
 import { evaluateRenewalRisk } from "./risk";
@@ -52,6 +53,15 @@ export function offerApprovalSnapshot(
 
 const SIGNABLE: ReadonlySet<string> = new Set(["SENT", "COUNTERED", "ACCEPTED"]);
 
+/** Open pending = not yet decided and not superseded by a later request. */
+const OPEN_PENDING = { decision: null, decidedAt: null } as const;
+
+function clampApprovalComment(comment?: string): string | undefined {
+  const trimmed = comment?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > APPROVAL_COMMENT_MAX ? trimmed.slice(0, APPROVAL_COMMENT_MAX) : trimmed;
+}
+
 export async function requestOwnerApproval(
   ctx: AuthzContext,
   input: { offerId: string; contactId: string },
@@ -69,6 +79,39 @@ export async function requestOwnerApproval(
 
   const snapshot = offerApprovalSnapshot(offer!, tenancy!.property);
   const payloadHash = sha256Hex(JSON.stringify(snapshot));
+
+  // Re-request: close prior open pending rows (decidedAt set, decision left
+  // null — not a reject) and revoke unused APPROVAL links so decide cannot
+  // claim a stale row. The new APPROVAL_REQUESTED supersedes the previous.
+  const priorRequested = await prisma.evidenceEvent.findFirst({
+    where: {
+      workspaceId: ctx.workspaceId,
+      type: "APPROVAL_REQUESTED",
+      scopeType: "OFFER",
+      scopeId: offer!.id,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  await prisma.approval.updateMany({
+    where: {
+      workspaceId: ctx.workspaceId,
+      subjectType: "offer",
+      subjectId: offer!.id,
+      ...OPEN_PENDING,
+    },
+    data: { decidedAt: new Date() },
+  });
+  await prisma.secureLink.updateMany({
+    where: {
+      workspaceId: ctx.workspaceId,
+      purpose: "APPROVAL",
+      scopeType: "OFFER",
+      scopeId: offer!.id,
+      revokedAt: null,
+    },
+    data: { revokedAt: new Date() },
+  });
+
   const approval = await prisma.approval.create({
     data: {
       workspaceId: ctx.workspaceId,
@@ -76,6 +119,8 @@ export async function requestOwnerApproval(
       subjectId: offer!.id,
       requestedOfContactId: input.contactId,
       payloadHash,
+      decision: null,
+      decidedAt: null,
     },
   });
   const link = await createSecureLink(ctx, {
@@ -97,6 +142,7 @@ export async function requestOwnerApproval(
     tenancyId: offer!.tenancyId,
     propertyId: tenancy!.propertyId,
     payload: { approvalId: approval.id, version: offer!.version },
+    supersedesId: priorRequested?.id ?? null,
   });
   await recordAudit({
     workspaceId: ctx.workspaceId,
@@ -127,6 +173,7 @@ export async function getApprovalForLink(link: SecureLink): Promise<ApprovalLink
   // scope-audit: public APPROVAL link path (no ctx); purpose/scopeType/workspace
   // match on the validated token is the gate, before any offer fetch.
   if (link.purpose !== "APPROVAL" || link.scopeType !== "OFFER") return null;
+  if (link.revokedAt) return null;
   const offer = await prisma.offer.findUnique({ where: { id: link.scopeId } });
   if (!offer || offer.workspaceId !== link.workspaceId) return null;
   const approval = await prisma.approval.findFirst({
@@ -134,7 +181,7 @@ export async function getApprovalForLink(link: SecureLink): Promise<ApprovalLink
       workspaceId: link.workspaceId,
       subjectType: "offer",
       subjectId: offer.id,
-      decision: null,
+      ...OPEN_PENDING,
     },
     orderBy: { createdAt: "desc" },
   });
@@ -186,23 +233,32 @@ export async function decideApprovalViaLink(
   if (!offer || offer.workspaceId !== link.workspaceId) {
     throw new AuthzError("This link is no longer available.", 400);
   }
+  let propertyId: string | null = null;
+  if (offer.tenancyId) {
+    const tenancy = await prisma.tenancy.findUnique({ where: { id: offer.tenancyId } });
+    if (!tenancy || tenancy.workspaceId !== link.workspaceId) {
+      throw new AuthzError("This link is no longer available.", 400);
+    }
+    propertyId = tenancy.propertyId;
+  }
   const pending = await prisma.approval.findFirst({
     where: {
       workspaceId: link.workspaceId,
       subjectType: "offer",
       subjectId: offer.id,
-      decision: null,
+      ...OPEN_PENDING,
     },
     orderBy: { createdAt: "desc" },
   });
   if (!pending) throw new AuthzError("Already decided", 409);
 
   const claim = await prisma.approval.updateMany({
-    where: { id: pending.id, decision: null },
+    where: { id: pending.id, ...OPEN_PENDING },
     data: { decision, decidedAt: new Date() },
   });
   if (claim.count !== 1) throw new AuthzError("Already decided", 409);
 
+  const note = clampApprovalComment(comment);
   await recordEvidence({
     workspaceId: link.workspaceId,
     type: decision === "APPROVED" ? "APPROVAL_GRANTED" : "APPROVAL_REJECTED",
@@ -211,12 +267,14 @@ export async function decideApprovalViaLink(
     scopeType: "OFFER",
     scopeId: offer.id,
     tenancyId: offer.tenancyId,
+    propertyId,
     payload: {
       viaLink: true,
       decision,
       approvalId: pending.id,
       offerVersion: offer.version,
-      ...(comment ? { comment } : {}),
+      offerStatus: offer.status,
+      ...(note ? { comment: note } : {}),
     },
   });
   if (offer.renewalCaseId) await evaluateRenewalRisk(offer.renewalCaseId);

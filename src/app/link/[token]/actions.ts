@@ -13,6 +13,7 @@ import { recordLinkMessagingOptIn } from "@/server/services/consent";
 import { dispatchPending } from "@/server/outbox";
 import { handlers } from "@/server/outbox/runner";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, MAX_FILES_PER_REQUEST } from "@/lib/uploadLimits";
+import { APPROVAL_COMMENT_MAX } from "@/lib/approvalLimits";
 
 // Success states echo back WHAT was submitted so the external party gets a
 // concrete receipt, not a generic thank-you. They must never carry the link
@@ -53,7 +54,8 @@ export async function decideApprovalAction(
   if (decision !== "APPROVED" && decision !== "REJECTED") {
     return { status: "error", message: "Choose approve or reject." };
   }
-  const comment = String(formData.get("comment") ?? "").trim() || undefined;
+  const commentRaw = String(formData.get("comment") ?? "").trim();
+  const comment = commentRaw ? commentRaw.slice(0, APPROVAL_COMMENT_MAX) : undefined;
 
   const h = await headers();
   const ip = (h.get("x-forwarded-for") ?? "unknown").split(",")[0].trim() || "unknown";
