@@ -15,11 +15,13 @@ export function Sidebar({
   nav,
   isStaff,
   collapsed,
+  mobile = false,
   onNavigate,
 }: {
   nav: NavItem[];
   isStaff: boolean;
   collapsed: boolean;
+  mobile?: boolean;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -28,7 +30,7 @@ export function Sidebar({
   const link = (item: { href: string; label: string; icon: IconKey }, accent = false) => {
     const active = isActive(pathname, item.href);
     const Glyph = NAV_ICONS[item.icon];
-    const base = "flex items-center rounded px-3 py-1.5 text-sm transition-colors";
+    const base = `flex items-center rounded px-3 text-sm transition-colors ${mobile ? "min-h-11 py-2" : "py-1.5"}`;
     const tone = active
       ? "bg-navy-800 text-ivory-50"
       : accent
@@ -101,7 +103,9 @@ export function Sidebar({
                 type="button"
                 onClick={() => setMoreOpen((v) => !v)}
                 aria-expanded={showSecondary}
-                className="flex w-full items-center gap-3 rounded px-3 py-1.5 text-sm text-ivory-200 transition-colors hover:bg-navy-800 hover:text-ivory-50"
+                className={`flex w-full items-center gap-3 rounded px-3 text-sm text-ivory-200 transition-colors hover:bg-navy-800 hover:text-ivory-50 ${
+                  mobile ? "min-h-11 py-2" : "py-1.5"
+                }`}
               >
                 <ChevronDownIcon className={`shrink-0 transition-transform ${showSecondary ? "" : "-rotate-90"}`} />
                 More

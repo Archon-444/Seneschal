@@ -151,6 +151,9 @@ dialog.seneschal-dialog[open] {
 dialog.seneschal-dialog::backdrop {
   background: color-mix(in srgb, var(--color-navy-900) 40%, transparent);
 }
+dialog.mobile-nav-drawer::backdrop {
+  background: color-mix(in srgb, var(--color-navy-900) 40%, transparent);
+}
 .seneschal-toast {
   animation: seneschal-pop-in 0.18s ease-out;
 }
