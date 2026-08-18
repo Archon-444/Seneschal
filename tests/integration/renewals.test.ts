@@ -22,6 +22,7 @@ import {
   serveRenewalNotice,
 } from "@/server/services/notice";
 import { createSecureLink, validateLinkToken } from "@/server/services/secureLinks";
+import { getRenewalWorkspace } from "@/server/services/renewalWorkspace";
 
 let W: TestActor;
 let clientId: string;
@@ -178,6 +179,17 @@ describe("renewal risk desk", () => {
     });
     await expect(getRenewalRisk(W.ctx, otherTenancy.id)).rejects.toThrow();
     await expect(captureRentIndex(W.ctx, { tenancyId: otherTenancy.id, marketRentAvg: 60_000 })).rejects.toThrow();
+  });
+
+  it("gives read-only roles a complete task path without unauthorized evidence or action flags", async () => {
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 96_000 });
+    const agent = await addMember(W.workspaceId, "AGENT");
+    const workspace = await getRenewalWorkspace(agent.ctx, tenancyId);
+
+    expect(workspace.tasks).toHaveLength(9);
+    expect(workspace.risk.nextAction.code).toBe("REVIEW_CASE");
+    expect(workspace.capabilities).toMatchObject({ canWrite: false, canDecide: false, canReadEvidence: false });
+    expect(workspace.events).toHaveLength(0);
   });
 });
 

@@ -226,6 +226,25 @@ export interface OfferView {
   note: string | null;
   createdAt: Date;
   sentToTenant: boolean;
+  sentToTenantAt: Date | null;
+  permittedMaxSnapshot: number | null;
+  indexCitation: {
+    source: string | null;
+    capturedAt: string | null;
+    calculatorVersion: string | null;
+    provisional: boolean;
+  } | null;
+}
+
+function normalizedOfferCitation(value: Prisma.JsonValue | null): OfferView["indexCitation"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const citation = value as Record<string, Prisma.JsonValue>;
+  return {
+    source: typeof citation.source === "string" ? citation.source : null,
+    capturedAt: typeof citation.capturedAt === "string" ? citation.capturedAt : null,
+    calculatorVersion: typeof citation.calculatorVersion === "string" ? citation.calculatorVersion : null,
+    provisional: citation.provisional === true,
+  };
 }
 
 export interface RenewalRisk {
@@ -237,11 +256,27 @@ export interface RenewalRisk {
   gatePassed: boolean;
   latestIndex: { marketRentAvg: number; capturedAt: Date; source: string; isBenchmark: boolean; provisional: boolean } | null;
   position: RentPositionResult | null;
-  renewalCase: { id: string; status: RenewalStatus; decidedOfferId: string | null } | null;
+  renewalCase: {
+    id: string;
+    status: RenewalStatus;
+    decidedOfferId: string | null;
+    renewedTenancyId: string | null;
+    createdAt: Date;
+  } | null;
   /** The most recent notice on the case — drives the serve/confirm UI. A
    *  SERVICE_RECORDED_PENDING_EVIDENCE status means service was logged without
    *  proof and the case did NOT advance. */
-  currentNotice: { id: string; status: NoticeStatus; serviceMethod: ServiceMethod | null } | null;
+  currentNotice: {
+    id: string;
+    status: NoticeStatus;
+    serviceMethod: ServiceMethod | null;
+    generatedAt: Date;
+    approvedAt: Date | null;
+    servedAt: Date | null;
+    docId: string | null;
+    serviceRef: string | null;
+    attestedAt: Date | null;
+  } | null;
   offers: OfferView[];
   nextAction: RenewalNextAction;
 }
@@ -402,10 +437,11 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
           scopeType: "OFFER",
           scopeId: { in: offers.map((offer) => offer.id) },
         },
-        select: { scopeId: true },
+        select: { scopeId: true, createdAt: true },
       })
     : [];
   const sentOfferIds = new Set(tenantLinks.map((link) => link.scopeId));
+  const sentOfferAt = new Map(tenantLinks.map((link) => [link.scopeId, link.createdAt]));
 
   const currentNotice = renewalCase
     ? await prisma.notice.findFirst({
@@ -454,10 +490,26 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
     latestIndex,
     position,
     renewalCase: renewalCase
-      ? { id: renewalCase.id, status: renewalCase.status, decidedOfferId: renewalCase.decidedOfferId }
+      ? {
+          id: renewalCase.id,
+          status: renewalCase.status,
+          decidedOfferId: renewalCase.decidedOfferId,
+          renewedTenancyId: renewalCase.renewedTenancyId,
+          createdAt: renewalCase.createdAt,
+        }
       : null,
     currentNotice: currentNotice
-      ? { id: currentNotice.id, status: currentNotice.status, serviceMethod: currentNotice.serviceMethod }
+      ? {
+          id: currentNotice.id,
+          status: currentNotice.status,
+          serviceMethod: currentNotice.serviceMethod,
+          generatedAt: currentNotice.generatedAt,
+          approvedAt: currentNotice.approvedAt,
+          servedAt: currentNotice.servedAt,
+          docId: currentNotice.docId,
+          serviceRef: currentNotice.serviceRef,
+          attestedAt: currentNotice.attestedAt,
+        }
       : null,
     offers: offers.map((o) => ({
       id: o.id,
@@ -471,6 +523,9 @@ export async function getRenewalRisk(ctx: AuthzContext, tenancyId: string): Prom
       note: o.note,
       createdAt: o.createdAt,
       sentToTenant: sentOfferIds.has(o.id),
+      sentToTenantAt: sentOfferAt.get(o.id) ?? null,
+      permittedMaxSnapshot: o.permittedMaxSnapshot != null ? Number(o.permittedMaxSnapshot) : null,
+      indexCitation: normalizedOfferCitation(o.indexCitation),
     })),
     nextAction,
   };

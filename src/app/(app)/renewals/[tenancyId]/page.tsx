@@ -1,10 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
-import { hasCapability } from "@/server/authz";
-import { getRenewalRisk } from "@/server/services/renewals";
-import { daysBetween, formatDubaiDate, isoDate } from "@/server/calculators/dates";
-import { Badge, Button, Card, Field, FormActions, inputClass, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
+import { getRenewalWorkspace } from "@/server/services/renewalWorkspace";
+import type { RenewalRisk } from "@/server/services/renewals";
+import { daysBetween, formatDubaiDate, formatDubaiDateTime, isoDate } from "@/server/calculators/dates";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  FormActions,
+  inputClass,
+  LinkButton,
+  Money,
+  PageHeader,
+  Table,
+  Td,
+} from "@/components/ui";
+import { RenewalTaskPath } from "@/components/renewals/RenewalTaskPath";
 import { SubmitButton } from "@/components/SubmitButton";
 import { InfoTooltip } from "@/components/Tooltip";
 import {
@@ -19,51 +33,64 @@ import {
 } from "../../actions";
 import { RequestOwnerApprovalForm } from "./RequestOwnerApprovalForm";
 
-// Renewal risk report (Renewal Risk Desk). Notice-gate countdown + the index-based
-// Decree 43 position from a captured index. Estimates for review — not legal advice.
+type WorkspaceView = "case" | "terms" | "evidence" | "details";
 
-export default async function RenewalReportPage({
+const VIEWS: { value: WorkspaceView; label: string }[] = [
+  { value: "case", label: "Case" },
+  { value: "terms", label: "Terms" },
+  { value: "evidence", label: "Evidence" },
+  { value: "details", label: "Details" },
+];
+
+const TERMS_ACTIONS = new Set([
+  "PREPARE_TERMS",
+  "SEND_OFFER",
+  "AWAIT_TENANT",
+  "REVIEW_COUNTER",
+  "COMPLETE_RENEWAL",
+]);
+
+export default async function RenewalWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenancyId: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
   const { tenancyId } = await params;
+  const query = await searchParams;
   const ctx = await requireCtx();
 
-  let risk;
+  let workspace;
   try {
-    risk = await getRenewalRisk(ctx, tenancyId);
+    workspace = await getRenewalWorkspace(ctx, tenancyId);
   } catch {
     notFound();
   }
 
-  const t = risk!.tenancy;
-  const p = t.property;
-  const unit = [p.community, p.building, p.unitNo].filter(Boolean).join(" · ") || "Unit";
-  const pos = risk!.position;
-
-  // Timeline ribbon positions across the contract term.
-  const total = Math.max(1, daysBetween(t.startDate, t.endDate));
-  const pct = (d: Date) => Math.min(100, Math.max(0, (daysBetween(t.startDate, d) / total) * 100));
-  const gateLeft = pct(risk!.noticeGateAt);
-
-  // Complete-renewal (mint successor) affordance: only when the case is AGREED
-  // and the caller can decide. The successor defaults to the day after the
-  // current term for a one-year renewal, at the accepted offer's rent.
-  const canWrite = hasCapability(ctx, "renewals.write");
-  const canDecide = hasCapability(ctx, "renewals.decide");
-  const acceptedOffer = risk!.offers.find((o) => o.status === "ACCEPTED");
-  const successorStart = new Date(t.endDate.getTime() + 86_400_000);
-  const successorEnd = new Date(
-    Date.UTC(successorStart.getUTCFullYear() + 1, successorStart.getUTCMonth(), successorStart.getUTCDate()),
-  );
-  const chequeCountDefault = (() => {
-    const m = acceptedOffer?.paymentSchedule.match(/\d+/);
-    if (!m) return "";
-    const n = Number(m[0]);
-    return Number.isInteger(n) && n >= 0 && n <= 12 ? String(n) : "";
-  })();
-  const ownerContactId = t.landlordContactId ?? p.ownerContactId;
+  const view = VIEWS.some((candidate) => candidate.value === query.view)
+    ? (query.view as WorkspaceView)
+    : "case";
+  const { risk, tasks, events, successor, capabilities } = workspace!;
+  const t = risk.tenancy;
+  const property = t.property;
+  const unit = [property.community, property.building, property.unitNo].filter(Boolean).join(" · ") || "Unit";
+  const acceptedOffer = risk.offers.find((offer) => offer.status === "ACCEPTED") ?? null;
+  const latestOffer = risk.offers.at(-1) ?? null;
+  const evidenceState = risk.currentNotice?.status === "SERVICE_RECORDED_PENDING_EVIDENCE"
+    ? "Awaiting service proof"
+    : risk.latestIndex?.provisional
+      ? "Provisional source"
+      : !risk.latestIndex
+        ? "No verified source"
+        : successor
+          ? "Completion recorded"
+          : "Evidence accumulating";
+  const actionView = TERMS_ACTIONS.has(risk.nextAction.code)
+    ? "terms"
+    : risk.nextAction.code === "REVIEW_COMPLETED_CASE" || risk.nextAction.code === "NO_ACTION"
+      ? "evidence"
+      : "case";
 
   return (
     <>
@@ -71,535 +98,634 @@ export default async function RenewalReportPage({
         ← All renewals
       </Link>
       <PageHeader
-        eyebrow="Renewal risk report"
+        eyebrow="Renewal case workspace"
         title={unit}
         subtitle={`Contract ${formatDubaiDate(t.startDate)} → ${formatDubaiDate(t.endDate)}${t.ejariNo ? ` · Ejari ${t.ejariNo}` : ""}`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {hasCapability(ctx, "evidence.export") && (
-              <LinkButton href={`/api/v1/tenancies/${tenancyId}/evidence-pack.pdf`}>
-                Download evidence pack
-              </LinkButton>
+          <>
+            {capabilities.canExportEvidence && (
+              <LinkButton href={`/api/v1/tenancies/${tenancyId}/evidence-pack.pdf`}>Download evidence pack</LinkButton>
             )}
-            {risk!.renewalCase ? (
-              <Badge value={risk!.renewalCase.status} />
-            ) : canWrite ? (
-              <form action={openRenewalCaseAction}>
-                <input type="hidden" name="tenancyId" value={tenancyId} />
-                <Button type="submit">Open renewal case</Button>
-              </form>
-            ) : (
-              <span className="max-w-xs text-xs text-muted">
-                An authorized renewal operator opens the case.
-              </span>
-            )}
-          </div>
+            <Badge value={risk.renewalCase?.status ?? "CASE NOT OPEN"} />
+          </>
         }
       />
 
-      <Card className="mb-6 border-navy-900/20 bg-navy-900 text-ivory-50">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <Card className="z-10 mb-5 border-navy-900/20 bg-navy-900 text-ivory-50 shadow-lg lg:sticky lg:top-3">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto] lg:items-center">
           <div>
             <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-gold-300">Next action</div>
-            <h2 className="font-display text-xl">{risk!.nextAction.label}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-ivory-100">{risk!.nextAction.reason}</p>
+            <h2 className="font-display text-xl">{risk.nextAction.label}</h2>
+            <p className="mt-1 text-sm text-ivory-100">{risk.nextAction.reason}</p>
           </div>
-          {risk!.nextAction.urgency !== "NONE" && <Badge value={risk!.nextAction.urgency} />}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ivory-100">
-          {risk!.nextAction.dueAt && <span>By {formatDubaiDate(risk!.nextAction.dueAt)}</span>}
-          {risk!.nextAction.responsibleLayer && <span>Responsible: {risk!.nextAction.responsibleLayer}</span>}
+          <SummaryFact
+            label="Notice gate"
+            value={risk.gatePassed ? "Gate passed" : `${risk.daysToGate} days`}
+            note={formatDubaiDate(risk.noticeGateAt)}
+          />
+          <SummaryFact
+            label="Responsible"
+            value={risk.nextAction.responsibleLayer ?? "Review owner"}
+            note={risk.nextAction.urgency === "NONE" ? "No active urgency" : `${risk.nextAction.urgency.toLowerCase()} priority`}
+          />
+          <SummaryFact
+            label="Evidence state"
+            value={evidenceState}
+            note={
+              acceptedOffer
+                ? `Accepted rent AED ${acceptedOffer.annualRent.toLocaleString("en-AE")}`
+                : latestOffer
+                  ? `Latest terms AED ${latestOffer.annualRent.toLocaleString("en-AE")}`
+                  : "No terms recorded"
+            }
+          />
+          <div className="flex flex-wrap gap-2 lg:flex-col">
+            <Link
+              href={`/renewals/${tenancyId}?view=${actionView}${actionView === "case" ? "#active-task" : ""}`}
+              className="rounded-lg bg-gold-300 px-4 py-2 text-center text-sm font-bold text-navy-900 hover:bg-gold-100"
+            >
+              Go to current task
+            </Link>
+            <Link href={`/renewals/${tenancyId}?view=evidence`} className="text-center text-xs text-ivory-100 hover:underline">
+              View case evidence
+            </Link>
+          </div>
         </div>
       </Card>
 
-      {/* Key dates */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KeyDate
-          label="Last day to serve a change notice"
-          value={formatDubaiDate(risk!.noticeGateAt)}
-          note={`${t.noticePeriodDays} days before expiry`}
-          hot={!risk!.gatePassed && risk!.daysToGate <= 30}
-        />
-        <KeyDate label="Contract expiry" value={formatDubaiDate(risk!.expiresAt)} note="renews on current terms if no valid notice" />
-        <KeyDate label="Renewal date" value={formatDubaiDate(risk!.renewalDate)} note="new term begins" />
-        <KeyDate
-          label="Window remaining"
-          value={risk!.gatePassed ? "Gate passed" : `${risk!.daysToGate} days`}
-          note="to the notice gate"
-          hot={!risk!.gatePassed && risk!.daysToGate <= 30}
-        />
-      </div>
+      <nav aria-label="Renewal workspace views" className="mb-6 flex flex-wrap gap-2">
+        {VIEWS.map((candidate) => {
+          const active = candidate.value === view;
+          return (
+            <Link
+              key={candidate.value}
+              href={`/renewals/${tenancyId}?view=${candidate.value}`}
+              aria-current={active ? "page" : undefined}
+              className={`rounded-full border px-4 py-2 text-sm font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 ${
+                active ? "border-navy-900 bg-navy-900 text-white" : "border-line bg-white text-navy-700 hover:border-gold-500"
+              }`}
+            >
+              {candidate.label}
+            </Link>
+          );
+        })}
+      </nav>
 
-      {/* Timeline ribbon */}
-      <div className="mb-8">
-        <div className="relative h-3 rounded-full bg-verde-100">
-          <div className="absolute inset-y-0 right-0 rounded-r-full bg-claret-100" style={{ width: `${100 - gateLeft}%` }} />
-          <div className="absolute -top-1 bottom-[-4px] w-0.5 bg-navy-900" style={{ left: `${gateLeft}%` }} />
-        </div>
-        <div className="mt-2 flex justify-between text-xs text-muted">
-          <span>{formatDubaiDate(t.startDate)} · start</span>
-          <span className="text-navy-900">notice gate · {formatDubaiDate(risk!.noticeGateAt)}</span>
-          <span>{formatDubaiDate(t.endDate)} · expiry</span>
-        </div>
-      </div>
-
-      {/* RERA position */}
-      <Card className="mb-6 border-gold-300 bg-gold-100/40">
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-display text-xl text-navy-900">Index-based position · Decree 43</h2>
-          {risk!.latestIndex && (
-            <span className="figure flex items-center gap-2 text-xs text-muted">
-              <span>
-                {risk!.latestIndex.source} · captured {formatDubaiDate(risk!.latestIndex.capturedAt)}
-              </span>
-              {risk!.latestIndex.provisional && (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                  awaiting verification
-                </span>
-              )}
-            </span>
-          )}
-        </div>
-
-        {pos ? (
-          <>
-            <CeilingScale
-              current={pos.currentRent}
-              ceiling={pos.ceiling}
-              bandPct={pos.bandPct}
-              markers={risk!.offers
-                .filter((o) => o.status === "SENT" || o.status === "COUNTERED" || o.status === "ACCEPTED")
-                .map((o) => ({ label: `AED ${o.annualRent.toLocaleString("en-AE")}`, value: o.annualRent, party: o.party }))}
+      {view === "case" && (
+        <div className="space-y-6">
+          <RenewalTaskPath tasks={tasks} tenancyId={tenancyId} />
+          <div className="scroll-mt-32" id="active-task">
+          <Card>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-gold-700">Current task</div>
+                <h2 className="font-display text-xl text-navy-900">{risk.nextAction.label}</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted">{risk.nextAction.reason}</p>
+              </div>
+              {risk.nextAction.urgency !== "NONE" && <Badge value={risk.nextAction.urgency} />}
+            </div>
+            <ActiveTask
+              risk={risk}
+              tenancyId={tenancyId}
+              canWrite={capabilities.canWrite}
+              canDecide={capabilities.canDecide}
             />
-            <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Fact
-                label="Index average market rent"
-                value={<Money amount={pos.marketRentAvg} />}
-                info="The captured index figure for comparable units — see the benchmark's source and capture date below."
-              />
-              <Fact
-                label="Your rent vs market"
-                value={`${Math.round(pos.gapPct * 100)}% below`}
-                info="How far the current rent sits below the index average. This gap decides which Decree 43 band applies."
-              />
-              <Fact
-                label="Decree 43 band"
-                value={`${pos.bandPct}%`}
-                info="The estimated permissible increase for this gap under Decree No. (43) of 2013. It is an upper boundary from a rule-based calculation, based on supplied data — not legal advice."
-              />
-              <Fact
-                label="Value at risk / yr"
-                value={<Money amount={pos.valueAtRisk} />}
-                info="Annual rent forgone if no permissible increase is applied: the gap between current rent and the index-based ceiling estimate."
-              />
-            </div>
-            <div className="mt-4 flex items-start gap-3 rounded-lg bg-white/70 p-3 text-sm text-navy-700">
-              <span className="mt-0.5 rounded-full bg-navy-900 px-2 py-0.5 text-xs font-bold text-ivory-50">
-                est.
-              </span>
-              <p>
-                {pos.bandPct === 0 ? (
-                  <>
-                    Based on supplied data, the rule-based calculation produces no estimated permissible
-                    increase for this renewal. Review the captured source before action.
-                  </>
-                ) : (
-                  <>
-                    Based on supplied data, the rule-based calculation produces an estimated permissible
-                    increase of up to <b>{pos.bandPct}%</b>, with an index-based ceiling estimate of{" "}
-                    <Money amount={pos.ceiling} />. A proposed rent is a separate human decision and may be
-                    lower. Review the captured source before action. Up to <Money amount={pos.valueAtRisk} />/yr
-                    is at risk if no valid notice is served by <b>{formatDubaiDate(risk!.noticeGateAt)}</b>.
-                  </>
-                )}
-                {risk!.latestIndex?.provisional && (
-                  <> This calculation uses a provisional concierge figure awaiting verification; capture and review an official source before action.</>
-                )}
-              </p>
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-muted">
-            No index figure captured yet. Enter the DLD Smart Rental Index average for a comparable unit
-            below to compute the estimated band, ceiling and value at risk.
-          </p>
-        )}
-      </Card>
+          </Card>
+          </div>
+        </div>
+      )}
 
-      {/* Capture index */}
-      <Card className="mb-6 max-w-2xl">
-        <h2 className="font-display mb-1 text-lg text-navy-900">Capture index figure</h2>
-        <p className="mb-3 text-xs text-muted">
-          Current rent <Money amount={Number(t.annualRent)} />/yr. An official source (DLD Smart Rental
-          Index / RERA) requires a source reference; without one the figure is saved as a concierge
-          estimate marked “awaiting verification” — never as DLD-sourced.
-        </p>
-        {canWrite ? (
-        <form action={captureIndexAction} className="flex flex-wrap items-end gap-3">
-          <input type="hidden" name="tenancyId" value={tenancyId} />
-          <Field label="Index average market rent (AED/yr)">
-            <input name="marketRentAvg" type="number" min="1" step="1" required className={inputClass} placeholder="e.g. 96000" />
-          </Field>
-          <Field label="Captured on">
-            <input name="capturedAt" type="date" className={inputClass} />
-          </Field>
-          <Field label="Source">
-            <select name="indexSource" defaultValue="MANUAL_CONCIERGE" className={inputClass}>
-              <option value="MANUAL_CONCIERGE">Concierge estimate (provisional)</option>
-              <option value="SMART_RENTAL_INDEX_2025">DLD Smart Rental Index</option>
-              <option value="RERA_INDEX_LEGACY">RERA index (legacy)</option>
-            </select>
-          </Field>
-          <Field label="Source reference (URL / screenshot id)">
-            <input name="sourceRef" className={inputClass} placeholder="required for an official source" />
-          </Field>
-          <Field label="Comparable basis (optional)">
-            <input name="comparableBasis" className={inputClass} placeholder="e.g. 2BR, Marina Heights" />
-          </Field>
-          <Button type="submit">Save index figure</Button>
-        </form>
-        ) : (
-          <p className="text-sm text-muted">
-            Index sources are captured by an authorized renewal operator. You can review the current source and calculation above.
-          </p>
-        )}
-      </Card>
-
-      {/* Notice service */}
-      {risk!.renewalCase && (
-        <NoticeServiceCard
-          renewalCaseId={risk!.renewalCase.id}
+      {view === "terms" && (
+        <TermsView
+          risk={risk}
           tenancyId={tenancyId}
-          notice={risk!.currentNotice}
-          canDecide={canDecide}
+          canWrite={capabilities.canWrite}
+          canDecide={capabilities.canDecide}
         />
       )}
 
-      {/* Negotiation workspace */}
-      {risk!.renewalCase && (
-        <Card className="mb-6">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-display text-lg text-navy-900">Renewal terms</h2>
-          </div>
-
-          {risk!.offers.length === 0 ? (
-            <p className="mb-4 text-sm text-muted">No terms on the table yet — send the first proposal below.</p>
-          ) : (
-            <Table headers={["v", "Party", "Annual rent", "Payment", "Status", ""]}>
-              {risk!.offers.map((o) => (
-                <tr
-                  key={o.id}
-                  className={
-                    o.status === "ACCEPTED"
-                      ? "bg-verde-100/40"
-                      : o.status === "SENT" || o.status === "COUNTERED"
-                        ? "bg-amber-100/30"
-                        : ""
-                  }
-                >
-                  <Td className="figure">{o.version}</Td>
-                  <Td><Badge value={o.party} /></Td>
-                  <Td>
-                    <Money amount={o.annualRent} />
-                    <div className="text-[11px] text-muted">{deltaOnCurrent(o.annualRent, Number(t.annualRent))}</div>
-                  </Td>
-                  <Td>{o.paymentSchedule}{o.paymentMethod ? ` · ${o.paymentMethod}` : ""}</Td>
-                  <Td>
-                    <Badge value={o.status} />
-                    {(o.status === "SENT" || o.status === "COUNTERED") && (
-                      <div className="mt-0.5 text-[11px] text-amber-700">awaiting response</div>
-                    )}
-                  </Td>
-                  <Td>
-                    <div className="flex flex-col items-start gap-1">
-                      {(o.status === "SENT" || o.status === "COUNTERED") && (canWrite || canDecide) && (
-                        <div className="flex gap-3">
-                          {canDecide && <form action={acceptOfferAction}>
-                            <input type="hidden" name="offerId" value={o.id} />
-                            <input type="hidden" name="tenancyId" value={tenancyId} />
-                            <button className="text-xs text-navy-500 underline-offset-2 hover:text-verde-700 hover:underline">
-                              Accept
-                            </button>
-                          </form>}
-                          {canWrite && o.party === "LANDLORD" && (
-                            <form action={sendOfferToTenantAction}>
-                              <input type="hidden" name="offerId" value={o.id} />
-                              <input type="hidden" name="tenancyId" value={tenancyId} />
-                              <button className="text-xs text-navy-500 underline-offset-2 hover:text-gold-700 hover:underline">
-                                Send to tenant
-                              </button>
-                            </form>
-                          )}
-                        </div>
-                      )}
-                      {canDecide &&
-                        ownerContactId &&
-                        (o.status === "SENT" || o.status === "COUNTERED" || o.status === "ACCEPTED") && (
-                          <RequestOwnerApprovalForm
-                            offerId={o.id}
-                            tenancyId={tenancyId}
-                            contactId={ownerContactId}
-                          />
-                        )}
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          )}
-
-          {canWrite && risk!.renewalCase.status !== "AGREED" && risk!.renewalCase.status !== "RENEWED" && (
-            <form action={proposeOfferAction} className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4">
-              <input type="hidden" name="renewalCaseId" value={risk!.renewalCase.id} />
-              <input type="hidden" name="tenancyId" value={tenancyId} />
-              <Field label="Party">
-                <select name="party" className={inputClass}>
-                  <option value="LANDLORD">Landlord proposal</option>
-                  <option value="TENANT">Tenant counter</option>
-                </select>
-              </Field>
-              <Field label="Annual rent (AED)">
-                <input name="annualRent" type="number" min="1" step="1" required className={inputClass} placeholder="e.g. 79200" />
-              </Field>
-              <Field label="Payment schedule">
-                <input name="paymentSchedule" required className={inputClass} placeholder="4 cheques" />
-              </Field>
-              <Field label="Method">
-                <input name="paymentMethod" className={inputClass} placeholder="Cheque" />
-              </Field>
-              <Button type="submit">Add terms</Button>
-            </form>
-          )}
-
-          {risk!.renewalCase.status === "RENEWED" && (
-            <div className="mt-4 flex items-center gap-2 rounded-lg border border-verde-100 bg-verde-100/40 p-3 text-sm text-verde-700">
-              <span aria-hidden>✓</span>
-              <span>Renewal complete. The successor tenancy has been created and this unit is renewed.</span>
-            </div>
-          )}
-
-          {risk!.renewalCase.status === "AGREED" &&
-            (canDecide ? (
-              <form action={mintRenewedTenancyAction} className="mt-4 space-y-3 border-t border-line pt-4">
-                <div>
-                  <h3 className="font-display text-base text-navy-900">Complete renewal</h3>
-                  <p className="text-xs text-muted">
-                    The offer is accepted. Create the successor tenancy to move this unit to renewed and
-                    close the case. Dates default to a one-year term from the day after the current
-                    contract; adjust if the agreed term differs.
-                  </p>
-                </div>
-                <input type="hidden" name="renewalCaseId" value={risk!.renewalCase.id} />
-                <input type="hidden" name="tenancyId" value={tenancyId} />
-                <div className="flex flex-wrap items-end gap-3">
-                  <Field label="Successor start" required>
-                    <input name="startDate" type="date" required defaultValue={isoDate(successorStart)} className={inputClass} />
-                  </Field>
-                  <Field label="Successor end" required>
-                    <input name="endDate" type="date" required defaultValue={isoDate(successorEnd)} className={inputClass} />
-                  </Field>
-                  <Field label="Annual rent (AED)" required>
-                    <input
-                      name="annualRent"
-                      type="number"
-                      min="1"
-                      step="1"
-                      required
-                      defaultValue={acceptedOffer ? String(acceptedOffer.annualRent) : ""}
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="Payment terms (optional)">
-                    <input name="paymentTermsNote" className={inputClass} placeholder="e.g. 4 cheques" />
-                  </Field>
-                  <Field label="Generate cheques (count)">
-                    <input
-                      name="chequeCount"
-                      type="number"
-                      min="0"
-                      max="12"
-                      defaultValue={chequeCountDefault}
-                      className={inputClass}
-                    />
-                  </Field>
-                </div>
-                <FormActions note="Mints the successor tenancy and records a renewal-completed evidence event. Cheques are split evenly across the term and sum to the annual rent.">
-                  <SubmitButton pendingLabel="Completing…">Complete renewal</SubmitButton>
-                </FormActions>
-              </form>
-            ) : (
-              <p className="mt-4 border-t border-line pt-4 text-xs text-muted">
-                The offer is accepted. Completing the renewal (creating the successor tenancy) is done by
-                a fiduciary or manager.
-              </p>
-            ))}
-        </Card>
+      {view === "evidence" && (
+        <EvidenceView
+          events={events}
+          successor={successor}
+          tenancyId={tenancyId}
+          canReadEvidence={capabilities.canReadEvidence}
+          canExportEvidence={capabilities.canExportEvidence}
+        />
       )}
 
-      {/* Partner desk */}
-      {risk!.renewalCase && (
-        <Card className="mb-6">
-          <h2 className="font-display mb-1 text-lg text-navy-900">Partner desk</h2>
-          <p className="mb-4 text-xs text-muted">
-            Seneschal owns the software, workflow and record. Regulated execution is performed by a
-            licensed partner office under its own licence.
-          </p>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div>
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Case progress</h3>
-              <ul className="space-y-1.5 text-sm">
-                <Task done={!!risk!.latestIndex} label="Index captured & index position computed" />
-                <Task done label="Renewal case opened" />
-                <Task done={risk!.offers.some((o) => o.party === "LANDLORD")} label="Proposal prepared" />
-                <Task done={risk!.offers.some((o) => o.party === "TENANT")} label="Tenant responded" />
-                <Task done={risk!.renewalCase.status === "AGREED"} label="Terms agreed" />
-              </ul>
-            </div>
-            <div>
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Who does what</h3>
-              <Table headers={["Layer", "Owner"]}>
-                <WhoRow layer="Risk scan & index capture" owner="Seneschal" />
-                <WhoRow layer="Workflow, documents & evidence" owner="Seneschal" />
-                <WhoRow layer="Tenant coordination & notice service" owner="Licensed partner" />
-                <WhoRow layer="Ejari submission (where in scope)" owner="Licensed partner" />
-              </Table>
-            </div>
-          </div>
-          <p className="mt-3 text-xs text-muted">
-            Regulated scope, fees and licence boundaries are confirmed with the licensed partner before
-            action. No specific licence is represented here.
-          </p>
-        </Card>
-      )}
+      {view === "details" && <DetailsView risk={risk} successor={successor} />}
 
-      <p className="text-xs text-muted">
-        Decree No. (43) of 2013 figures are estimates anchored to the captured index. Seneschal provides
-        software and a record — it is not a broker or legal adviser. Review official sources before acting.
+      <p className="mt-8 text-xs text-muted">
+        Decree No. (43) of 2013 figures are estimates anchored to a recorded source. Seneschal provides software and a
+        record — it is not a broker or legal adviser. Review official sources before acting.
       </p>
     </>
   );
 }
 
+function SummaryFact({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div className="border-l border-white/20 pl-3">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-gold-300">{label}</div>
+      <div className="mt-0.5 text-sm font-semibold text-white">{value}</div>
+      <div className="mt-0.5 text-[11px] text-ivory-100">{note}</div>
+    </div>
+  );
+}
+
+function ActiveTask({
+  risk,
+  tenancyId,
+  canWrite,
+  canDecide,
+}: {
+  risk: RenewalRisk;
+  tenancyId: string;
+  canWrite: boolean;
+  canDecide: boolean;
+}) {
+  switch (risk.nextAction.code) {
+    case "CAPTURE_INDEX":
+    case "VERIFY_INDEX_SOURCE":
+      return canWrite ? (
+        <CaptureIndexForm tenancyId={tenancyId} currentRent={Number(risk.tenancy.annualRent)} />
+      ) : (
+        <ReadOnlyNote>Index sources are captured by an authorized renewal operator. The current source and estimate remain visible under Details.</ReadOnlyNote>
+      );
+    case "OPEN_CASE":
+      return canWrite ? (
+        <form action={openRenewalCaseAction}>
+          <input type="hidden" name="tenancyId" value={tenancyId} />
+          <Button type="submit">Open renewal case</Button>
+        </form>
+      ) : (
+        <ReadOnlyNote>An authorized renewal operator opens the case. You can continue to review the source and dates.</ReadOnlyNote>
+      );
+    case "SERVE_NOTICE":
+    case "ADD_SERVICE_EVIDENCE":
+      return risk.renewalCase ? (
+        <NoticeServiceCard
+          renewalCaseId={risk.renewalCase.id}
+          tenancyId={tenancyId}
+          notice={risk.currentNotice}
+          canDecide={canDecide}
+          embedded
+        />
+      ) : (
+        <ReadOnlyNote>The renewal case must be opened before notice service can be recorded.</ReadOnlyNote>
+      );
+    case "PREPARE_TERMS":
+    case "SEND_OFFER":
+    case "AWAIT_TENANT":
+    case "REVIEW_COUNTER":
+    case "COMPLETE_RENEWAL":
+      return <LinkButton href={`/renewals/${tenancyId}?view=terms`}>Open terms workspace</LinkButton>;
+    case "REVIEW_COMPLETED_CASE":
+    case "NO_ACTION":
+      return <LinkButton href={`/renewals/${tenancyId}?view=evidence`}>Review case evidence</LinkButton>;
+    default:
+      return (
+        <ReadOnlyNote>
+          This case needs fiduciary review. The system will not infer a legal or operational action from an unexpected record combination.
+        </ReadOnlyNote>
+      );
+  }
+}
+
+function CaptureIndexForm({ tenancyId, currentRent }: { tenancyId: string; currentRent: number }) {
+  return (
+    <div>
+      <p className="mb-3 text-xs text-muted">
+        Current rent <Money amount={currentRent} />/yr. An official DLD/RERA source requires a source reference; otherwise
+        the figure remains a provisional concierge estimate.
+      </p>
+      <form action={captureIndexAction} className="flex flex-wrap items-end gap-3">
+        <input type="hidden" name="tenancyId" value={tenancyId} />
+        <Field label="Index average market rent (AED/yr)">
+          <input name="marketRentAvg" type="number" min="1" step="1" required className={inputClass} placeholder="e.g. 96000" />
+        </Field>
+        <Field label="Captured on"><input name="capturedAt" type="date" className={inputClass} /></Field>
+        <Field label="Source">
+          <select name="indexSource" defaultValue="MANUAL_CONCIERGE" className={inputClass}>
+            <option value="MANUAL_CONCIERGE">Concierge estimate (provisional)</option>
+            <option value="SMART_RENTAL_INDEX_2025">DLD Smart Rental Index</option>
+            <option value="RERA_INDEX_LEGACY">RERA index (legacy)</option>
+          </select>
+        </Field>
+        <Field label="Source reference (URL / screenshot id)">
+          <input name="sourceRef" className={inputClass} placeholder="required for an official source" />
+        </Field>
+        <Field label="Comparable basis (optional)">
+          <input name="comparableBasis" className={inputClass} placeholder="e.g. 2BR, Marina Heights" />
+        </Field>
+        <Button type="submit">Save index figure</Button>
+      </form>
+    </div>
+  );
+}
+
+function TermsView({
+  risk,
+  tenancyId,
+  canWrite,
+  canDecide,
+}: {
+  risk: RenewalRisk;
+  tenancyId: string;
+  canWrite: boolean;
+  canDecide: boolean;
+}) {
+  if (!risk.renewalCase) {
+    return <EmptyState title="No renewal case" message="Open the case from the Case view before recording terms." action={<LinkButton href={`/renewals/${tenancyId}?view=case`}>Back to case</LinkButton>} />;
+  }
+
+  const t = risk.tenancy;
+  const property = t.property;
+  const ownerContactId = t.landlordContactId ?? property.ownerContactId;
+  const acceptedOffer = risk.offers.find((offer) => offer.status === "ACCEPTED") ?? null;
+  const latestOffer = risk.offers.at(-1) ?? null;
+  const canPropose = canWrite && ["PREPARE_TERMS", "REVIEW_COUNTER"].includes(risk.nextAction.code);
+  const canSend = canWrite && risk.nextAction.code === "SEND_OFFER";
+  const canAccept = canDecide && risk.nextAction.code === "REVIEW_COUNTER";
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl text-navy-900">Versioned terms history</h2>
+            <p className="mt-1 text-sm text-muted">
+              Current rent, frozen source ceiling estimate, proposed rent, and accepted rent remain separate records.
+            </p>
+          </div>
+          <Badge value={risk.nextAction.label} />
+        </div>
+        {risk.offers.length === 0 ? (
+          <EmptyState message="No renewal terms are recorded yet." />
+        ) : (
+          <Table stack headers={["Version", "Party", "Annual rent", "Delivery / status", "Frozen source", "Action"]}>
+            {risk.offers.map((offer) => {
+              const current = latestOffer?.id === offer.id;
+              return (
+                <tr key={offer.id} className={offer.status === "ACCEPTED" ? "bg-verde-100/40" : current ? "bg-gold-100/30" : ""}>
+                  <Td label="Version" className="figure">
+                    v{offer.version}
+                    {current && <div className="text-[10px] font-bold text-gold-700">current version</div>}
+                  </Td>
+                  <Td label="Party"><Badge value={offer.party} /></Td>
+                  <Td label="Annual rent">
+                    <Money amount={offer.annualRent} />
+                    <div className="text-[11px] text-muted">{deltaOnCurrent(offer.annualRent, Number(t.annualRent))}</div>
+                    {offer.status === "ACCEPTED" && <div className="text-[11px] font-bold text-verde-700">accepted rent</div>}
+                  </Td>
+                  <Td label="Delivery / status">
+                    <Badge value={offer.status} />
+                    <div className="mt-1 text-[11px] text-muted">
+                      {offer.sentToTenantAt
+                        ? `Sent ${formatDubaiDateTime(offer.sentToTenantAt)}`
+                        : offer.party === "LANDLORD" && offer.status === "SENT"
+                          ? "Prepared · not sent to tenant"
+                          : `Recorded ${formatDubaiDateTime(offer.createdAt)}`}
+                    </div>
+                  </Td>
+                  <Td label="Frozen source" className="text-xs">
+                    {offer.permittedMaxSnapshot != null ? (
+                      <>
+                        <div>Ceiling estimate <Money amount={offer.permittedMaxSnapshot} /></div>
+                        <div className={offer.annualRent > offer.permittedMaxSnapshot ? "mt-1 font-semibold text-claret-700" : "mt-1 text-muted"}>
+                          {offer.annualRent > offer.permittedMaxSnapshot
+                            ? "Proposal above frozen estimate · review required"
+                            : "Proposal at or below frozen estimate"}
+                        </div>
+                        {offer.indexCitation?.source && <div className="mt-1 text-muted">{offer.indexCitation.source}</div>}
+                        {offer.indexCitation?.provisional && <div className="mt-1 font-semibold text-amber-700">Provisional source</div>}
+                      </>
+                    ) : (
+                      <span className="text-muted">No frozen citation</span>
+                    )}
+                  </Td>
+                  <Td label="Action">
+                    <div className="flex flex-col items-start gap-2">
+                      {current && canAccept && offer.status === "COUNTERED" && (
+                        <form action={acceptOfferAction}>
+                          <input type="hidden" name="offerId" value={offer.id} />
+                          <input type="hidden" name="tenancyId" value={tenancyId} />
+                          <button className="text-xs font-semibold text-navy-500 hover:underline">Accept counter</button>
+                        </form>
+                      )}
+                      {current && canSend && offer.party === "LANDLORD" && offer.status === "SENT" && !offer.sentToTenant && (
+                        <form action={sendOfferToTenantAction}>
+                          <input type="hidden" name="offerId" value={offer.id} />
+                          <input type="hidden" name="tenancyId" value={tenancyId} />
+                          <button className="text-xs font-semibold text-navy-500 hover:underline">Send to tenant</button>
+                        </form>
+                      )}
+                      {current && ownerContactId && canDecide && ["SEND_OFFER", "REVIEW_COUNTER"].includes(risk.nextAction.code) && (
+                        <RequestOwnerApprovalForm offerId={offer.id} tenancyId={tenancyId} contactId={ownerContactId} />
+                      )}
+                    </div>
+                  </Td>
+                </tr>
+              );
+            })}
+          </Table>
+        )}
+      </Card>
+
+      {canPropose ? (
+        <Card>
+          <h2 className="font-display text-lg text-navy-900">
+            {risk.nextAction.code === "REVIEW_COUNTER" ? "Respond to tenant counter" : "Prepare renewal terms"}
+          </h2>
+          <p className="mb-4 mt-1 text-xs text-muted">Adding terms creates a new immutable version and supersedes the prior open version.</p>
+          <form action={proposeOfferAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="renewalCaseId" value={risk.renewalCase.id} />
+            <input type="hidden" name="tenancyId" value={tenancyId} />
+            <Field label="Party">
+              <select name="party" className={inputClass} defaultValue={risk.nextAction.code === "REVIEW_COUNTER" ? "LANDLORD" : "LANDLORD"}>
+                <option value="LANDLORD">Landlord proposal</option>
+                <option value="TENANT">Tenant counter</option>
+              </select>
+            </Field>
+            <Field label="Annual rent (AED)"><input name="annualRent" type="number" min="1" step="1" required className={inputClass} /></Field>
+            <Field label="Payment schedule"><input name="paymentSchedule" required className={inputClass} placeholder="4 cheques" /></Field>
+            <Field label="Method"><input name="paymentMethod" className={inputClass} placeholder="Cheque" /></Field>
+            <Button type="submit">Add terms version</Button>
+          </form>
+        </Card>
+      ) : !canWrite && risk.nextAction.code === "PREPARE_TERMS" ? (
+        <ReadOnlyNote>Renewal terms are prepared by an authorized renewal operator. You can review every persisted version above.</ReadOnlyNote>
+      ) : null}
+
+      {risk.nextAction.code === "AWAIT_TENANT" && (
+        <Card className="border-amber-500/40 bg-amber-100/30">
+          <h2 className="font-display text-lg text-navy-900">Awaiting tenant response</h2>
+          <p className="mt-1 text-sm text-muted">The current proposal was delivered. This is a waiting state, not an operator mutation.</p>
+        </Card>
+      )}
+
+      {risk.nextAction.code === "COMPLETE_RENEWAL" && acceptedOffer && (
+        canDecide ? (
+          <CompleteRenewalForm risk={risk} tenancyId={tenancyId} acceptedOffer={acceptedOffer} />
+        ) : (
+          <ReadOnlyNote>Terms are accepted. A fiduciary or manager creates the successor tenancy and completion record.</ReadOnlyNote>
+        )
+      )}
+    </div>
+  );
+}
+
+function CompleteRenewalForm({ risk, tenancyId, acceptedOffer }: { risk: RenewalRisk; tenancyId: string; acceptedOffer: RenewalRisk["offers"][number] }) {
+  const t = risk.tenancy;
+  const successorStart = new Date(t.endDate.getTime() + 86_400_000);
+  const successorEnd = new Date(Date.UTC(successorStart.getUTCFullYear() + 1, successorStart.getUTCMonth(), successorStart.getUTCDate()));
+  const match = acceptedOffer.paymentSchedule.match(/\d+/);
+  const chequeCount = match && Number(match[0]) <= 12 ? match[0] : "";
+  return (
+    <Card>
+      <h2 className="font-display text-lg text-navy-900">Complete renewal</h2>
+      <p className="mb-4 mt-1 text-xs text-muted">
+        Accepted rent <Money amount={acceptedOffer.annualRent} /> is a persisted agreement, separate from the calculated ceiling estimate.
+      </p>
+      <form action={mintRenewedTenancyAction} className="space-y-3">
+        <input type="hidden" name="renewalCaseId" value={risk.renewalCase!.id} />
+        <input type="hidden" name="tenancyId" value={tenancyId} />
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Successor start" required><input name="startDate" type="date" required defaultValue={isoDate(successorStart)} className={inputClass} /></Field>
+          <Field label="Successor end" required><input name="endDate" type="date" required defaultValue={isoDate(successorEnd)} className={inputClass} /></Field>
+          <Field label="Accepted annual rent (AED)" required><input name="annualRent" type="number" min="1" step="1" required defaultValue={acceptedOffer.annualRent} className={inputClass} /></Field>
+          <Field label="Payment terms (optional)"><input name="paymentTermsNote" className={inputClass} placeholder="e.g. 4 cheques" /></Field>
+          <Field label="Generate cheques (count)"><input name="chequeCount" type="number" min="0" max="12" defaultValue={chequeCount} className={inputClass} /></Field>
+        </div>
+        <FormActions note="Creates one successor tenancy and one renewal-completed evidence event. Existing service and concurrency guards remain authoritative.">
+          <SubmitButton pendingLabel="Completing…">Create successor tenancy</SubmitButton>
+        </FormActions>
+      </form>
+    </Card>
+  );
+}
+
+function EvidenceView({
+  events,
+  successor,
+  tenancyId,
+  canReadEvidence,
+  canExportEvidence,
+}: {
+  events: Awaited<ReturnType<typeof getRenewalWorkspace>>["events"];
+  successor: Awaited<ReturnType<typeof getRenewalWorkspace>>["successor"];
+  tenancyId: string;
+  canReadEvidence: boolean;
+  canExportEvidence: boolean;
+}) {
+  return (
+    <div className="space-y-6">
+      {successor && (
+        <Card className="border-verde-100 bg-verde-100/30">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg text-navy-900">Renewal complete</h2>
+              <p className="mt-1 text-sm text-muted">
+                Successor term {formatDubaiDate(successor.startDate)} → {formatDubaiDate(successor.endDate)} · <Money amount={successor.annualRent} />/yr
+              </p>
+            </div>
+            <LinkButton href={successor.href}>Open successor tenancy</LinkButton>
+          </div>
+        </Card>
+      )}
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl text-navy-900">Case evidence receipts</h2>
+            <p className="mt-1 text-sm text-muted">Append-only events created by the existing renewal services. This view writes nothing.</p>
+          </div>
+          {canExportEvidence && <LinkButton href={`/api/v1/tenancies/${tenancyId}/evidence-pack.pdf`}>Download evidence pack</LinkButton>}
+        </div>
+      </Card>
+      {!canReadEvidence ? (
+        <EmptyState title="Evidence detail is restricted" message="Your role can review the case status and task receipts, but the full evidence timeline requires evidence-read access." />
+      ) : events.length === 0 ? (
+        <EmptyState title="No case evidence yet" message="Receipts appear as trusted renewal actions are recorded." />
+      ) : (
+        <ol className="space-y-3">
+          {events.map((event) => (
+            <li id={`event-${event.id}`} key={event.id} className="scroll-mt-32 rounded-xl border border-line bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-navy-900">{event.label}</div>
+                  <div className="mt-1 text-xs text-muted">Recorded by {event.actorType.toLowerCase().replace(/_/g, " ")}</div>
+                </div>
+                <div className="text-right">
+                  <div className="figure text-xs text-navy-700">{formatDubaiDateTime(event.createdAt)}</div>
+                  <div className="mt-1 text-[10px] uppercase tracking-wide text-muted">{event.scopeType.replace(/_/g, " ")}</div>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function DetailsView({
+  risk,
+  successor,
+}: {
+  risk: RenewalRisk;
+  successor: Awaited<ReturnType<typeof getRenewalWorkspace>>["successor"];
+}) {
+  const t = risk.tenancy;
+  const position = risk.position;
+  const total = Math.max(1, daysBetween(t.startDate, t.endDate));
+  const gateLeft = Math.min(100, Math.max(0, (daysBetween(t.startDate, risk.noticeGateAt) / total) * 100));
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KeyDate label="Last day to serve a change notice" value={formatDubaiDate(risk.noticeGateAt)} note={`${t.noticePeriodDays} days before expiry`} hot={!risk.gatePassed && risk.daysToGate <= 30} />
+        <KeyDate label="Contract expiry" value={formatDubaiDate(risk.expiresAt)} note="review recorded notice and terms" />
+        <KeyDate label="Renewal date" value={formatDubaiDate(risk.renewalDate)} note="new term begins" />
+        <KeyDate label="Window remaining" value={risk.gatePassed ? "Gate passed" : `${risk.daysToGate} days`} note="to the recorded notice gate" hot={!risk.gatePassed && risk.daysToGate <= 30} />
+      </div>
+
+      <Card>
+        <h2 className="font-display mb-4 text-lg text-navy-900">Contract timeline</h2>
+        <div className="relative h-3 rounded-full bg-verde-100">
+          <div className="absolute inset-y-0 right-0 rounded-r-full bg-claret-100" style={{ width: `${100 - gateLeft}%` }} />
+          <div className="absolute -top-1 bottom-[-4px] w-0.5 bg-navy-900" style={{ left: `${gateLeft}%` }} />
+        </div>
+        <div className="mt-2 flex justify-between gap-3 text-xs text-muted">
+          <span>{formatDubaiDate(t.startDate)} · start</span>
+          <span className="text-center text-navy-900">notice gate · {formatDubaiDate(risk.noticeGateAt)}</span>
+          <span className="text-right">{formatDubaiDate(t.endDate)} · expiry</span>
+        </div>
+      </Card>
+
+      <Card className="border-gold-300 bg-gold-100/40">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-xl text-navy-900">Index-based position · Decree 43</h2>
+          {risk.latestIndex && (
+            <span className="figure text-xs text-muted">
+              {risk.latestIndex.source} · captured {formatDubaiDate(risk.latestIndex.capturedAt)}
+              {risk.latestIndex.provisional && <span className="ml-2 font-bold text-amber-700">awaiting verification</span>}
+            </span>
+          )}
+        </div>
+        {position ? (
+          <>
+            <CeilingScale
+              current={position.currentRent}
+              ceiling={position.ceiling}
+              bandPct={position.bandPct}
+              markers={risk.offers.filter((offer) => ["SENT", "COUNTERED", "ACCEPTED"].includes(offer.status)).map((offer) => ({ label: `AED ${offer.annualRent.toLocaleString("en-AE")}`, value: offer.annualRent, party: offer.party }))}
+            />
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Fact label="Current rent" value={<Money amount={position.currentRent} />} info="The annual rent recorded on the current tenancy." />
+              <Fact label="Index average market rent" value={<Money amount={position.marketRentAvg} />} info="The captured source figure used for this estimate." />
+              <Fact label="Calculated ceiling estimate" value={<Money amount={position.ceiling} />} info="A rule-based upper-bound estimate, not an entitlement or proposed rent." />
+              <Fact label="Estimated uplift / yr" value={<Money amount={position.valueAtRisk} />} info="The difference between current rent and the calculated estimate." />
+            </div>
+            <p className="mt-4 rounded-lg bg-white/70 p-3 text-sm text-navy-700">
+              The calculation produces an estimated band of <b>{position.bandPct}%</b>. Proposed and accepted rents are separate human decisions retained under Terms.
+            </p>
+          </>
+        ) : (
+          <EmptyState title="No index position" message="No source figure is recorded for this renewal assessment." />
+        )}
+      </Card>
+
+      <Card>
+        <h2 className="font-display text-lg text-navy-900">Responsibility boundary</h2>
+        <p className="mb-4 mt-1 text-xs text-muted">Seneschal owns the software, workflow, and record. Regulated execution remains with an appropriately authorized party.</p>
+        <Table headers={["Layer", "Responsible"]}>
+          <WhoRow layer="Source capture and rule-based estimate" owner="Authorized renewal operator" />
+          <WhoRow layer="Workflow, documents, and evidence record" owner="Seneschal" />
+          <WhoRow layer="Notice decision and service" owner="Decision-authorized fiduciary / manager" />
+          <WhoRow layer="Legal or regulated execution" owner="Appropriately licensed partner where required" />
+        </Table>
+      </Card>
+
+      {successor && (
+        <Card className="border-verde-100 bg-verde-100/30">
+          <h2 className="font-display text-lg text-navy-900">Successor tenancy</h2>
+          <p className="mt-1 text-sm text-muted">{formatDubaiDate(successor.startDate)} → {formatDubaiDate(successor.endDate)} · <Money amount={successor.annualRent} />/yr</p>
+          <div className="mt-3"><LinkButton href={successor.href}>Open successor tenancy</LinkButton></div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 const SERVICE_METHODS = ["EMAIL", "COURIER", "IN_PERSON", "REGISTERED_POST", "OTHER"] as const;
 
-/** Serve / confirm a change notice. A notice reaches SERVED only with proof of
- *  service; without it the record rests at pending-evidence and the timeline does
- *  not advance (enforced server-side in serveNoticeFormal / confirmNoticeService). */
 function NoticeServiceCard({
   renewalCaseId,
   tenancyId,
   notice,
   canDecide,
+  embedded = false,
 }: {
   renewalCaseId: string;
   tenancyId: string;
-  notice: { id: string; status: string; serviceMethod: string | null } | null;
+  notice: RenewalRisk["currentNotice"];
   canDecide: boolean;
+  embedded?: boolean;
 }) {
   const served = notice?.status === "SERVED";
   const pending = notice?.status === "SERVICE_RECORDED_PENDING_EVIDENCE";
-  const label = (m: string) => m.replace(/_/g, " ").toLowerCase();
-  return (
-    <Card className="mb-6 max-w-2xl">
-      <h2 className="font-display mb-1 text-lg text-navy-900">Serve change notice</h2>
+  const label = (method: string) => method.replace(/_/g, " ").toLowerCase();
+  const content = (
+    <>
       <p className="mb-3 text-xs text-muted">
-        A notice is recorded as <b>served</b> only with proof of service — a delivery reference, an
-        uploaded service document, or a signed attestation. Without proof it is held as “service
-        recorded — awaiting evidence” and the renewal timeline does not advance.
+        A notice is recorded as served only with a delivery reference, service document, or signed attestation.
       </p>
-
       {served ? (
-        <div className="flex items-center gap-2 rounded-lg border border-verde-100 bg-verde-100/40 p-3 text-sm text-verde-700">
-          <span aria-hidden>✓</span>
-          <span>
-            Notice served{notice?.serviceMethod ? ` via ${label(notice.serviceMethod)}` : ""}, with
-            evidence on file.
-          </span>
+        <div className="rounded-lg border border-verde-100 bg-verde-100/40 p-3 text-sm text-verde-700">
+          Notice served{notice.serviceMethod ? ` via ${label(notice.serviceMethod)}` : ""}, with evidence on file.
         </div>
       ) : canDecide ? (
         <>
-          {pending && (
-            <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-100/50 p-3 text-sm text-amber-700">
-              Service was recorded but no proof is attached yet. Add a delivery reference, a document,
-              or a signed attestation below to mark it served.
-            </div>
-          )}
+          {pending && <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-100/50 p-3 text-sm text-amber-700">Service is recorded but remains awaiting proof. The case has not advanced to served.</div>}
           <form action={pending ? confirmNoticeServiceAction : serveNoticeAction} className="space-y-3">
             <input type="hidden" name="renewalCaseId" value={renewalCaseId} />
             <input type="hidden" name="tenancyId" value={tenancyId} />
             {pending && <input type="hidden" name="noticeId" value={notice!.id} />}
             <Field label="Service method">
               <select name="serviceMethod" defaultValue={notice?.serviceMethod ?? "EMAIL"} className={inputClass}>
-                {SERVICE_METHODS.map((m) => (
-                  <option key={m} value={m}>{label(m)}</option>
-                ))}
+                {SERVICE_METHODS.map((method) => <option key={method} value={method}>{label(method)}</option>)}
               </select>
             </Field>
             <fieldset className="space-y-3 rounded-lg border border-line bg-ivory-100/60 p-3">
-              <legend className="t-label px-1 text-muted">
-                Proof of service — provide at least one
-              </legend>
+              <legend className="t-label px-1 text-muted">Proof of service — provide at least one</legend>
               <Field label="Delivery reference" hint="Courier tracking no., registered-post ref, or inbox reference.">
                 <input name="serviceRef" className={inputClass} placeholder="courier / inbox ref" />
               </Field>
               <Field label="Service document" hint="A delivery receipt, signed copy, or similar.">
                 <input type="file" name="file" className="text-sm" />
               </Field>
-              <div>
-                <label className="flex items-center gap-2 text-sm text-navy-700">
-                  <input type="checkbox" name="attest" value="yes" />
-                  I attest this notice was served as recorded
-                </label>
-                <div className="mt-2">
-                  <Field label="Attested by (name)">
-                    <input name="attestedBy" className={inputClass} placeholder="your name" />
-                  </Field>
-                </div>
-              </div>
+              <label className="flex items-center gap-2 text-sm text-navy-700"><input type="checkbox" name="attest" value="yes" /> I attest this notice was served as recorded</label>
+              <Field label="Attested by (name)"><input name="attestedBy" className={inputClass} /></Field>
             </fieldset>
-            <FormActions
-              note={
-                pending
-                  ? "At least one proof element above is needed to move this notice to served."
-                  : "With no proof attached, the service is recorded but held as awaiting evidence — it does not count as served."
-              }
-            >
-              <Button type="submit" variant="secondary">
-                {pending ? "Confirm service with evidence" : "Record notice service"}
-              </Button>
+            <FormActions note={pending ? "Proof is required to move the notice to served." : "Without proof, service remains recorded but awaiting evidence."}>
+              <Button type="submit" variant="secondary">{pending ? "Confirm service with evidence" : "Record notice service"}</Button>
             </FormActions>
           </form>
         </>
       ) : (
-        <p className="rounded-lg border border-line bg-ivory-100 p-3 text-sm text-muted">
-          Notice service and its proof are recorded by a decision-authorized fiduciary or manager.
-          You can review the current evidence state here.
-        </p>
+        <ReadOnlyNote>Notice service and proof are recorded by a decision-authorized fiduciary or manager.</ReadOnlyNote>
       )}
-    </Card>
+    </>
   );
+  return embedded ? content : <Card>{content}</Card>;
 }
 
-function Task({ done, label }: { done?: boolean; label: string }) {
-  return (
-    <li className="flex items-center gap-2">
-      <span
-        className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${done ? "bg-verde-100 text-verde-700" : "border border-dashed border-line text-muted"}`}
-      >
-        {done ? "✓" : ""}
-      </span>
-      <span className={done ? "text-navy-900" : "text-muted"}>{label}</span>
-    </li>
-  );
+function ReadOnlyNote({ children }: { children: React.ReactNode }) {
+  return <p className="rounded-lg border border-line bg-ivory-100 p-3 text-sm text-muted">{children}</p>;
 }
 
 function WhoRow({ layer, owner }: { layer: string; owner: string }) {
-  return (
-    <tr>
-      <Td>{layer}</Td>
-      <Td className={owner === "Seneschal" ? "font-medium text-navy-900" : "font-medium text-verde-700"}>{owner}</Td>
-    </tr>
-  );
+  return <tr><Td>{layer}</Td><Td className="font-medium text-navy-900">{owner}</Td></tr>;
 }
 
 function KeyDate({ label, value, note, hot = false }: { label: string; value: string; note: string; hot?: boolean }) {
@@ -615,10 +741,7 @@ function KeyDate({ label, value, note, hot = false }: { label: string; value: st
 function Fact({ label, value, info }: { label: string; value: React.ReactNode; info?: string }) {
   return (
     <div>
-      <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted">
-        {label}
-        {info && <InfoTooltip text={info} />}
-      </div>
+      <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted">{label}{info && <InfoTooltip text={info} />}</div>
       <div className="figure mt-0.5 text-lg text-navy-900">{value}</div>
     </div>
   );
@@ -630,8 +753,6 @@ function deltaOnCurrent(rent: number, current: number): string {
   return `${pct >= 0 ? "+" : ""}${pct}% on current`;
 }
 
-/** The decision signature: where current rent, the offers on the table, and the
- *  Decree 43 ceiling estimate sit on one axis — the negotiating room, at a glance. */
 function CeilingScale({
   current,
   ceiling,
@@ -644,30 +765,18 @@ function CeilingScale({
   markers: { label: string; value: number; party: "LANDLORD" | "TENANT" }[];
 }) {
   if (bandPct === 0 || ceiling <= current) {
-    return (
-      <div className="rounded-lg border border-line bg-white/60 p-4 text-sm text-navy-700">
-        Based on supplied data, the rule-based calculation produces no estimated permissible increase for this renewal.
-        Review the captured source before action.
-      </div>
-    );
+    return <div className="rounded-lg border border-line bg-white/60 p-4 text-sm text-navy-700">The rule-based calculation produces no estimated permissible increase. Review the captured source before action.</div>;
   }
   const span = ceiling - current;
-  const at = (v: number) => Math.min(100, Math.max(0, ((v - current) / span) * 100));
+  const at = (value: number) => Math.min(100, Math.max(0, ((value - current) / span) * 100));
   return (
-    <div className="px-1 pt-8 pb-1">
+    <div className="px-1 pb-1 pt-8">
       <div className="relative h-2 rounded-full bg-gradient-to-r from-verde-100 to-gold-100">
-        {/* ceiling-estimate cap */}
-        <div className="absolute right-0 -top-1.5 h-5 w-0.5 bg-claret-500" />
-        {markers.map((m, i) => (
-          <div key={i} className="absolute top-1/2" style={{ left: `${at(m.value)}%` }}>
-            <span
-              className={`figure absolute -top-7 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold ${m.party === "TENANT" ? "text-gold-700" : "text-navy-900"}`}
-            >
-              {m.label}
-            </span>
-            <span
-              className={`absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white ${m.party === "TENANT" ? "bg-gold-500" : "bg-navy-900"}`}
-            />
+        <div className="absolute -top-1.5 right-0 h-5 w-0.5 bg-claret-500" />
+        {markers.map((marker, index) => (
+          <div key={`${marker.label}-${index}`} className="absolute top-1/2" style={{ left: `${at(marker.value)}%` }}>
+            <span className={`figure absolute -top-7 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold ${marker.party === "TENANT" ? "text-gold-700" : "text-navy-900"}`}>{marker.label}</span>
+            <span className={`absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white ${marker.party === "TENANT" ? "bg-gold-500" : "bg-navy-900"}`} />
           </div>
         ))}
       </div>
@@ -675,12 +784,6 @@ function CeilingScale({
         <span>current · AED {current.toLocaleString("en-AE")}</span>
         <span className="text-claret-700">ceiling estimate · AED {ceiling.toLocaleString("en-AE")}</span>
       </div>
-      {markers.length > 0 && (
-        <div className="mt-2 flex gap-4 text-[10px] text-muted">
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-navy-900" /> landlord</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-gold-500" /> tenant</span>
-        </div>
-      )}
     </div>
   );
 }
