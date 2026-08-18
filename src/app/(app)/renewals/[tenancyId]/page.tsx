@@ -19,6 +19,7 @@ import {
   Td,
 } from "@/components/ui";
 import { RenewalTaskPath } from "@/components/renewals/RenewalTaskPath";
+import { EvidenceEventCard } from "@/components/evidence/EvidenceEventCard";
 import { SubmitButton } from "@/components/SubmitButton";
 import { InfoTooltip } from "@/components/Tooltip";
 import {
@@ -540,7 +541,10 @@ function EvidenceView({
             <h2 className="font-display text-xl text-navy-900">Case evidence receipts</h2>
             <p className="mt-1 text-sm text-muted">Append-only events created by the existing renewal services. This view writes nothing.</p>
           </div>
-          {canExportEvidence && <LinkButton href={`/api/v1/tenancies/${tenancyId}/evidence-pack.pdf`}>Download evidence pack</LinkButton>}
+          <div className="flex flex-wrap gap-2">
+            {canReadEvidence && <LinkButton href={`/evidence?tenancy=${tenancyId}&category=renewals&print=1`}>Print activity record</LinkButton>}
+            {canExportEvidence && <LinkButton href={`/api/v1/tenancies/${tenancyId}/evidence-pack.pdf`}>Download evidence pack</LinkButton>}
+          </div>
         </div>
       </Card>
       {!canReadEvidence ? (
@@ -549,20 +553,7 @@ function EvidenceView({
         <EmptyState title="No case evidence yet" message="Receipts appear as trusted renewal actions are recorded." />
       ) : (
         <ol className="space-y-3">
-          {events.map((event) => (
-            <li id={`event-${event.id}`} key={event.id} className="scroll-mt-32 rounded-xl border border-line bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="font-semibold text-navy-900">{event.label}</div>
-                  <div className="mt-1 text-xs text-muted">Recorded by {event.actorType.toLowerCase().replace(/_/g, " ")}</div>
-                </div>
-                <div className="text-right">
-                  <div className="figure text-xs text-navy-700">{formatDubaiDateTime(event.createdAt)}</div>
-                  <div className="mt-1 text-[10px] uppercase tracking-wide text-muted">{event.scopeType.replace(/_/g, " ")}</div>
-                </div>
-              </div>
-            </li>
-          ))}
+          {events.map((event) => <li key={event.id}><EvidenceEventCard event={event} /></li>)}
         </ol>
       )}
     </div>

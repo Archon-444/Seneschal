@@ -5,17 +5,19 @@ import { hasCapability } from "@/server/authz";
 import { getProofRequest } from "@/server/services/proofs";
 import { listSecureLinks } from "@/server/services/secureLinks";
 import { listDocuments } from "@/server/services/documents";
-import { listEvidence, EVIDENCE_LABELS } from "@/server/services/evidenceQuery";
+import { getEvidenceTimeline } from "@/server/services/evidenceReadModel";
 import { formatDubaiDate } from "@/server/calculators/dates";
-import { BackLink, Badge, Card, DubaiDate, Field, inputClass, PageHeader, resolveScopeLink, ScopeLink, Table, Td } from "@/components/ui";
+import { BackLink, Badge, Card, DubaiDate, Field, inputClass, LinkButton, PageHeader, resolveScopeLink, ScopeLink, Table, Td } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { decideProofAction, resendProofAction, revokeLinkAction } from "../../actions";
+import { EvidenceEventCard } from "@/components/evidence/EvidenceEventCard";
 
 export default async function ProofDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ctx = await requireCtx();
   const canWrite = hasCapability(ctx, "proofs.write");
   const canDecide = hasCapability(ctx, "proofs.decide");
+  const canReadEvidence = hasCapability(ctx, "evidence.read");
 
   let request;
   try {
@@ -26,7 +28,7 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
   const [links, docs, evidence] = await Promise.all([
     listSecureLinks(ctx, "PROOF_REQUEST", id),
     listDocuments(ctx, { scopeType: "PROOF_REQUEST", scopeId: id }),
-    listEvidence(ctx, { scopeType: "PROOF_REQUEST", scopeId: id }),
+    canReadEvidence ? getEvidenceTimeline(ctx, { proof: id, pageSize: 100, sort: "asc" }) : Promise.resolve(null),
   ]);
   const decidable = request!.status === "SUBMITTED" || request!.status === "OVERDUE";
 
@@ -115,18 +117,17 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
           <p className="mt-2 text-xs text-navy-300">Tokens are never stored or shown again — only hashes.</p>
         </div>
         <div>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Evidence trail</h2>
-          <ol className="relative ml-3 space-y-4 border-l border-ivory-300 pl-6">
-            {evidence.map((e) => (
-              <li key={e.id}>
-                <span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-gold-500" />
-                <div className="text-sm font-medium text-navy-900">{EVIDENCE_LABELS[e.type] ?? e.type}</div>
-                <div className="figure text-xs text-navy-300">
-                  {e.createdAt.toISOString().replace("T", " ").slice(0, 16)} UTC · {e.actorType}
-                </div>
-              </li>
-            ))}
-          </ol>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="font-display text-lg text-navy-900">Evidence trail</h2>
+            {canReadEvidence && <LinkButton href={`/evidence?proof=${id}`}>Open filtered evidence</LinkButton>}
+          </div>
+          {!canReadEvidence || !evidence ? (
+            <p className="text-sm text-muted">Your role can review the proof request, but the evidence ledger requires evidence-read access.</p>
+          ) : evidence.events.length === 0 ? (
+            <p className="text-sm text-muted">No proof evidence is recorded yet.</p>
+          ) : (
+            <ol className="space-y-4">{evidence.events.map((event) => <li key={event.id}><EvidenceEventCard event={event} /></li>)}</ol>
+          )}
         </div>
       </div>
     </>

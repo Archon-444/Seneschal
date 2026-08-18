@@ -5,7 +5,7 @@ import { hasCapability } from "@/server/authz";
 import { getProperty } from "@/server/services/properties";
 import { getRenewalRisk } from "@/server/services/renewals";
 import { listDocuments } from "@/server/services/documents";
-import { listEvidence, EVIDENCE_LABELS } from "@/server/services/evidenceQuery";
+import { getEvidenceTimeline } from "@/server/services/evidenceReadModel";
 import { daysBetween, todayInDubai } from "@/server/calculators/dates";
 import { Badge, BackLink, Card, DubaiDate, EmptyState, Field, inputClass, LinkButton, Money, PageHeader, Table, Td } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -16,6 +16,7 @@ import {
 } from "../../actions";
 import { PaymentRow } from "./PaymentRow";
 import { UploadForm } from "./UploadForm";
+import { EvidenceEventCard } from "@/components/evidence/EvidenceEventCard";
 
 const TABS = ["tenancy", "payments", "documents", "evidence"] as const;
 
@@ -35,6 +36,7 @@ export default async function PropertyDetailPage({
   const canAcknowledgeMoveIn = hasCapability(ctx, "movein.acknowledge");
   const canWritePayments = hasCapability(ctx, "payments.write");
   const canWriteDocuments = hasCapability(ctx, "documents.write");
+  const canReadEvidence = hasCapability(ctx, "evidence.read");
 
   let property;
   try {
@@ -49,7 +51,7 @@ export default async function PropertyDetailPage({
         ? [...propertyDocs, ...(await listDocuments(ctx, { scopeType: "TENANCY", scopeId: tenancy.id }))]
         : propertyDocs,
     ),
-    listEvidence(ctx, { propertyId: id, limit: 100 }),
+    canReadEvidence ? getEvidenceTimeline(ctx, { property: id, pageSize: 100 }) : Promise.resolve(null),
   ]);
   const tenancyFull = tenancy
     ? await import("@/server/services/tenancies").then((m) => m.getTenancy(ctx, tenancy.id))
@@ -297,22 +299,15 @@ export default async function PropertyDetailPage({
       )}
 
       {tab === "evidence" && (
-        evidence.length === 0 ? (
+        !canReadEvidence || !evidence ? (
+          <EmptyState title="Evidence detail is restricted" message="Your role can review the property record, but the evidence ledger requires evidence-read access." />
+        ) : evidence.events.length === 0 ? (
           <EmptyState title="No evidence yet" message="Actions on this property will appear here." />
         ) : (
-          <ol className="relative ml-3 space-y-4 border-l border-ivory-300 pl-6">
-            {evidence.map((e) => (
-              <li key={e.id}>
-                <span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-gold-500" />
-                <div className="text-sm font-medium text-navy-900">
-                  {EVIDENCE_LABELS[e.type] ?? e.type}
-                </div>
-                <div className="figure text-xs text-navy-300">
-                  {e.createdAt.toISOString().replace("T", " ").slice(0, 16)} UTC · {e.actorType}
-                </div>
-              </li>
-            ))}
-          </ol>
+          <div>
+            <div className="mb-4 flex justify-end"><LinkButton href={`/evidence?property=${id}`}>Open filtered evidence</LinkButton></div>
+            <ol className="space-y-4">{evidence.events.map((event) => <li key={event.id}><EvidenceEventCard event={event} /></li>)}</ol>
+          </div>
         )
       )}
     </>

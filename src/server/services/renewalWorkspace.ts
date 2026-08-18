@@ -2,6 +2,7 @@ import type { ActorType, EvidenceType } from "@prisma/client";
 import { hasCapability, type AuthzContext } from "../authz";
 import { prisma } from "../db";
 import { EVIDENCE_LABELS, listEvidenceForTenancy } from "./evidenceQuery";
+import { getEvidenceTimeline } from "./evidenceReadModel";
 import { getRenewalRisk, type RenewalRisk } from "./renewals";
 import type { RenewalNextActionCode } from "./renewalNextAction";
 
@@ -205,6 +206,9 @@ export async function getRenewalWorkspace(ctx: AuthzContext, tenancyId: string) 
   const events = canReadEvidence
     ? (await listEvidenceForTenancy(ctx, tenancyId)).filter((event) => RENEWAL_EVIDENCE.has(event.type))
     : [];
+  const presentedTimeline = canReadEvidence
+    ? await getEvidenceTimeline(ctx, { tenancy: tenancyId, category: "renewals", pageSize: 100, sort: "asc" })
+    : null;
   const receipts: Partial<Record<RenewalTaskCode, RenewalTaskReceipt>> = {};
 
   for (const code of Object.keys(TASK_EVIDENCE) as RenewalTaskCode[]) {
@@ -256,15 +260,7 @@ export async function getRenewalWorkspace(ctx: AuthzContext, tenancyId: string) 
   return {
     risk,
     tasks,
-    events: events.map((event) => ({
-      id: event.id,
-      type: event.type,
-      label: EVIDENCE_LABELS[event.type] ?? event.type.replace(/_/g, " ").toLowerCase(),
-      actorType: event.actorType,
-      createdAt: event.createdAt,
-      scopeType: event.scopeType,
-      scopeId: event.scopeId,
-    })),
+    events: presentedTimeline?.events ?? [],
     successor: successor
       ? { ...successor, annualRent: Number(successor.annualRent), href: `/renewals/${successor.id}` }
       : null,
