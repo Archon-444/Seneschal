@@ -94,6 +94,7 @@ describe("absentee-owner APPROVAL link", () => {
     const { offer, rc } = await openCaseAndOffer();
     const { url } = await requestOwnerApproval(W.ctx, { offerId: offer.id, contactId: ownerId });
     const token = url.split("/link/")[1]!;
+    const caseBefore = (await prisma.renewalCase.findUniqueOrThrow({ where: { id: rc.id } })).status;
 
     const decided = await decideApprovalViaLink(token, "APPROVED");
     expect(decided.decision).toBe("APPROVED");
@@ -113,15 +114,16 @@ describe("absentee-owner APPROVAL link", () => {
     const link = await prisma.secureLink.findFirstOrThrow({ where: { purpose: "APPROVAL", scopeId: offer.id } });
     expect(link.useCount).toBe(1);
 
-    // Record, not a gate: offer and case are unchanged.
+    // Record, not a gate: offer and case are unchanged (proposeOffer already moved the case to NEGOTIATING).
     expect((await prisma.offer.findUniqueOrThrow({ where: { id: offer.id } })).status).toBe("SENT");
-    expect((await prisma.renewalCase.findUniqueOrThrow({ where: { id: rc.id } })).status).toBe("ASSESSING");
+    expect((await prisma.renewalCase.findUniqueOrThrow({ where: { id: rc.id } })).status).toBe(caseBefore);
   });
 
   it("REJECTED via link records APPROVAL_REJECTED and leaves offer/case untouched", async () => {
     const { offer, rc } = await openCaseAndOffer();
     const { url } = await requestOwnerApproval(W.ctx, { offerId: offer.id, contactId: ownerId });
     const token = url.split("/link/")[1]!;
+    const caseBefore = (await prisma.renewalCase.findUniqueOrThrow({ where: { id: rc.id } })).status;
 
     await decideApprovalViaLink(token, "REJECTED", "too high");
     const rejected = await prisma.evidenceEvent.findFirstOrThrow({
@@ -130,7 +132,7 @@ describe("absentee-owner APPROVAL link", () => {
     expect(rejected.actorType).toBe("TENANT_LINK");
     expect(rejected.payload).toMatchObject({ decision: "REJECTED", comment: "too high" });
     expect((await prisma.offer.findUniqueOrThrow({ where: { id: offer.id } })).status).toBe("SENT");
-    expect((await prisma.renewalCase.findUniqueOrThrow({ where: { id: rc.id } })).status).toBe("ASSESSING");
+    expect((await prisma.renewalCase.findUniqueOrThrow({ where: { id: rc.id } })).status).toBe(caseBefore);
   });
 
   it("second decide on the same link 409s and writes no second evidence row", async () => {
