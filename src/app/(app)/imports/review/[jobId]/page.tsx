@@ -169,6 +169,7 @@ export default async function ExtractionReviewPage({
     seq: number;
     dueDate: string;
     amount: number;
+    instrument?: string;
     chequeNo?: string;
     bank?: string;
   }[];
@@ -373,6 +374,9 @@ export default async function ExtractionReviewPage({
                       <tr key={item.seq} className="border-t border-ivory-200">
                         <td className="py-1.5 pr-2">
                           <input type="hidden" name={`pay_${i}_seq`} value={item.seq} />
+                        {/* The contract's instrument is extracted; round-trip it so a
+                            transfer or DDS schedule is not recorded as cheques. */}
+                        <input type="hidden" name={`pay_${i}_instrument`} value={item.instrument ?? "CHEQUE"} />
                           <span className="figure">{item.seq}</span>
                         </td>
                         <td className="pr-2">

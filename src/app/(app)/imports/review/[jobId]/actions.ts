@@ -10,6 +10,7 @@ import {
   type ExtractionFields,
 } from "@/server/services/extraction";
 import type { ImportPartyFields, ImportRowData } from "@/server/services/imports";
+import { diffCorrections } from "./corrections";
 
 export type ReviewCommitState = { error: string } | null;
 
@@ -53,13 +54,16 @@ function paymentItems(formData: FormData): ImportRowData["paymentItems"] {
     const dueDate = str(formData, `pay_${i}_dueDate`);
     const amount = num(formData, `pay_${i}_amount`);
     if (!dueDate || amount == null || !Number.isFinite(amount)) continue;
+    const instrument = str(formData, `pay_${i}_instrument`);
     items.push({
       seq: num(formData, `pay_${i}_seq`) ?? i + 1,
       dueDate,
       amount,
       chequeNo: str(formData, `pay_${i}_chequeNo`),
       bank: str(formData, `pay_${i}_bank`),
-      instrument: "CHEQUE",
+      // The contract's own instrument, round-tripped from the extraction. Forcing
+      // CHEQUE here recorded every transfer/DDS schedule as cheques.
+      instrument: (instrument as NonNullable<ImportRowData["paymentItems"]>[number]["instrument"]) ?? "CHEQUE",
     });
   }
   return items;
@@ -107,30 +111,7 @@ export async function commitReviewedExtractionAction(
     paymentItems: paymentItems(formData),
   };
 
-  const scalarKeys: (keyof ImportRowData)[] = [
-    "community",
-    "building",
-    "unitNo",
-    "propertyType",
-    "bedrooms",
-    "usage",
-    "ejariNo",
-    "startDate",
-    "endDate",
-    "annualRent",
-    "depositAmount",
-    "noticePeriodDays",
-    "landlordName",
-    "tenantName",
-  ];
-  const corrections: Record<string, { from: unknown; to: unknown }> = {};
-  for (const key of scalarKeys) {
-    const before = original[key]?.value ?? null;
-    const after = reviewed[key] ?? null;
-    if (String(before ?? "") !== String(after ?? "")) {
-      corrections[key] = { from: before, to: after };
-    }
-  }
+  const corrections = diffCorrections(original, reviewed);
 
   try {
     const { propertyId } = await reviewAndCommit(ctx, jobId, reviewed, corrections);
