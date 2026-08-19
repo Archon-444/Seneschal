@@ -1,4 +1,4 @@
-import { Prisma, type ContactKind, type ImportSource } from "@prisma/client";
+import { Prisma, type ContactKind, type ImportSource, type ScopeType } from "@prisma/client";
 import { prisma } from "../db";
 import {
   type AuthzContext,
@@ -15,10 +15,23 @@ import { toUtcDateOnly } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
 import { evenChequeSchedule } from "./payments";
 import { evaluateRiskForTenancy, raiseTenancyOverlap } from "./risk";
+import { findContactReferences } from "./contactReferences";
 
 // ImportBatch machinery (T6.1 — release blocking). Nothing writes to trusted
 // records until commit; conflicts block the ROW, not the batch; commit is
 // atomic; rollback archives created records via createdRecordRefs.
+
+/**
+ * One record a commit created (or one document scope it moved), remembered on
+ * ImportRow.createdRecordRefs so rollback can undo exactly what was done.
+ * `prior` is only set for DocumentScope, and carries the scope the document
+ * held before the commit re-pointed it at the new tenancy.
+ */
+export interface ImportRecordRef {
+  type: "Contact" | "Property" | "Tenancy" | "PaymentItem" | "DocumentScope";
+  id: string;
+  prior?: { scopeType: string; scopeId: string | null };
+}
 
 export interface ImportPartyFields {
   name?: string;
@@ -197,11 +210,18 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
 
   const committable = batch!.rows.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED");
   const createdTenancyIds: string[] = [];
+  // AuditEvent stores only a payloadHash, so the readable from/to of each
+  // document move rides on the batch's evidence payload (MEDIUM-6).
+  const documentRescopes: {
+    documentId: string;
+    from: { scopeType: string; scopeId: string | null };
+    to: { scopeType: string; scopeId: string | null };
+  }[] = [];
 
   await prisma.$transaction(async (tx) => {
     for (const row of committable) {
       const data = row.mappedJson as unknown as ImportRowData;
-      const refs: { type: string; id: string }[] = [];
+      const refs: ImportRecordRef[] = [];
 
       const landlord = await resolveImportParty(tx, ctx, {
         kind: "OWNER",
@@ -303,10 +323,45 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
           where: { id: contractDocId, workspaceId: ctx.workspaceId },
         });
         if (doc) {
+          // scopeType/scopeId is permission-bearing: listDocuments and
+          // contactScopedWhere resolve readability from it. Moving a document
+          // that is already attached to another record would take it out of
+          // that record's scope, so refuse rather than silently re-point.
+          const attachedElsewhere =
+            (doc.scopeType === "TENANCY" && doc.scopeId !== tenancy.id) ||
+            (doc.scopeType === "PROPERTY" && doc.scopeId !== property.id);
+          if (attachedElsewhere) {
+            throw new AuthzError(
+              "That document is already attached to another record; detach it first",
+              422,
+            );
+          }
+          const prior = { scopeType: doc.scopeType as string, scopeId: doc.scopeId };
           await tx.document.update({
             where: { id: contractDocId },
             data: { scopeType: "TENANCY", scopeId: tenancy.id },
           });
+          // Remembered so rollback can put it back, and audited because a
+          // scope change decides who can read the file.
+          refs.push({ type: "DocumentScope", id: contractDocId, prior });
+          documentRescopes.push({
+            documentId: contractDocId,
+            from: prior,
+            to: { scopeType: "TENANCY", scopeId: tenancy.id },
+          });
+          await recordAudit(
+            {
+              workspaceId: ctx.workspaceId,
+              actorType: ctx.isStaff ? "STAFF" : "USER",
+              actorId: ctx.userId,
+              onBehalfOfId: ctx.onBehalfOfId,
+              verb: "document.rescope",
+              objectType: "Document",
+              objectId: contractDocId,
+              payload: { from: prior, to: { scopeType: "TENANCY", scopeId: tenancy.id } },
+            },
+            tx,
+          );
         }
       }
 
@@ -350,6 +405,7 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
         payload: {
           committedRows: committable.length,
           conflictRows: batch!.rows.filter((r) => r.status === "CONFLICT").length,
+          documentRescopes,
         },
       },
       tx,
@@ -408,9 +464,21 @@ export async function rollbackImportBatch(ctx: AuthzContext, batchId: string) {
   assertSameWorkspace(ctx, batch);
   if (batch!.status !== "COMMITTED") throw new AuthzError("Only committed batches roll back", 422);
 
+  const keptContacts: { id: string; referencedBy: string[] }[] = [];
+  const documentRescopes: {
+    documentId: string;
+    from: { scopeType: string; scopeId: string | null };
+    to: { scopeType: string; scopeId: string | null };
+  }[] = [];
+
   await prisma.$transaction(async (tx) => {
+    // Contacts are archived in a second pass, after this batch's own properties
+    // and tenancies are archived, so a batch's own rows never count as the live
+    // reference that keeps its contact alive (MEDIUM-7).
+    const createdContactIds: string[] = [];
+
     for (const row of batch!.rows) {
-      const refs = (row.createdRecordRefs as { type: string; id: string }[] | null) ?? [];
+      const refs = (row.createdRecordRefs as unknown as ImportRecordRef[] | null) ?? [];
       for (const ref of refs) {
         if (ref.type === "Property") {
           await tx.property.update({ where: { id: ref.id }, data: { archivedAt: new Date() } });
@@ -425,10 +493,54 @@ export async function rollbackImportBatch(ctx: AuthzContext, batchId: string) {
           });
         } else if (ref.type === "PaymentItem") {
           await tx.paymentItem.update({ where: { id: ref.id }, data: { status: "CANCELLED" } });
+        } else if (ref.type === "DocumentScope" && ref.prior) {
+          // Commit re-pointed this document at the new tenancy, and scopeType/
+          // scopeId is what decides who can read it. Undo the move so the file
+          // does not stay attached to an archived tenancy (MEDIUM-6).
+          const doc = await tx.document.findFirst({
+            where: { id: ref.id, workspaceId: ctx.workspaceId },
+          });
+          if (doc) {
+            await tx.document.update({
+              where: { id: ref.id },
+              data: { scopeType: ref.prior.scopeType as ScopeType, scopeId: ref.prior.scopeId },
+            });
+            const move = {
+              documentId: ref.id,
+              from: { scopeType: doc.scopeType as string, scopeId: doc.scopeId },
+              to: ref.prior,
+            };
+            documentRescopes.push(move);
+            await recordAudit(
+              {
+                workspaceId: ctx.workspaceId,
+                actorType: ctx.isStaff ? "STAFF" : "USER",
+                actorId: ctx.userId,
+                onBehalfOfId: ctx.onBehalfOfId,
+                verb: "document.rescope",
+                objectType: "Document",
+                objectId: ref.id,
+                payload: { ...move, reason: "import.rollback" },
+              },
+              tx,
+            );
+          }
         } else if (ref.type === "Contact") {
-          await tx.contact.update({ where: { id: ref.id }, data: { archivedAt: new Date() } });
+          createdContactIds.push(ref.id);
         }
       }
+    }
+
+    for (const contactId of new Set(createdContactIds)) {
+      const referencedBy = await findContactReferences(ctx.workspaceId, contactId, tx);
+      if (referencedBy.length) {
+        // A later batch reused this contact, or an operator attached it
+        // elsewhere. Archiving it would blank a live record's counterparty, so
+        // keep it and say so on the rollback evidence event.
+        keptContacts.push({ id: contactId, referencedBy });
+        continue;
+      }
+      await tx.contact.update({ where: { id: contactId }, data: { archivedAt: new Date() } });
     }
     await tx.importBatch.update({
       where: { id: batchId },
@@ -443,7 +555,7 @@ export async function rollbackImportBatch(ctx: AuthzContext, batchId: string) {
         onBehalfOfId: ctx.onBehalfOfId,
         scopeType: "IMPORT_BATCH",
         scopeId: batchId,
-        payload: { rows: batch!.rows.length },
+        payload: { rows: batch!.rows.length, keptContacts, documentRescopes },
       },
       tx,
     );

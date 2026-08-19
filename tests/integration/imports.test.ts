@@ -217,3 +217,209 @@ describe("import parties", () => {
     expect(total).toBe(72000);
   });
 });
+
+// Review findings MEDIUM-6 and MEDIUM-7 on the scan → review → commit path.
+// Commit moves the scanned contract document onto the new tenancy, and
+// scopeType/scopeId is what decides who can read that file; rollback used to
+// leave it pointing at an archived tenancy and never logged the move. Rollback
+// also archived every contact the batch created, even one a later live batch
+// had since reused.
+
+async function makeContractDoc(batchId: string, fileName = "contract.pdf") {
+  return prisma.document.create({
+    data: {
+      workspaceId: W.workspaceId,
+      scopeType: "IMPORT_BATCH",
+      scopeId: batchId,
+      kind: "TENANCY_CONTRACT",
+      fileName,
+      mime: "application/pdf",
+      sizeBytes: 1024,
+      storageKey: `test/${fileName}-${batchId}`,
+      sha256: "0".repeat(64),
+    },
+  });
+}
+
+describe("import document scope (MEDIUM-6)", () => {
+  it("audits the re-scope on commit and restores the prior scope on rollback", async () => {
+    const batch = await imports.createImportBatch(W.ctx, "DOCUMENTS");
+    const doc = await makeContractDoc(batch.id);
+    await prisma.importBatch.update({ where: { id: batch.id }, data: { fileDocId: doc.id } });
+    await imports.addImportRows(W.ctx, batch.id, [{ raw: {}, mapped: row() }]);
+    await imports.commitImportBatch(W.ctx, batch.id);
+
+    const tenancy = await prisma.tenancy.findFirst({ where: { ejariNo: "2025/118402" } });
+    const moved = await prisma.document.findUnique({ where: { id: doc.id } });
+    expect(moved!.scopeType).toBe("TENANCY");
+    expect(moved!.scopeId).toBe(tenancy!.id);
+
+    // security log: the move is attributed and hashed
+    const commitAudit = await prisma.auditEvent.findFirst({
+      where: { verb: "document.rescope", objectId: doc.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(commitAudit).toBeTruthy();
+    expect(commitAudit!.payloadHash).toBeTruthy();
+    // evidence carries the readable from/to, since AuditEvent stores only a hash
+    const commitEvidence = await prisma.evidenceEvent.findFirst({
+      where: { type: "IMPORT_COMMITTED", scopeId: batch.id },
+    });
+    expect(commitEvidence!.payload).toMatchObject({
+      documentRescopes: [
+        {
+          documentId: doc.id,
+          from: { scopeType: "IMPORT_BATCH", scopeId: batch.id },
+          to: { scopeType: "TENANCY", scopeId: tenancy!.id },
+        },
+      ],
+    });
+
+    await imports.rollbackImportBatch(W.ctx, batch.id);
+
+    const restored = await prisma.document.findUnique({ where: { id: doc.id } });
+    expect(restored!.scopeType).toBe("IMPORT_BATCH");
+    expect(restored!.scopeId).toBe(batch.id);
+    // the undo is logged too, so the file's readability history is complete
+    const audits = await prisma.auditEvent.findMany({
+      where: { verb: "document.rescope", objectId: doc.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(audits).toHaveLength(2);
+    const rollbackEvidence = await prisma.evidenceEvent.findFirst({
+      where: { type: "IMPORT_ROLLED_BACK", scopeId: batch.id },
+    });
+    expect(rollbackEvidence!.payload).toMatchObject({
+      documentRescopes: [
+        {
+          documentId: doc.id,
+          from: { scopeType: "TENANCY", scopeId: tenancy!.id },
+          to: { scopeType: "IMPORT_BATCH", scopeId: batch.id },
+        },
+      ],
+    });
+  });
+
+  it("refuses to steal a document already attached to another tenancy", async () => {
+    const first = await imports.createImportBatch(W.ctx, "DOCUMENTS");
+    const doc = await makeContractDoc(first.id);
+    await prisma.importBatch.update({ where: { id: first.id }, data: { fileDocId: doc.id } });
+    await imports.addImportRows(W.ctx, first.id, [{ raw: {}, mapped: row() }]);
+    await imports.commitImportBatch(W.ctx, first.id);
+    const firstTenancy = await prisma.tenancy.findFirst({ where: { ejariNo: "2025/118402" } });
+
+    // a second batch pointed at the same already-attached document
+    const second = await imports.createImportBatch(W.ctx, "DOCUMENTS");
+    await prisma.importBatch.update({ where: { id: second.id }, data: { fileDocId: doc.id } });
+    await imports.addImportRows(W.ctx, second.id, [
+      {
+        raw: {},
+        mapped: row({ ejariNo: "2026/000077", unitNo: "902", startDate: "2026-10-01", endDate: "2027-09-30" }),
+      },
+    ]);
+    await expect(imports.commitImportBatch(W.ctx, second.id)).rejects.toMatchObject({ status: 422 });
+
+    // the first tenancy keeps its evidence and the failed commit created nothing
+    const still = await prisma.document.findUnique({ where: { id: doc.id } });
+    expect(still!.scopeId).toBe(firstTenancy!.id);
+    expect(await prisma.tenancy.count({ where: { ejariNo: "2026/000077" } })).toBe(0);
+  });
+});
+
+describe("import rollback contact safety (MEDIUM-7)", () => {
+  it("keeps a contact a later live batch still references, and says so on the evidence event", async () => {
+    const first = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, first.id, [
+      { raw: {}, mapped: row({ landlordName: "Al Noor Properties LLC", tenantName: "Ricardo Fernandes" }) },
+    ]);
+    await imports.commitImportBatch(W.ctx, first.id);
+    const landlordId = (await prisma.tenancy.findFirst({ where: { ejariNo: "2025/118402" } }))!
+      .landlordContactId!;
+
+    // a second batch reuses that landlord and stays committed
+    const second = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, second.id, [
+      {
+        raw: {},
+        mapped: row({
+          ejariNo: "2026/000002",
+          unitNo: "901",
+          startDate: "2026-10-01",
+          endDate: "2027-09-30",
+          landlordName: "al noor properties llc",
+          tenantName: "New Tenant",
+        }),
+      },
+    ]);
+    await imports.commitImportBatch(W.ctx, second.id);
+    expect((await prisma.tenancy.findFirst({ where: { ejariNo: "2026/000002" } }))!.landlordContactId)
+      .toBe(landlordId);
+
+    // rolling back the batch that CREATED the landlord must not blank the
+    // second tenancy's counterparty
+    await imports.rollbackImportBatch(W.ctx, first.id);
+
+    const landlord = await prisma.contact.findUnique({ where: { id: landlordId } });
+    expect(landlord!.archivedAt).toBeNull();
+    // the tenant only this batch used is still archived
+    const tenant = await prisma.contact.findFirst({
+      where: { workspaceId: W.workspaceId, name: "Ricardo Fernandes" },
+    });
+    expect(tenant!.archivedAt).toBeTruthy();
+
+    const evidence = await prisma.evidenceEvent.findFirst({
+      where: { type: "IMPORT_ROLLED_BACK", scopeId: first.id },
+    });
+    const kept = (evidence!.payload as { keptContacts: { id: string; referencedBy: string[] }[] })
+      .keptContacts;
+    expect(kept).toHaveLength(1);
+    expect(kept[0].id).toBe(landlordId);
+    // the second batch's own property and tenancy are both live referrers
+    expect(kept[0].referencedBy).toEqual(expect.arrayContaining(["Property", "Tenancy"]));
+  });
+
+  it("still archives a contact only this batch used", async () => {
+    const batch = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, batch.id, [
+      { raw: {}, mapped: row({ landlordName: "Sole Use LLC", tenantName: "Sole Tenant" }) },
+    ]);
+    await imports.commitImportBatch(W.ctx, batch.id);
+    await imports.rollbackImportBatch(W.ctx, batch.id);
+
+    for (const name of ["Sole Use LLC", "Sole Tenant"]) {
+      const c = await prisma.contact.findFirst({ where: { workspaceId: W.workspaceId, name } });
+      expect(c!.archivedAt).toBeTruthy();
+    }
+    const evidence = await prisma.evidenceEvent.findFirst({
+      where: { type: "IMPORT_ROLLED_BACK", scopeId: batch.id },
+    });
+    expect(evidence!.payload).toMatchObject({ keptContacts: [] });
+  });
+
+  it("keeps a contact an operator attached elsewhere, outside any import", async () => {
+    const batch = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, batch.id, [
+      { raw: {}, mapped: row({ landlordName: "Attached Elsewhere LLC", tenantName: "Passing Tenant" }) },
+    ]);
+    await imports.commitImportBatch(W.ctx, batch.id);
+    const landlordId = (await prisma.tenancy.findFirst({ where: { ejariNo: "2025/118402" } }))!
+      .landlordContactId!;
+
+    // a proof request assigned to that contact — no Property or Tenancy involved
+    await prisma.proofRequest.create({
+      data: {
+        workspaceId: W.workspaceId,
+        scopeType: "WORKSPACE",
+        scopeId: null,
+        title: "Ownership evidence",
+        requiredEvidence: "Title deed",
+        assignedContactId: landlordId,
+        createdById: W.userId,
+      },
+    });
+
+    await imports.rollbackImportBatch(W.ctx, batch.id);
+    const landlord = await prisma.contact.findUnique({ where: { id: landlordId } });
+    expect(landlord!.archivedAt).toBeNull();
+  });
+});
