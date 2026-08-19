@@ -247,8 +247,22 @@ export function LinkButton({ href, children, variant = "secondary" }: { href: st
     primary: "bg-navy-900 text-ivory-50 hover:brightness-110",
     secondary: "border border-line bg-white text-navy-700 hover:bg-ivory-100",
   }[variant];
+  const className = `inline-block rounded-lg px-4 py-2.5 text-sm font-bold transition ${styles}`;
+  // API routes are file downloads (evidence pack, CSV export), not client-navigable
+  // pages. next/link prefetches every href it is given, so pointing it at one makes
+  // the router fetch that route as an RSC payload, which it cannot serve: the
+  // evidence-pack route 500s on every renewal page render. A plain anchor is the
+  // correct element for a download, and it also avoids a client-side navigation
+  // attempt on click that the router cannot satisfy.
+  if (href.startsWith("/api/")) {
+    return (
+      <a href={href} className={className}>
+        {children}
+      </a>
+    );
+  }
   return (
-    <Link href={href} className={`inline-block rounded-lg px-4 py-2.5 text-sm font-bold transition ${styles}`}>
+    <Link href={href} className={className}>
       {children}
     </Link>
   );
