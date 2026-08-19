@@ -24,11 +24,16 @@ export function UploadForm({
   scopeId,
   back,
   allowExtract = true,
+  extractDefault = false,
+  defaultKind,
 }: {
   scopeType: string;
   scopeId: string;
   back: string;
   allowExtract?: boolean;
+  /** When true, the extract checkbox starts checked (imports OCR path). */
+  extractDefault?: boolean;
+  defaultKind?: string;
 }) {
   const [sizeError, setSizeError] = useState<string | null>(null);
 
@@ -51,7 +56,7 @@ export function UploadForm({
           <input type="file" name="file" required onChange={onFileChange} className="text-sm" />
         </Field>
         <Field label="Kind">
-          <select name="kind" className={inputClass}>
+          <select name="kind" className={inputClass} defaultValue={defaultKind ?? KINDS[0]}>
             {KINDS.map((k) => (
               <option key={k} value={k}>{k.replace(/_/g, " ")}</option>
             ))}
@@ -59,7 +64,7 @@ export function UploadForm({
         </Field>
         {allowExtract && (
           <label className="flex items-center gap-2 pb-2 text-sm text-navy-700">
-            <input type="checkbox" name="extract" value="yes" />
+            <input type="checkbox" name="extract" value="yes" defaultChecked={extractDefault} />
             Extract fields (review before commit)
           </label>
         )}

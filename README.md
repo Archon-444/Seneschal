@@ -85,14 +85,16 @@ Scripted pass proving the P1 exit criteria, on a seeded database with `pnpm dev`
 and `pnpm worker` running:
 
 1. **Onboard via OCR** — Imports → "Extract from document", upload
-   `fixtures/pdf/fixture-1-contract-marina.pdf` with *Extract fields* checked
-   (`EXTRACTION_PROVIDER=mock` replays the recorded output). The review screen
-   shows every field with confidence and source snippet. Correct any field,
-   then *Confirm & commit*. A property, tenancy, 4 cheques and 7 deadlines
-   appear; evidence shows FIELD_EXTRACTED → FIELD_CONFIRMED → IMPORT_COMMITTED.
+   `fixtures/pdf/fixture-1-contract-marina.pdf` (`EXTRACTION_PROVIDER=mock`
+   replays the recorded output; extract is on by default). The review screen
+   shows landlord, tenant, asset and term — each with confidence and the source
+   snippet. Match an existing contact or leave “create new”. Correct any field,
+   then *Confirm & create tenancy*. A property, landlord, tenant, tenancy,
+   4 cheques and deadlines appear, and the contract is attached to the tenancy;
+   evidence shows FIELD_EXTRACTED → FIELD_CONFIRMED → IMPORT_COMMITTED.
    Repeat with fixture 2 (Bayview): commit raises **MISSING_EJARI** and the
-   60-day override puts the notice gate at 01 Sep 2026. (Manual path: add the
-   three seeded properties by hand — already present from `pnpm db:seed`.)
+   60-day override puts the notice gate at 01 Sep 2026. (Manual path: `/onboarding/new`
+   types the same records without a scan.)
 2. **Tenancies + schedules** — property detail → tenancy tab shows term, rent,
    notice gate with rule citation; payments tab shows the cheque schedule.
 3. **Calendar** — `/calendar` renders the month grid plus upcoming/overdue

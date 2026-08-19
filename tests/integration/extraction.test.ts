@@ -89,6 +89,7 @@ describe("extraction vs ground truth", () => {
     expect(await prisma.tenancy.count({ where: { workspaceId: W.workspaceId } })).toBe(0);
     expect(await prisma.property.count({ where: { workspaceId: W.workspaceId } })).toBe(0);
     expect(await prisma.paymentItem.count({ where: { workspaceId: W.workspaceId } })).toBe(0);
+    expect(await prisma.contact.count({ where: { workspaceId: W.workspaceId } })).toBe(0);
   });
 
   it("review+confirm commits through ImportBatch; evidence trail complete", async () => {
@@ -108,17 +109,36 @@ describe("extraction vs ground truth", () => {
       annualRent: Number(fields.annualRent.value),
       depositAmount: Number(fields.depositAmount.value),
       noticePeriodDays: Number(fields.noticePeriodDays.value),
+      landlordName: String(fields.landlordName.value),
+      tenantName: String(fields.tenantName.value),
       paymentItems: (fields.paymentItems.value as ImportRowData["paymentItems"]) ?? [],
     };
-    const batch = await extraction.reviewAndCommit(W.ctx, job.id, reviewed, {
+    const { batch } = await extraction.reviewAndCommit(W.ctx, job.id, reviewed, {
       unitNo: { from: "803", to: "803-A" },
     });
     expect(batch!.status).toBe("COMMITTED");
 
-    const tenancy = await prisma.tenancy.findFirst({ where: { workspaceId: W.workspaceId } });
+    const tenancy = await prisma.tenancy.findFirst({
+      where: { workspaceId: W.workspaceId },
+      include: { property: true },
+    });
     expect(tenancy).toBeTruthy();
     expect(tenancy!.noticePeriodDays).toBe(60);
     expect(tenancy!.source).toBe("OCR");
+    expect(tenancy!.contractDocId).toBe(doc.id);
+    expect(tenancy!.landlordContactId).toBeTruthy();
+    expect(tenancy!.tenantContactId).toBeTruthy();
+
+    const landlord = await prisma.contact.findUnique({ where: { id: tenancy!.landlordContactId! } });
+    expect(landlord!.kind).toBe("OWNER");
+    expect(landlord!.name).toBe("Lumina Real Estate Investments FZ-LLC");
+    const tenant = await prisma.contact.findUnique({ where: { id: tenancy!.tenantContactId! } });
+    expect(tenant!.kind).toBe("TENANT");
+    expect(tenant!.name).toBe("Amal & Mazen Haddad");
+
+    const attached = await prisma.document.findUnique({ where: { id: doc.id } });
+    expect(attached!.scopeType).toBe("TENANCY");
+    expect(attached!.scopeId).toBe(tenancy!.id);
 
     // derived: notice gate per ground truth (2026-09-01)
     const gate = await prisma.deadline.findFirst({
@@ -177,5 +197,60 @@ describe("extraction vs ground truth", () => {
     // both jobs sit in EXTRACTED awaiting human review
     expect((await prisma.extractionJob.findUnique({ where: { id: quoteJob.id } }))!.status).toBe("EXTRACTED");
     expect((await prisma.extractionJob.findUnique({ where: { id: invoiceJob.id } }))!.status).toBe("EXTRACTED");
+    expect(extraction.isTenancyShapedExtraction(quote)).toBe(false);
+    expect(extraction.isTenancyShapedExtraction(invoice)).toBe(false);
+  });
+
+  it("reuses a unique same-kind contact instead of duplicating the landlord", async () => {
+    const existing = await prisma.contact.create({
+      data: {
+        workspaceId: W.workspaceId,
+        kind: "OWNER",
+        name: "Al Noor Properties LLC",
+      },
+    });
+    const doc = await uploadFixture("fixture-1-contract-marina");
+    const job = await extraction.createExtractionJob(W.ctx, doc.id);
+    const done = await extraction.runExtraction(job.id);
+    const fields = done!.rawOutput as unknown as extraction.ExtractionFields;
+    const { tenancyId } = await extraction.reviewAndCommit(W.ctx, job.id, {
+      community: String(fields.community.value),
+      building: String(fields.building.value),
+      unitNo: String(fields.unitNo.value),
+      startDate: String(fields.startDate.value),
+      endDate: String(fields.endDate.value),
+      annualRent: Number(fields.annualRent.value),
+      landlordName: "AL NOOR PROPERTIES LLC",
+      tenantName: String(fields.tenantName.value),
+      paymentItems: (fields.paymentItems.value as ImportRowData["paymentItems"]) ?? [],
+    });
+    const tenancy = await prisma.tenancy.findUnique({ where: { id: tenancyId } });
+    expect(tenancy!.landlordContactId).toBe(existing.id);
+    expect(await prisma.contact.count({ where: { workspaceId: W.workspaceId, kind: "OWNER" } })).toBe(1);
+  });
+
+  it("leaves the job reviewable when commit would conflict", async () => {
+    const doc = await uploadFixture("fixture-1-contract-marina");
+    const job = await extraction.createExtractionJob(W.ctx, doc.id);
+    const done = await extraction.runExtraction(job.id);
+    const fields = done!.rawOutput as unknown as extraction.ExtractionFields;
+    const row: ImportRowData = {
+      community: String(fields.community.value),
+      building: String(fields.building.value),
+      unitNo: String(fields.unitNo.value),
+      ejariNo: String(fields.ejariNo.value),
+      startDate: String(fields.startDate.value),
+      endDate: String(fields.endDate.value),
+      annualRent: Number(fields.annualRent.value),
+      landlordName: String(fields.landlordName.value),
+      tenantName: String(fields.tenantName.value),
+    };
+    await extraction.reviewAndCommit(W.ctx, job.id, row);
+
+    const doc2 = await uploadFixture("fixture-1-contract-marina");
+    const job2 = await extraction.createExtractionJob(W.ctx, doc2.id);
+    await extraction.runExtraction(job2.id);
+    await expect(extraction.reviewAndCommit(W.ctx, job2.id, row)).rejects.toThrow(/Duplicate ejariNo/);
+    expect((await prisma.extractionJob.findUnique({ where: { id: job2.id } }))!.status).toBe("EXTRACTED");
   });
 });

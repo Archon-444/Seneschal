@@ -14,16 +14,49 @@ export default async function ImportsPage() {
 
   return (
     <>
-      <PageHeader title="Import & extract" subtitle="OCR-first intake with Excel fallback. Nothing reaches trusted records without your confirmation." />
+      <PageHeader
+        title="Import & extract"
+        subtitle="Scan a contract or Ejari to propose a new tenancy — landlord, tenant, asset and term. Nothing reaches trusted records without your confirmation."
+      />
+
+      <ol className="mb-8 max-w-3xl space-y-2 text-sm text-navy-700">
+        <li>
+          <span className="figure text-xs text-gold-700">1</span>
+          <span className="ml-2">Upload the tenancy contract or Ejari (extract is on by default).</span>
+        </li>
+        <li>
+          <span className="figure text-xs text-gold-700">2</span>
+          <span className="ml-2">Review the proposed landlord and tenant — match someone already on file, or take them as new contacts.</span>
+        </li>
+        <li>
+          <span className="figure text-xs text-gold-700">3</span>
+          <span className="ml-2">Confirm. That writes the property, tenancy, parties, cheques and deadlines together.</span>
+        </li>
+      </ol>
+      <p className="mb-6 max-w-3xl text-xs text-muted">
+        Prefer to type it?{" "}
+        <Link href="/onboarding/new" className="text-gold-700 underline-offset-2 hover:underline">
+          Onboard a tenancy by hand
+        </Link>
+        .
+      </p>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <h2 className="font-display mb-3 text-lg text-navy-900">Extract from document (OCR)</h2>
           <p className="mb-3 text-xs text-navy-500">
-            Upload a contract, Ejari certificate or cheque schedule. Fields are proposed with
-            per-field confidence; you review every field before commit.
+            Upload a contract or Ejari certificate. The model proposes landlord, tenant, unit and
+            term with per-field confidence; you review every field — and decide whether each party
+            is new or already in the directory — before commit.
           </p>
-          <UploadForm scopeType="WORKSPACE" scopeId={ctx.workspaceId} back="/imports" allowExtract />
+          <UploadForm
+            scopeType="WORKSPACE"
+            scopeId={ctx.workspaceId}
+            back="/imports"
+            allowExtract
+            extractDefault
+            defaultKind="TENANCY_CONTRACT"
+          />
         </Card>
         <Card>
           <h2 className="font-display mb-3 text-lg text-navy-900">Excel / CSV import</h2>

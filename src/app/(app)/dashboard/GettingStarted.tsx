@@ -37,16 +37,16 @@ export function GettingStarted({
       title: "Onboard your first tenancy",
       detail: (
         <>
-          Capture landlord, tenant, property and contract in one pass — or{" "}
-          <Link href="/imports" className="text-gold-700 underline-offset-2 hover:underline">
-            upload the contract
-          </Link>{" "}
-          and let extraction propose the fields for your review.
+          Scan the contract to propose landlord, tenant, property and term for your review — or{" "}
+          <Link href="/onboarding/new" className="text-gold-700 underline-offset-2 hover:underline">
+            enter them by hand
+          </Link>
+          . Nothing is written until you confirm.
         </>
       ),
       done: hasTenancy,
-      href: "/onboarding/new",
-      cta: "Onboard tenancy",
+      href: "/imports",
+      cta: "Scan contract",
     },
     ...(showTeamStep
       ? [

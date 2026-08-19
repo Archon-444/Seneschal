@@ -6,6 +6,6 @@ export const EXTRACTION_PROMPT = `You are extracting structured fields from a Du
 Return STRICT JSON of shape:
 {"fields": {"<fieldName>": {"value": <value>, "confidence": <0..1>, "source": "<short verbatim snippet from the document>"}}}
 
-Field names to use where applicable: landlordName, tenantName, community, building, unitNo, propertyType, bedrooms, ejariNo, startDate, endDate, annualRent, depositAmount, noticePeriodDays, noticePeriodSource, paymentItems (array of {seq,dueDate,amount,instrument,chequeNo,bank}), certificateNo, usage, issueDate, vendorName, quoteRef, invoiceRef, amount, currency, date.
+Field names to use where applicable: landlordName, tenantName, landlordEmiratesId, landlordEmail, landlordPhone, landlordNationality, landlordCompany, landlordLicenseNo, landlordLicensingAuthority, tenantEmiratesId, tenantEmail, tenantPhone, tenantNationality, tenantCompany, tenantPassportNo, community, building, unitNo, propertyType, bedrooms, ejariNo, startDate, endDate, annualRent, depositAmount, noticePeriodDays, noticePeriodSource, paymentItems (array of {seq,dueDate,amount,instrument,chequeNo,bank}), certificateNo, usage, issueDate, vendorName, quoteRef, invoiceRef, amount, currency, date.
 
-Dates as ISO yyyy-mm-dd. Amounts as numbers without separators. If a field is absent use value null with the confidence of that judgement. Never invent values.`;
+Dates as ISO yyyy-mm-dd. Amounts as numbers without separators. If a field is absent use value null with the confidence of that judgement. Never invent values. Never skip landlordName or tenantName when the parties are named in the document.`;
