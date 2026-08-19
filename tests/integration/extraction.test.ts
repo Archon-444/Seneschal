@@ -201,6 +201,28 @@ describe("extraction vs ground truth", () => {
     expect(extraction.isTenancyShapedExtraction(invoice)).toBe(false);
   });
 
+  it("refuses to commit a quotation as a tenancy, even if the caller supplies lease fields", async () => {
+    // The predicate used to be consulted only when rendering the review page, so
+    // anything that could POST the action bypassed it. A caller that fills in a
+    // plausible term must still be refused when the SOURCE DOCUMENT is a quote.
+    const quoteDoc = await uploadFixture("fixture-5-quotation");
+    const quoteJob = await extraction.createExtractionJob(W.ctx, quoteDoc.id);
+    await extraction.runExtraction(quoteJob.id);
+
+    const reviewed: ImportRowData = {
+      community: "Dubai Marina",
+      startDate: "2025-09-16",
+      endDate: "2026-09-15",
+      annualRent: 72000,
+    };
+
+    await expect(extraction.reviewAndCommit(W.ctx, quoteJob.id, reviewed)).rejects.toMatchObject({
+      status: 422,
+    });
+    expect(await prisma.tenancy.count()).toBe(0);
+    expect(await prisma.property.count()).toBe(0);
+  });
+
   it("reuses a unique same-kind contact instead of duplicating the landlord", async () => {
     const existing = await prisma.contact.create({
       data: {

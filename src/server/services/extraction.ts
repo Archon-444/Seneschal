@@ -128,6 +128,15 @@ export async function reviewAndCommit(
   if (!reviewed.community?.trim() || !reviewed.startDate || !reviewed.endDate || !reviewed.annualRent) {
     throw new AuthzError("Community, start date, end date and annual rent are required", 422);
   }
+  // The source document must itself look like a lease. Without this the only
+  // thing standing between a quotation and a committed tenancy was a render-time
+  // branch in the review page, so anything that could POST the action bypassed it.
+  if (!isTenancyShapedExtraction((job.rawOutput ?? {}) as unknown as ExtractionFields)) {
+    throw new AuthzError(
+      "This document does not describe a tenancy (no contract term or Ejari number)",
+      422,
+    );
+  }
 
   for (const [field, change] of Object.entries(corrections ?? {})) {
     await recordEvidence({
@@ -183,18 +192,26 @@ export async function reviewAndCommit(
 }
 
 /** True when the model found a lease-shaped document (not a quote/invoice). */
+/**
+ * Does this extraction describe a lease, rather than a document that merely
+ * mentions one?
+ *
+ * Requires lease-defining evidence: a term (both ends) or an Ejari number.
+ * The previous OR across startDate/landlordName/tenantName/ejariNo/community
+ * was too permissive — the extraction prompt asks for `community` "where
+ * applicable", and most Dubai maintenance quotes name one, so a vendor quote
+ * would present the full tenancy-commit form. Names and a community are things
+ * a quotation, invoice or receipt legitimately carries; a term is not.
+ *
+ * Checked at render time (which form to offer) and again in reviewAndCommit,
+ * so the guarantee does not depend on the UI.
+ */
 export function isTenancyShapedExtraction(fields: ExtractionFields): boolean {
   const present = (key: string) => {
     const v = fields[key]?.value;
     return v != null && String(v).trim() !== "";
   };
-  return (
-    present("startDate") ||
-    present("landlordName") ||
-    present("tenantName") ||
-    present("ejariNo") ||
-    present("community")
-  );
+  return (present("startDate") && present("endDate")) || present("ejariNo");
 }
 
 export async function rejectExtraction(ctx: AuthzContext, jobId: string) {
