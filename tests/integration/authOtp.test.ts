@@ -57,3 +57,65 @@ describe("requestOtp throttling", () => {
     expect(live).toHaveLength(1);
   });
 });
+
+// Issue #56 acceptance criterion — MAX_OTP_ATTEMPTS is the brute-force ceiling
+// on a six-digit code, so it needs a test that actually reaches it. The
+// load-bearing assertion is the last one: once the ceiling is hit, even the
+// CORRECT code stops working. A counter that increments but does not lock is
+// indistinguishable from no counter at all.
+
+describe("verifyOtp attempt ceiling (H8)", () => {
+  const MAX_OTP_ATTEMPTS = 5;
+
+  async function seedKnownCode(code: string) {
+    return prisma.authOtp.create({
+      data: {
+        email,
+        codeHash: sha256Hex(code),
+        expiresAt: new Date(Date.now() + OTP_TTL_MS),
+      },
+    });
+  }
+
+  it("locks the code out after MAX_OTP_ATTEMPTS wrong guesses, correct code included", async () => {
+    const otp = await seedKnownCode("424242");
+
+    for (let i = 1; i <= MAX_OTP_ATTEMPTS; i++) {
+      expect(await verifyOtp(email, "000000")).toBeNull();
+      const row = await prisma.authOtp.findUnique({ where: { id: otp.id } });
+      expect(row!.attempts).toBe(i);
+    }
+
+    // the ceiling is now reached — the real code must no longer work
+    expect(await verifyOtp(email, "424242")).toBeNull();
+    // and no session was minted along the way
+    expect(await prisma.session.count()).toBe(0);
+    // the row is not consumed, so a lockout cannot be mistaken for a successful use
+    const locked = await prisma.authOtp.findUnique({ where: { id: otp.id } });
+    expect(locked!.usedAt).toBeNull();
+  });
+
+  it("a correct guess before the ceiling still signs in and consumes the code", async () => {
+    const otp = await seedKnownCode("424242");
+    for (let i = 0; i < MAX_OTP_ATTEMPTS - 1; i++) {
+      expect(await verifyOtp(email, "000000")).toBeNull();
+    }
+
+    const result = await verifyOtp(email, "424242");
+    expect(result?.sessionToken).toBeTruthy();
+    const used = await prisma.authOtp.findUnique({ where: { id: otp.id } });
+    expect(used!.usedAt).toBeTruthy();
+    expect(await prisma.session.count()).toBe(1);
+  });
+
+  it("a locked-out code cannot be revived by exhausting attempts and re-verifying", async () => {
+    await seedKnownCode("424242");
+    for (let i = 0; i < MAX_OTP_ATTEMPTS; i++) await verifyOtp(email, "000000");
+
+    // repeated attempts past the ceiling stay refused and stop incrementing
+    expect(await verifyOtp(email, "424242")).toBeNull();
+    expect(await verifyOtp(email, "000000")).toBeNull();
+    const row = await prisma.authOtp.findFirst({ where: { email } });
+    expect(row!.attempts).toBe(MAX_OTP_ATTEMPTS);
+  });
+});

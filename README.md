@@ -186,11 +186,23 @@ local-dev runner.
 | `EMAIL_PROVIDER` / `RESEND_API_KEY` / `EMAIL_FROM` | `resend` + your key + verified sender |
 | `STORAGE_DRIVER` / `BLOB_READ_WRITE_TOKEN` | `blob` + token from the attached Blob store |
 | `CRON_SECRET` | `openssl rand -hex 32` (auth for the cron route) |
+| `SEED_API_ENABLED` | leave unset. Only set to `true` while bootstrapping via `POST /api/v1/jobs/seed`, then unset — the route is default-deny on this flag *and* `CRON_SECRET` |
 | `EXTRACTION_PROVIDER` | `mock`, or `gemini` + `GEMINI_API_KEY`, or `anthropic` + `ANTHROPIC_API_KEY` |
 
 After the first deploy, seed once from any machine:
 `DATABASE_URL=<neon-url> APP_BASE_URL=<https-url> pnpm db:seed` — idempotent, and
 it prints the live external proof-upload link.
+
+Two alternatives to running it from your own machine, both default-deny:
+
+- `SEED_ON_DEPLOY=true` runs the same idempotent seed during `vercel-build`. In
+  production the build log deliberately withholds the proof-upload link (it is a
+  live bearer credential and build logs are a passive record) — open it from the
+  proof request in the app instead.
+- `POST /api/v1/jobs/seed` with `Authorization: Bearer $CRON_SECRET` runs it
+  inside the deployment, so no database credential leaves the project. It
+  requires `SEED_API_ENABLED=true` **as well as** the secret; unset the flag once
+  you are done.
 
 **Storage:** the Vercel Blob store is **private** — bytes are reachable only via the
 SDK with `BLOB_READ_WRITE_TOKEN`, the stored url is not publicly fetchable, and client
