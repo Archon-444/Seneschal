@@ -63,7 +63,53 @@ async function evidencePageWhere(ctx: AuthzContext, filters: EvidencePageFilters
     });
   }
   if (filters.tenancyId) {
-    and.push({ OR: [{ tenancyId: filters.tenancyId }, { scopeType: "TENANCY", scopeId: filters.tenancyId }] });
+    // A tenancy timeline is relational: renewal-case and offer events can be
+    // scoped to their own records, while the completion event points at the
+    // successor tenancy. Resolve those ids inside the workspace so the
+    // predecessor's human-readable timeline remains complete.
+    const cases = await prisma.renewalCase.findMany({
+      where: { workspaceId: ctx.workspaceId, tenancyId: filters.tenancyId },
+      select: { id: true },
+    });
+    const caseIds = cases.map((renewalCase) => renewalCase.id);
+    const offers = await prisma.offer.findMany({
+      where: {
+        workspaceId: ctx.workspaceId,
+        OR: [
+          { tenancyId: filters.tenancyId },
+          ...(caseIds.length ? [{ renewalCaseId: { in: caseIds } }] : []),
+        ],
+      },
+      select: { id: true },
+    });
+    const offerIds = offers.map((offer) => offer.id);
+    const paymentItems = await prisma.paymentItem.findMany({
+      where: { workspaceId: ctx.workspaceId, tenancyId: filters.tenancyId },
+      select: { id: true },
+    });
+    const itemIds = paymentItems.map((item) => item.id);
+    const proofs = await prisma.proofRequest.findMany({
+      where: {
+        workspaceId: ctx.workspaceId,
+        OR: [
+          { scopeType: "TENANCY", scopeId: filters.tenancyId },
+          ...(caseIds.length ? [{ scopeType: "RENEWAL_CASE" as const, scopeId: { in: caseIds } }] : []),
+          ...(itemIds.length ? [{ scopeType: "PAYMENT_ITEM" as const, scopeId: { in: itemIds } }] : []),
+        ],
+      },
+      select: { id: true },
+    });
+    const proofIds = proofs.map((proof) => proof.id);
+    and.push({
+      OR: [
+        { tenancyId: filters.tenancyId },
+        { scopeType: "TENANCY", scopeId: filters.tenancyId },
+        ...(caseIds.length ? [{ scopeType: "RENEWAL_CASE" as const, scopeId: { in: caseIds } }] : []),
+        ...(offerIds.length ? [{ scopeType: "OFFER" as const, scopeId: { in: offerIds } }] : []),
+        ...(itemIds.length ? [{ scopeType: "PAYMENT_ITEM" as const, scopeId: { in: itemIds } }] : []),
+        ...(proofIds.length ? [{ scopeType: "PROOF_REQUEST" as const, scopeId: { in: proofIds } }] : []),
+      ],
+    });
   }
   if (filters.renewalCaseId) {
     // scope-audit: related offer ids only expand an already workspace-scoped evidence filter.

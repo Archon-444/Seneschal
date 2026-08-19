@@ -78,6 +78,7 @@ describe("anonymous tenant-link ACCEPT hardening (F2)", () => {
     });
     const supersededV1 = await prisma.offer.findUnique({ where: { id: v1.id } });
     expect(supersededV1!.status).toBe("SUPERSEDED");
+    expect(await renewals.getOfferForLink(link)).toBeNull();
 
     // Re-use the SAME link (still pinned to v1) to ACCEPT. Must be denied.
     await expect(renewals.respondToOfferViaLink(link, { action: "ACCEPT" })).rejects.toMatchObject({

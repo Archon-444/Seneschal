@@ -30,6 +30,8 @@ jobs:
       EMAIL_PROVIDER: console
       STORAGE_DRIVER: local
       EXTRACTION_PROVIDER: mock
+      E2E_WEB_SERVER_COMMAND: pnpm start
+      TZ: Asia/Dubai
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -47,3 +49,16 @@ jobs:
       - run: pnpm fixtures:render
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+            e2e/visual/pilot-screens.spec.ts-snapshots/*-linux.png
+          if-no-files-found: ignore
+          retention-days: 7

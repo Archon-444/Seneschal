@@ -12,11 +12,16 @@ import { GettingStarted } from "./GettingStarted";
 export default async function DashboardPage() {
   const ctx = await requireCtx();
   const canOnboard = hasCapability(ctx, "clients.write");
+  const canReadDeadlines = hasCapability(ctx, "deadlines.read");
+  const canReadPayments = hasCapability(ctx, "payments.read");
+  const canReadProofs = hasCapability(ctx, "proofs.read");
+  const canReadRenewals = hasCapability(ctx, "renewals.read");
+  const canReadRisk = hasCapability(ctx, "riskflags.read");
   const [kpis, deadlines, flags, pipeline, activation] = await Promise.all([
     dashboardKpis(ctx),
-    listDeadlines(ctx),
-    listRiskFlags(ctx),
-    listRenewalPipeline(ctx),
+    canReadDeadlines ? listDeadlines(ctx) : Promise.resolve([]),
+    canReadRisk ? listRiskFlags(ctx) : Promise.resolve([]),
+    canReadRenewals ? listRenewalPipeline(ctx) : Promise.resolve([]),
     canOnboard ? activationStatus(ctx) : null,
   ]);
   const today = todayInDubai();
@@ -53,35 +58,26 @@ export default async function DashboardPage() {
       <section className="mb-8">
         <Eyebrow>Needs attention</Eyebrow>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KpiCard
-            label="Overdue deadlines"
-            value={kpis.overdueDeadlines}
+          {canReadDeadlines && kpis.overdueDeadlines != null && <KpiCard
+            label="Overdue deadlines" value={kpis.overdueDeadlines}
             variant={kpis.overdueDeadlines > 0 ? "risk" : "default"}
             tone={kpis.overdueDeadlines > 0 ? "danger" : "good"}
-            sub={kpis.overdueDeadlines > 0 ? "past the gate" : "all clear"}
-            href="/calendar"
-          />
-          <KpiCard
-            label="Late / bounced cheques"
-            value={kpis.latePayments}
+            sub={kpis.overdueDeadlines > 0 ? "past the gate" : "all clear"} href="/calendar"
+          />}
+          {canReadPayments && kpis.latePayments != null && <KpiCard
+            label="Late / bounced cheques" value={kpis.latePayments}
             tone={kpis.latePayments > 0 ? "danger" : "good"}
-            sub={kpis.latePayments > 0 ? "needs follow-up" : "all received"}
-            href="/payments?status=problem"
-          />
-          <KpiCard
-            label="Open risk flags"
-            value={kpis.openFlags}
+            sub={kpis.latePayments > 0 ? "needs follow-up" : "all received"} href="/payments?status=problem"
+          />}
+          {canReadRisk && kpis.openFlags != null && <KpiCard
+            label="Open risk flags" value={kpis.openFlags}
             tone={kpis.openFlags > 0 ? "warn" : "good"}
-            sub={kpis.openFlags > 0 ? "to review" : "none open"}
-            href="/risk"
-          />
-          <KpiCard
-            label="Est. permissible uplift · 120 days"
-            value={<Money amount={upliftAtRisk} />}
-            tone="good"
-            sub="captured-index renewals · estimate only"
-            href="/renewals"
-          />
+            sub={kpis.openFlags > 0 ? "to review" : "none open"} href="/risk"
+          />}
+          {canReadRenewals && <KpiCard
+            label="Est. permissible uplift · 120 days" value={<Money amount={upliftAtRisk} />}
+            tone="good" sub="captured-index renewals · estimate only" href="/renewals"
+          />}
         </div>
       </section>
 
@@ -91,12 +87,12 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard label="Properties" value={kpis.properties} href="/properties" />
           <KpiCard label="Active tenancies" value={kpis.tenancies} href="/properties" />
-          <KpiCard label="Deadlines · 30 days" value={kpis.upcomingDeadlines} tone={kpis.upcomingDeadlines > 0 ? "warn" : "default"} href="/calendar" />
-          <KpiCard label="Open proof requests" value={kpis.openProofs} href="/proofs" />
+          {canReadDeadlines && kpis.upcomingDeadlines != null && <KpiCard label="Deadlines · 30 days" value={kpis.upcomingDeadlines} tone={kpis.upcomingDeadlines > 0 ? "warn" : "default"} href="/calendar" />}
+          {canReadProofs && kpis.openProofs != null && <KpiCard label="Open proof requests" value={kpis.openProofs} href="/proofs" />}
         </div>
       </section>
 
-      <section className="mb-8">
+      {canReadRenewals && <section className="mb-8">
         <div className="mb-3 flex items-end justify-between gap-4">
           <div>
             <Eyebrow>Renewal queue</Eyebrow>
@@ -127,10 +123,10 @@ export default async function DashboardPage() {
             ))}
           </Table>
         )}
-      </section>
+      </section>}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div>
+      {(canReadDeadlines || canReadRisk) && <div className="grid gap-6 lg:grid-cols-2">
+        {canReadDeadlines && <div>
           <h2 className="font-display mb-3 text-xl text-navy-900">Upcoming</h2>
           {upcoming.length === 0 ? (
             <EmptyState message="No upcoming deadlines. The calendar is clear." />
@@ -195,8 +191,8 @@ export default async function DashboardPage() {
               </ol>
             </Card>
           )}
-        </div>
-        <div>
+        </div>}
+        {canReadRisk && <div>
           <h2 className="font-display mb-3 text-xl text-navy-900">Open risk flags</h2>
           {flags.length === 0 ? (
             <EmptyState message="No open risk flags." />
@@ -219,8 +215,8 @@ export default async function DashboardPage() {
           <div className="mt-2 text-right">
             <Link href="/risk" className="text-sm text-navy-500 hover:text-navy-900">All flags →</Link>
           </div>
-        </div>
-      </div>
+        </div>}
+      </div>}
 
       <Card className="mt-8 bg-ivory-100 text-xs text-navy-500">
         Seneschal keeps the record and the evidence — it doesn’t hold funds, broker deals, or give legal

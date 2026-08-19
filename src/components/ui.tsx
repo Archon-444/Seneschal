@@ -47,9 +47,13 @@ export function Card({
   const hoverClass = hover
     ? "transition hover:border-gold-500 hover:shadow-md"
     : "";
+  // Tailwind utilities have stylesheet order, not call-site order. Omitting the
+  // default surface when a caller supplies one ensures semantic navy/tinted
+  // cards are not accidentally rendered white with light-on-white text.
+  const surfaceClass = /(?:^|\s)bg-[^\s]+/.test(className) ? "" : "bg-white";
   return (
     <div
-      className={`rounded-xl border border-line bg-white p-5 shadow-sm ${hoverClass} ${className}`}
+      className={`rounded-xl border border-line ${surfaceClass} p-5 shadow-sm ${hoverClass} ${className}`}
     >
       {children}
     </div>
@@ -88,7 +92,7 @@ export function KpiCard({
         <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-gold-500">{label}</div>
         <div className="figure t-kpi mt-2">{value}</div>
         <div className="mt-3 h-px w-7 bg-gold-500/60" />
-        {sub && <div className="mt-2 text-[11px] text-white/55">{sub}</div>}
+        {sub && <div className="mt-2 text-[11px] text-white/75">{sub}</div>}
       </div>
     ) : (
       <Card hover={!!href}>

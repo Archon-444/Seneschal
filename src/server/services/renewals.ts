@@ -1041,7 +1041,10 @@ interface OfferIndexCitation {
 export async function getOfferForLink(link: SecureLink): Promise<TenantOfferView | null> {
   if (link.purpose !== "TENANT_OFFER") return null;
   const offer = await prisma.offer.findUnique({ where: { id: link.scopeId } });
-  if (!offer || !offer.tenancyId) return null;
+  // Do not render response controls for a stale, withdrawn, or already-decided
+  // proposal. The guarded write remains authoritative, while the public page
+  // now fails calm and closed before asking the tenant to act.
+  if (!offer || !offer.tenancyId || !["SENT", "COUNTERED"].includes(offer.status)) return null;
   const tenancy = await prisma.tenancy.findUnique({
     where: { id: offer.tenancyId },
     include: { property: true },
