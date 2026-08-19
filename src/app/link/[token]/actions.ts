@@ -12,7 +12,13 @@ import { createEnquiryFromLink } from "@/server/services/enquiries";
 import { recordLinkMessagingOptIn } from "@/server/services/consent";
 import { dispatchPending } from "@/server/outbox";
 import { handlers } from "@/server/outbox/runner";
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, MAX_FILES_PER_REQUEST } from "@/lib/uploadLimits";
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_LABEL,
+  MAX_FILES_PER_REQUEST,
+  MAX_UPLOAD_TOTAL_BYTES,
+  MAX_UPLOAD_TOTAL_LABEL,
+} from "@/lib/uploadLimits";
 import { APPROVAL_COMMENT_MAX } from "@/lib/approvalLimits";
 
 // Success states echo back WHAT was submitted so the external party gets a
@@ -137,10 +143,22 @@ export async function submitProofAction(_prev: SubmitState, formData: FormData):
   if (files.length > MAX_FILES_PER_REQUEST) {
     return { status: "error", message: `Please upload at most ${MAX_FILES_PER_REQUEST} files at a time.` };
   }
+  let totalBytes = 0;
   for (const f of files) {
     if (f.size > MAX_FILE_BYTES) {
       return { status: "error", message: `${f.name} is larger than ${MAX_UPLOAD_LABEL}.` };
     }
+    totalBytes += f.size;
+  }
+  // The aggregate cap sits BELOW serverActions.bodySizeLimit, so a request
+  // between the two reaches this action with the framework's body guard
+  // satisfied. The client-side sum in UploadProofForm is a courtesy for a real
+  // browser; this is the one a direct POST has to get past.
+  if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
+    return {
+      status: "error",
+      message: `Those files total more than ${MAX_UPLOAD_TOTAL_LABEL}. Please upload them in smaller batches.`,
+    };
   }
 
   const h = await headers();
