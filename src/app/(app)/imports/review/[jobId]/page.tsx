@@ -170,6 +170,7 @@ export default async function ExtractionReviewPage({
     amount: number;
     chequeNo?: string;
     bank?: string;
+    instrument?: string;
   }[];
 
   return (
@@ -363,6 +364,7 @@ export default async function ExtractionReviewPage({
                       <th className="py-1">#</th>
                       <th>Due</th>
                       <th>Amount</th>
+                      <th>How</th>
                       <th>Cheque</th>
                       <th>Bank</th>
                     </tr>
@@ -390,6 +392,17 @@ export default async function ExtractionReviewPage({
                             defaultValue={item.amount}
                             className={inputClass}
                           />
+                        </td>
+                        <td className="pr-2">
+                          <select
+                            name={`pay_${i}_instrument`}
+                            defaultValue={item.instrument === "TRANSFER" || item.instrument === "DDS" ? item.instrument : "CHEQUE"}
+                            className={inputClass}
+                          >
+                            <option value="CHEQUE">Cheque</option>
+                            <option value="TRANSFER">Transfer</option>
+                            <option value="DDS">DDS</option>
+                          </select>
                         </td>
                         <td className="pr-2">
                           <input

@@ -1,4 +1,4 @@
-import { Prisma, type ContactKind, type ImportSource } from "@prisma/client";
+import { Prisma, type ContactKind, type ImportSource, type Instrument, type ScopeType } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
@@ -58,10 +58,25 @@ export interface ImportRowData {
     seq: number;
     dueDate: string;
     amount: number;
-    instrument?: "CHEQUE" | "TRANSFER" | "DDS";
+    instrument?: Instrument;
     chequeNo?: string;
     bank?: string;
   }[];
+}
+
+interface CreatedRecordRef {
+  type: string;
+  id: string;
+  previousOwnerContactId?: string | null;
+  previousScopeType?: ScopeType;
+  previousScopeId?: string | null;
+}
+
+const PAYMENT_INSTRUMENTS: readonly Instrument[] = ["CHEQUE", "TRANSFER", "DDS"];
+
+/** Round-trip an extracted instrument; unknown values fall back to cheque. */
+export function parsePaymentInstrument(value: unknown): Instrument {
+  return PAYMENT_INSTRUMENTS.includes(value as Instrument) ? (value as Instrument) : "CHEQUE";
 }
 
 /** Collapse whitespace and case so "AL NOOR PROPERTIES LLC" matches the directory. */
@@ -140,16 +155,8 @@ export async function detectConflicts(ctx: AuthzContext, batchId: string) {
       }
     }
 
-    if (!conflict && data.community && data.unitNo) {
-      const property = await prisma.property.findFirst({
-        where: {
-          workspaceId: ctx.workspaceId,
-          community: data.community,
-          building: data.building ?? null,
-          unitNo: data.unitNo,
-          archivedAt: null,
-        },
-      });
+    if (!conflict) {
+      const property = await findImportProperty(prisma, ctx.workspaceId, data);
       if (property) {
         const overlap = await prisma.tenancy.findFirst({
           where: {
@@ -160,7 +167,8 @@ export async function detectConflicts(ctx: AuthzContext, batchId: string) {
           },
         });
         if (overlap) {
-          conflict = `Overlapping tenancy dates for ${data.community} ${data.unitNo}`;
+          const label = [property.community, property.unitNo].filter(Boolean).join(" ") || "the selected property";
+          conflict = `Overlapping tenancy dates for ${label}`;
         }
       }
     }
@@ -193,7 +201,7 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
   await prisma.$transaction(async (tx) => {
     for (const row of committable) {
       const data = row.mappedJson as unknown as ImportRowData;
-      const refs: { type: string; id: string }[] = [];
+      const refs: CreatedRecordRef[] = [];
 
       const landlord = await resolveImportParty(tx, ctx, {
         kind: "OWNER",
@@ -210,21 +218,7 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
       if (landlord.created && landlord.id) refs.push({ type: "Contact", id: landlord.id });
       if (tenant.created && tenant.id) refs.push({ type: "Contact", id: tenant.id });
 
-      let property =
-        (data.propertyId
-          ? await tx.property.findFirst({
-              where: { id: data.propertyId, workspaceId: ctx.workspaceId, archivedAt: null },
-            })
-          : null) ??
-        (await tx.property.findFirst({
-          where: {
-            workspaceId: ctx.workspaceId,
-            community: data.community,
-            building: data.building ?? null,
-            unitNo: data.unitNo ?? null,
-            archivedAt: null,
-          },
-        }));
+      let property = await findImportProperty(tx, ctx.workspaceId, data);
       if (!property) {
         property = await tx.property.create({
           data: {
@@ -245,6 +239,11 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
         });
         refs.push({ type: "Property", id: property.id });
       } else if (!property.ownerContactId && landlord.id) {
+        refs.push({
+          type: "PropertyOwner",
+          id: property.id,
+          previousOwnerContactId: property.ownerContactId,
+        });
         property = await tx.property.update({
           where: { id: property.id },
           data: { ownerContactId: landlord.id },
@@ -278,6 +277,12 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
           where: { id: contractDocId, workspaceId: ctx.workspaceId },
         });
         if (doc) {
+          refs.push({
+            type: "DocumentScope",
+            id: contractDocId,
+            previousScopeType: doc.scopeType,
+            previousScopeId: doc.scopeId,
+          });
           await tx.document.update({
             where: { id: contractDocId },
             data: { scopeType: "TENANCY", scopeId: tenancy.id },
@@ -294,7 +299,7 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
             seq: item.seq,
             dueDate: toUtcDateOnly(new Date(item.dueDate)),
             amount: new Prisma.Decimal(item.amount),
-            instrument: item.instrument ?? "CHEQUE",
+            instrument: parsePaymentInstrument(item.instrument),
             chequeNo: item.chequeNo,
             bank: item.bank,
           },
@@ -354,13 +359,7 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
     if (reason.startsWith("Overlapping")) {
       // flag carried by the existing tenancy involved in the overlap
       const data = row.mappedJson as unknown as ImportRowData;
-      const property = await prisma.property.findFirst({
-        where: {
-          workspaceId: ctx.workspaceId,
-          community: data.community,
-          unitNo: data.unitNo ?? null,
-        },
-      });
+      const property = await findImportProperty(prisma, ctx.workspaceId, data);
       if (property) {
         const overlapped = await prisma.tenancy.findFirst({
           where: { propertyId: property.id, archivedAt: null },
@@ -385,7 +384,7 @@ export async function rollbackImportBatch(ctx: AuthzContext, batchId: string) {
 
   await prisma.$transaction(async (tx) => {
     for (const row of batch!.rows) {
-      const refs = (row.createdRecordRefs as { type: string; id: string }[] | null) ?? [];
+      const refs = (row.createdRecordRefs as CreatedRecordRef[] | null) ?? [];
       for (const ref of refs) {
         if (ref.type === "Property") {
           await tx.property.update({ where: { id: ref.id }, data: { archivedAt: new Date() } });
@@ -402,6 +401,16 @@ export async function rollbackImportBatch(ctx: AuthzContext, batchId: string) {
           await tx.paymentItem.update({ where: { id: ref.id }, data: { status: "CANCELLED" } });
         } else if (ref.type === "Contact") {
           await tx.contact.update({ where: { id: ref.id }, data: { archivedAt: new Date() } });
+        } else if (ref.type === "PropertyOwner") {
+          await tx.property.update({
+            where: { id: ref.id },
+            data: { ownerContactId: ref.previousOwnerContactId ?? null },
+          });
+        } else if (ref.type === "DocumentScope" && ref.previousScopeType) {
+          await tx.document.update({
+            where: { id: ref.id },
+            data: { scopeType: ref.previousScopeType, scopeId: ref.previousScopeId ?? null },
+          });
         }
       }
     }
@@ -516,6 +525,28 @@ function collapseName(name: string): string {
   return name.trim().replace(/\s+/g, " ");
 }
 
+async function findImportProperty(
+  db: Prisma.TransactionClient | typeof prisma,
+  workspaceId: string,
+  data: ImportRowData,
+) {
+  if (data.propertyId) {
+    const byId = await db.property.findFirst({
+      where: { id: data.propertyId, workspaceId, archivedAt: null },
+    });
+    if (byId) return byId;
+  }
+  return db.property.findFirst({
+    where: {
+      workspaceId,
+      community: data.community,
+      building: data.building ?? null,
+      unitNo: data.unitNo ?? null,
+      archivedAt: null,
+    },
+  });
+}
+
 function resolveSchedule(data: ImportRowData): NonNullable<ImportRowData["paymentItems"]> {
   if (data.paymentItems && data.paymentItems.length > 0) return data.paymentItems;
   if (!data.chequeCount || data.chequeCount <= 0) return [];
@@ -528,7 +559,7 @@ function resolveSchedule(data: ImportRowData): NonNullable<ImportRowData["paymen
     seq: item.seq,
     dueDate: item.dueDate.toISOString().slice(0, 10),
     amount: item.amount,
-    instrument: "CHEQUE" as const,
+    instrument: parsePaymentInstrument(item.instrument),
   }));
 }
 

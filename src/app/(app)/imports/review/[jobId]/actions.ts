@@ -9,7 +9,7 @@ import {
   reviewAndCommit,
   type ExtractionFields,
 } from "@/server/services/extraction";
-import type { ImportPartyFields, ImportRowData } from "@/server/services/imports";
+import { parsePaymentInstrument, type ImportPartyFields, type ImportRowData } from "@/server/services/imports";
 
 export type ReviewCommitState = { error: string } | null;
 
@@ -59,7 +59,7 @@ function paymentItems(formData: FormData): ImportRowData["paymentItems"] {
       amount,
       chequeNo: str(formData, `pay_${i}_chequeNo`),
       bank: str(formData, `pay_${i}_bank`),
-      instrument: "CHEQUE",
+      instrument: parsePaymentInstrument(formData.get(`pay_${i}_instrument`)),
     });
   }
   return items;

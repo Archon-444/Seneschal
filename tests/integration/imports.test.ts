@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
 import * as imports from "@/server/services/imports";
 import * as properties from "@/server/services/properties";
+import * as documents from "@/server/services/documents";
 
 // T6.1 ⛔ — commit, partial-conflict commit, rollback restore-of-visibility.
 
@@ -86,6 +87,31 @@ describe("import commit", () => {
     const rows = await imports.addImportRows(W.ctx, second.id, [
       // same property, overlapping window, different ejari
       { raw: {}, mapped: row({ ejariNo: "2026/000001", startDate: "2026-06-01", endDate: "2027-05-31" }) },
+    ]);
+    expect(rows[0].status).toBe("CONFLICT");
+    expect(rows[0].conflictReason).toMatch(/Overlapping/);
+  });
+
+  it("detects overlap against an explicitly selected property even when the extracted address differs", async () => {
+    const first = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, first.id, [{ raw: {}, mapped: row() }]);
+    await imports.commitImportBatch(W.ctx, first.id);
+    const existing = await prisma.property.findFirst({ where: { workspaceId: W.workspaceId } });
+
+    const second = await imports.createImportBatch(W.ctx, "EXCEL");
+    const rows = await imports.addImportRows(W.ctx, second.id, [
+      {
+        raw: {},
+        mapped: row({
+          ejariNo: "2026/000001",
+          community: "Wrong Community",
+          building: "Other Tower",
+          unitNo: "999",
+          propertyId: existing!.id,
+          startDate: "2026-06-01",
+          endDate: "2027-05-31",
+        }),
+      },
     ]);
     expect(rows[0].status).toBe("CONFLICT");
     expect(rows[0].conflictReason).toMatch(/Overlapping/);
@@ -215,5 +241,84 @@ describe("import parties", () => {
     expect(items).toHaveLength(4);
     const total = items.reduce((s, i) => s + Number(i.amount), 0);
     expect(total).toBe(72000);
+  });
+
+  it("preserves TRANSFER/DDS instruments instead of coercing them to CHEQUE", async () => {
+    const batch = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, batch.id, [
+      {
+        raw: {},
+        mapped: row({
+          paymentItems: [
+            { seq: 1, dueDate: "2025-09-16", amount: 72000, instrument: "TRANSFER" },
+          ],
+        }),
+      },
+    ]);
+    await imports.commitImportBatch(W.ctx, batch.id);
+    const item = await prisma.paymentItem.findFirst({ where: { tenancy: { ejariNo: "2025/118402" } } });
+    expect(item!.instrument).toBe("TRANSFER");
+  });
+
+  it("restores a filled-in ownerContactId on an existing property when the batch rolls back", async () => {
+    const first = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, first.id, [{ raw: {}, mapped: row() }]);
+    await imports.commitImportBatch(W.ctx, first.id);
+    const property = await prisma.property.findFirst({ where: { workspaceId: W.workspaceId } });
+    expect(property!.ownerContactId).toBeNull();
+
+    const second = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, second.id, [
+      {
+        raw: {},
+        mapped: row({
+          ejariNo: "2026/000003",
+          propertyId: property!.id,
+          startDate: "2026-10-01",
+          endDate: "2027-09-30",
+          landlordName: "Later Owner LLC",
+        }),
+      },
+    ]);
+    await imports.commitImportBatch(W.ctx, second.id);
+    expect((await prisma.property.findUnique({ where: { id: property!.id } }))!.ownerContactId).toBeTruthy();
+
+    await imports.rollbackImportBatch(W.ctx, second.id);
+    const restored = await prisma.property.findUnique({ where: { id: property!.id } });
+    expect(restored!.ownerContactId).toBeNull();
+    expect(restored!.archivedAt).toBeNull();
+  });
+
+  it("restores the contract document to its original workspace scope on rollback", async () => {
+    const doc = await documents.uploadDocument(W.ctx, {
+      scopeType: "WORKSPACE",
+      scopeId: W.workspaceId,
+      kind: "TENANCY_CONTRACT",
+      fileName: "contract.pdf",
+      mime: "application/pdf",
+      data: Buffer.from("%PDF-1.4"),
+    });
+    const batch = await imports.createImportBatch(W.ctx, "DOCUMENTS", doc.id);
+    await imports.addImportRows(W.ctx, batch.id, [{ raw: {}, mapped: row() }]);
+    await imports.commitImportBatch(W.ctx, batch.id);
+
+    const attached = await prisma.document.findUnique({ where: { id: doc.id } });
+    expect(attached!.scopeType).toBe("TENANCY");
+    expect(attached!.scopeId).toBeTruthy();
+
+    await imports.rollbackImportBatch(W.ctx, batch.id);
+    const restored = await prisma.document.findUnique({ where: { id: doc.id } });
+    expect(restored!.scopeType).toBe("WORKSPACE");
+    expect(restored!.scopeId).toBe(W.workspaceId);
+  });
+});
+
+describe("parsePaymentInstrument", () => {
+  it("keeps known instruments and falls back to CHEQUE", () => {
+    expect(imports.parsePaymentInstrument("TRANSFER")).toBe("TRANSFER");
+    expect(imports.parsePaymentInstrument("DDS")).toBe("DDS");
+    expect(imports.parsePaymentInstrument("CHEQUE")).toBe("CHEQUE");
+    expect(imports.parsePaymentInstrument("wire")).toBe("CHEQUE");
+    expect(imports.parsePaymentInstrument(null)).toBe("CHEQUE");
   });
 });
