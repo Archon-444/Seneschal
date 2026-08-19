@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CREATE_NEW_CONTACT } from "@/server/services/imports";
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import {
@@ -168,6 +169,7 @@ export default async function ExtractionReviewPage({
     seq: number;
     dueDate: string;
     amount: number;
+    instrument?: string;
     chequeNo?: string;
     bank?: string;
   }[];
@@ -240,7 +242,7 @@ export default async function ExtractionReviewPage({
                   className={inputClass}
                   defaultValue={landlordMatch?.id ?? ""}
                 >
-                  <option value="">— create new below —</option>
+                  <option value={CREATE_NEW_CONTACT}>— create new below —</option>
                   {owners.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -273,7 +275,7 @@ export default async function ExtractionReviewPage({
                   className={inputClass}
                   defaultValue={tenantMatch?.id ?? ""}
                 >
-                  <option value="">— create new below —</option>
+                  <option value={CREATE_NEW_CONTACT}>— create new below —</option>
                   {tenants.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -372,6 +374,9 @@ export default async function ExtractionReviewPage({
                       <tr key={item.seq} className="border-t border-ivory-200">
                         <td className="py-1.5 pr-2">
                           <input type="hidden" name={`pay_${i}_seq`} value={item.seq} />
+                        {/* The contract's instrument is extracted; round-trip it so a
+                            transfer or DDS schedule is not recorded as cheques. */}
+                        <input type="hidden" name={`pay_${i}_instrument`} value={item.instrument ?? "CHEQUE"} />
                           <span className="figure">{item.seq}</span>
                         </td>
                         <td className="pr-2">

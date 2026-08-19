@@ -46,12 +46,16 @@ const SCOPE_TOKENS = [
   "scope-audit:",
 ];
 
+// Transaction clients count too. Matching only `prisma.` left the entire
+// transactional write surface exempt: commitImportBatch does every write via
+// `tx.`, which is exactly how an unvalidated clientPrincipalId reached
+// property.create without this gate noticing.
 // Analytic reads (count/aggregate/groupBy) are reads too — an ungated dashboard
 // count on a client-scoped model leaks aggregate signal across every client.
-const READ_RE = /prisma\.(\w+)\.(findMany|findFirst|count|aggregate|groupBy)\b/;
+const READ_RE = /(?:prisma|tx|db)\.(\w+)\.(findMany|findFirst|count|aggregate|groupBy)\b/;
 // F0d: writes are now in scope too — a delegate has broad write, so an ungated
 // create/update/delete on a client-scoped model fails OPEN across every client.
-const WRITE_RE = /prisma\.(\w+)\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/;
+const WRITE_RE = /(?:prisma|tx|db)\.(\w+)\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/;
 // Top-level declarations only (column 0) — inner indented arrow consts are NOT
 // function boundaries, so a helper-arrow doesn't split a scoped function in two.
 const FUNC_START_RE = /^(export\s+)?(async\s+)?function\s+\w+|^(export\s+)?const\s+\w+\s*=\s*(async\s*)?(\(|function)/;
