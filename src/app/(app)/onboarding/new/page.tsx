@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireCtx } from "@/server/auth/request";
 import { listContacts } from "@/server/services/contacts";
 import { listClients } from "@/server/services/clients";
@@ -27,6 +28,13 @@ export default async function OnboardingPage() {
         title="New tenancy from Ejari"
         subtitle="Capture the landlord, tenant, asset and contract in one pass. Reuse an existing record from a dropdown, or fill the fields to create a new one. Only the contract dates and rent are required."
       />
+      <p className="mb-6 max-w-3xl text-sm text-muted">
+        Have the contract as a PDF or photo?{" "}
+        <Link href="/imports" className="text-gold-700 underline-offset-2 hover:underline">
+          Scan it and review the proposed fields
+        </Link>{" "}
+        — same records, with a human confirm before anything is trusted.
+      </p>
       <form action={onboardTenancyAction} className="max-w-3xl space-y-6">
         <FormSection eyebrow="Landlord · owner / lessor">
           <Field label="Use existing contact">

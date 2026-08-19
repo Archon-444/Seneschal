@@ -115,11 +115,18 @@ export async function reviewAndCommit(
   jobId: string,
   reviewed: ImportRowData,
   corrections?: Record<string, { from: unknown; to: unknown }>,
-) {
+): Promise<{
+  batch: NonNullable<Awaited<ReturnType<typeof commitImportBatch>>>;
+  tenancyId: string;
+  propertyId: string;
+}> {
   require_(ctx, "imports.manage");
   const job = await getExtractionJob(ctx, jobId);
   if (job.status !== "EXTRACTED" && job.status !== "REVIEWING") {
     throw new AuthzError(`Job is ${job.status}, not reviewable`, 422);
+  }
+  if (!reviewed.community?.trim() || !reviewed.startDate || !reviewed.endDate || !reviewed.annualRent) {
+    throw new AuthzError("Community, start date, end date and annual rent are required", 422);
   }
 
   for (const [field, change] of Object.entries(corrections ?? {})) {
@@ -146,10 +153,22 @@ export async function reviewAndCommit(
   });
 
   const batch = await createImportBatch(ctx, "DOCUMENTS", job.documentId);
-  await addImportRows(ctx, batch.id, [
+  const rows = await addImportRows(ctx, batch.id, [
     { raw: (job.rawOutput as Record<string, unknown>) ?? {}, mapped: reviewed },
   ]);
+  const conflict = rows.find((r) => r.status === "CONFLICT");
+  if (conflict) {
+    throw new AuthzError(
+      conflict.conflictReason ?? "This extraction conflicts with an existing tenancy",
+      422,
+    );
+  }
   const committed = await commitImportBatch(ctx, batch.id);
+  const refs =
+    (committed!.rows[0]?.createdRecordRefs as { type: string; id: string }[] | null) ?? [];
+  const tenancyId = refs.find((r) => r.type === "Tenancy")?.id;
+  if (!tenancyId) throw new AuthzError("Commit created no tenancy", 422);
+  const tenancy = await prisma.tenancy.findUnique({ where: { id: tenancyId } });
 
   await prisma.extractionJob.update({
     where: { id: jobId },
@@ -160,7 +179,22 @@ export async function reviewAndCommit(
       importBatchId: batch.id,
     },
   });
-  return committed;
+  return { batch: committed!, tenancyId, propertyId: tenancy!.propertyId };
+}
+
+/** True when the model found a lease-shaped document (not a quote/invoice). */
+export function isTenancyShapedExtraction(fields: ExtractionFields): boolean {
+  const present = (key: string) => {
+    const v = fields[key]?.value;
+    return v != null && String(v).trim() !== "";
+  };
+  return (
+    present("startDate") ||
+    present("landlordName") ||
+    present("tenantName") ||
+    present("ejariNo") ||
+    present("community")
+  );
 }
 
 export async function rejectExtraction(ctx: AuthzContext, jobId: string) {

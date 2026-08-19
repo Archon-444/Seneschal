@@ -1,15 +1,27 @@
-import { Prisma, type ImportSource } from "@prisma/client";
+import { Prisma, type ContactKind, type ImportSource } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
 import { toUtcDateOnly } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
+import { evenChequeSchedule } from "./payments";
 import { evaluateRiskForTenancy, raiseTenancyOverlap } from "./risk";
 
 // ImportBatch machinery (T6.1 — release blocking). Nothing writes to trusted
 // records until commit; conflicts block the ROW, not the batch; commit is
 // atomic; rollback archives created records via createdRecordRefs.
+
+export interface ImportPartyFields {
+  name?: string;
+  emiratesId?: string;
+  email?: string;
+  phone?: string;
+  nationality?: string;
+  company?: string;
+  licenseNo?: string;
+  licensingAuthority?: string;
+}
 
 export interface ImportRowData {
   // property
@@ -19,6 +31,12 @@ export interface ImportRowData {
   propertyType?: string;
   bedrooms?: number;
   clientPrincipalId?: string;
+  propertyId?: string;
+  usage?: string;
+  plotNo?: string;
+  makaniNo?: string;
+  dewaPremiseNo?: string;
+  sizeSqm?: number;
   // tenancy
   ejariNo?: string;
   startDate: string; // ISO date
@@ -26,9 +44,16 @@ export interface ImportRowData {
   annualRent: number;
   depositAmount?: number;
   noticePeriodDays?: number;
+  paymentTermsNote?: string;
+  // parties: reuse an existing contact by id, otherwise create/match from fields
+  landlordContactId?: string;
+  tenantContactId?: string;
   landlordName?: string;
   tenantName?: string;
-  // payment schedule
+  landlord?: ImportPartyFields;
+  tenant?: ImportPartyFields;
+  // payment schedule — extracted items win; chequeCount fills an even split when none
+  chequeCount?: number;
   paymentItems?: {
     seq: number;
     dueDate: string;
@@ -37,6 +62,11 @@ export interface ImportRowData {
     chequeNo?: string;
     bank?: string;
   }[];
+}
+
+/** Collapse whitespace and case so "AL NOOR PROPERTIES LLC" matches the directory. */
+export function normalizePartyName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 export async function createImportBatch(
@@ -165,34 +195,69 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
       const data = row.mappedJson as unknown as ImportRowData;
       const refs: { type: string; id: string }[] = [];
 
-      let property = await tx.property.findFirst({
-        where: {
-          workspaceId: ctx.workspaceId,
-          community: data.community,
-          building: data.building ?? null,
-          unitNo: data.unitNo ?? null,
-          archivedAt: null,
-        },
+      const landlord = await resolveImportParty(tx, ctx, {
+        kind: "OWNER",
+        contactId: data.landlordContactId,
+        name: data.landlordName ?? data.landlord?.name,
+        fields: data.landlord,
       });
+      const tenant = await resolveImportParty(tx, ctx, {
+        kind: "TENANT",
+        contactId: data.tenantContactId,
+        name: data.tenantName ?? data.tenant?.name,
+        fields: data.tenant,
+      });
+      if (landlord.created && landlord.id) refs.push({ type: "Contact", id: landlord.id });
+      if (tenant.created && tenant.id) refs.push({ type: "Contact", id: tenant.id });
+
+      let property =
+        (data.propertyId
+          ? await tx.property.findFirst({
+              where: { id: data.propertyId, workspaceId: ctx.workspaceId, archivedAt: null },
+            })
+          : null) ??
+        (await tx.property.findFirst({
+          where: {
+            workspaceId: ctx.workspaceId,
+            community: data.community,
+            building: data.building ?? null,
+            unitNo: data.unitNo ?? null,
+            archivedAt: null,
+          },
+        }));
       if (!property) {
         property = await tx.property.create({
           data: {
             workspaceId: ctx.workspaceId,
             clientPrincipalId: data.clientPrincipalId ?? null,
+            ownerContactId: landlord.id,
             community: data.community,
             building: data.building,
             unitNo: data.unitNo,
             propertyType: data.propertyType,
             bedrooms: data.bedrooms,
+            usage: data.usage,
+            plotNo: data.plotNo,
+            makaniNo: data.makaniNo,
+            dewaPremiseNo: data.dewaPremiseNo,
+            sizeSqm: data.sizeSqm != null ? new Prisma.Decimal(data.sizeSqm) : undefined,
           },
         });
         refs.push({ type: "Property", id: property.id });
+      } else if (!property.ownerContactId && landlord.id) {
+        property = await tx.property.update({
+          where: { id: property.id },
+          data: { ownerContactId: landlord.id },
+        });
       }
 
+      const contractDocId = batch!.source === "DOCUMENTS" ? batch!.fileDocId : null;
       const tenancy = await tx.tenancy.create({
         data: {
           workspaceId: ctx.workspaceId,
           propertyId: property.id,
+          landlordContactId: landlord.id,
+          tenantContactId: tenant.id,
           ejariNo: data.ejariNo ?? null,
           startDate: toUtcDateOnly(new Date(data.startDate)),
           endDate: toUtcDateOnly(new Date(data.endDate)),
@@ -200,13 +265,28 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
           depositAmount:
             data.depositAmount != null ? new Prisma.Decimal(data.depositAmount) : null,
           noticePeriodDays: data.noticePeriodDays ?? 90,
+          paymentTermsNote: data.paymentTermsNote,
+          contractDocId,
           source: batch!.source === "EXCEL" ? "EXCEL" : "OCR",
         },
       });
       refs.push({ type: "Tenancy", id: tenancy.id });
       createdTenancyIds.push(tenancy.id);
 
-      for (const item of data.paymentItems ?? []) {
+      if (contractDocId) {
+        const doc = await tx.document.findFirst({
+          where: { id: contractDocId, workspaceId: ctx.workspaceId },
+        });
+        if (doc) {
+          await tx.document.update({
+            where: { id: contractDocId },
+            data: { scopeType: "TENANCY", scopeId: tenancy.id },
+          });
+        }
+      }
+
+      const schedule = resolveSchedule(data);
+      for (const item of schedule) {
         const created = await tx.paymentItem.create({
           data: {
             workspaceId: ctx.workspaceId,
@@ -320,6 +400,8 @@ export async function rollbackImportBatch(ctx: AuthzContext, batchId: string) {
           });
         } else if (ref.type === "PaymentItem") {
           await tx.paymentItem.update({ where: { id: ref.id }, data: { status: "CANCELLED" } });
+        } else if (ref.type === "Contact") {
+          await tx.contact.update({ where: { id: ref.id }, data: { archivedAt: new Date() } });
         }
       }
     }
@@ -428,4 +510,99 @@ function mustNum(raw: Record<string, unknown>, key: string): number {
   const n = num(raw, key);
   if (n == null) throw new Error(`Missing required column ${key}`);
   return n;
+}
+
+function collapseName(name: string): string {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+function resolveSchedule(data: ImportRowData): NonNullable<ImportRowData["paymentItems"]> {
+  if (data.paymentItems && data.paymentItems.length > 0) return data.paymentItems;
+  if (!data.chequeCount || data.chequeCount <= 0) return [];
+  return evenChequeSchedule({
+    startDate: new Date(data.startDate),
+    endDate: new Date(data.endDate),
+    annualRent: data.annualRent,
+    chequeCount: data.chequeCount,
+  }).map((item) => ({
+    seq: item.seq,
+    dueDate: item.dueDate.toISOString().slice(0, 10),
+    amount: item.amount,
+    instrument: "CHEQUE" as const,
+  }));
+}
+
+/**
+ * Reuse an existing contact (explicit id, unique Emirates ID, or unique name of
+ * the same kind) or create one. Multiple name matches never auto-bind — the
+ * reviewer must pick. Called inside the import transaction.
+ */
+async function resolveImportParty(
+  tx: Prisma.TransactionClient,
+  ctx: AuthzContext,
+  args: {
+    kind: ContactKind;
+    contactId?: string;
+    name?: string;
+    fields?: ImportPartyFields;
+  },
+): Promise<{ id: string | null; created: boolean }> {
+  if (args.contactId) {
+    const existing = await tx.contact.findFirst({
+      where: { id: args.contactId, workspaceId: ctx.workspaceId, archivedAt: null },
+    });
+    if (!existing) throw new AuthzError("Contact not found", 404);
+    return { id: existing.id, created: false };
+  }
+
+  const emiratesId = args.fields?.emiratesId?.trim() || undefined;
+  if (emiratesId) {
+    const byId = await tx.contact.findMany({
+      where: { workspaceId: ctx.workspaceId, kind: args.kind, archivedAt: null, emiratesId },
+    });
+    if (byId.length === 1) return { id: byId[0].id, created: false };
+  }
+
+  const name = args.name?.trim() ? collapseName(args.name) : undefined;
+  if (name) {
+    const byName = await tx.contact.findMany({
+      where: {
+        workspaceId: ctx.workspaceId,
+        kind: args.kind,
+        archivedAt: null,
+        name: { equals: name, mode: "insensitive" },
+      },
+    });
+    if (byName.length === 1) return { id: byName[0].id, created: false };
+  }
+
+  if (!name) return { id: null, created: false };
+
+  const contact = await tx.contact.create({
+    data: {
+      workspaceId: ctx.workspaceId,
+      kind: args.kind,
+      name,
+      emiratesId,
+      email: args.fields?.email?.trim() || undefined,
+      phone: args.fields?.phone?.trim() || undefined,
+      nationality: args.fields?.nationality?.trim() || undefined,
+      company: args.fields?.company?.trim() || undefined,
+      licenseNo: args.fields?.licenseNo?.trim() || undefined,
+      licensingAuthority: args.fields?.licensingAuthority?.trim() || undefined,
+    },
+  });
+  await recordAudit(
+    {
+      workspaceId: ctx.workspaceId,
+      actorType: ctx.isStaff ? "STAFF" : "USER",
+      actorId: ctx.userId,
+      onBehalfOfId: ctx.onBehalfOfId,
+      verb: "contact.create",
+      objectType: "Contact",
+      objectId: contact.id,
+    },
+    tx,
+  );
+  return { id: contact.id, created: true };
 }

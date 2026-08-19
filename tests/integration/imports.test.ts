@@ -148,3 +148,72 @@ describe("CSV parsing (T6.2)", () => {
     expect(rows[1].error).toMatch(/annualRent/);
   });
 });
+
+describe("import parties", () => {
+  it("creates landlord and tenant contacts from names and links them on the tenancy", async () => {
+    const batch = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, batch.id, [
+      { raw: {}, mapped: row({ landlordName: "Al Noor Properties LLC", tenantName: "Ricardo Fernandes" }) },
+    ]);
+    await imports.commitImportBatch(W.ctx, batch.id);
+
+    const tenancy = await prisma.tenancy.findFirst({ where: { ejariNo: "2025/118402" } });
+    const landlord = await prisma.contact.findUnique({ where: { id: tenancy!.landlordContactId! } });
+    const tenant = await prisma.contact.findUnique({ where: { id: tenancy!.tenantContactId! } });
+    expect(landlord!.kind).toBe("OWNER");
+    expect(landlord!.name).toBe("Al Noor Properties LLC");
+    expect(tenant!.kind).toBe("TENANT");
+    expect(tenant!.name).toBe("Ricardo Fernandes");
+    expect(tenancy!.propertyId).toBeTruthy();
+    const property = await prisma.property.findUnique({ where: { id: tenancy!.propertyId } });
+    expect(property!.ownerContactId).toBe(landlord!.id);
+  });
+
+  it("reuses a unique existing landlord on a second import; rollback archives only newly created parties", async () => {
+    const first = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, first.id, [
+      { raw: {}, mapped: row({ landlordName: "Al Noor Properties LLC", tenantName: "Ricardo Fernandes" }) },
+    ]);
+    await imports.commitImportBatch(W.ctx, first.id);
+    const firstLandlordId = (await prisma.tenancy.findFirst({ where: { ejariNo: "2025/118402" } }))!.landlordContactId;
+
+    const second = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, second.id, [
+      {
+        raw: {},
+        mapped: row({
+          ejariNo: "2026/000002",
+          unitNo: "901",
+          startDate: "2026-10-01",
+          endDate: "2027-09-30",
+          landlordName: "al noor properties llc",
+          tenantName: "New Tenant",
+        }),
+      },
+    ]);
+    await imports.commitImportBatch(W.ctx, second.id);
+    const secondTenancy = await prisma.tenancy.findFirst({ where: { ejariNo: "2026/000002" } });
+    expect(secondTenancy!.landlordContactId).toBe(firstLandlordId);
+    expect(await prisma.contact.count({ where: { workspaceId: W.workspaceId, kind: "OWNER", archivedAt: null } })).toBe(1);
+
+    await imports.rollbackImportBatch(W.ctx, second.id);
+    expect(await prisma.contact.count({ where: { id: firstLandlordId!, archivedAt: null } })).toBe(1);
+    const newTenant = await prisma.contact.findFirst({ where: { workspaceId: W.workspaceId, name: "New Tenant" } });
+    expect(newTenant!.archivedAt).toBeTruthy();
+  });
+
+  it("fills an even cheque split when chequeCount is set and no items were extracted", async () => {
+    const batch = await imports.createImportBatch(W.ctx, "EXCEL");
+    await imports.addImportRows(W.ctx, batch.id, [
+      { raw: {}, mapped: row({ paymentItems: [], chequeCount: 4, annualRent: 72000 }) },
+    ]);
+    await imports.commitImportBatch(W.ctx, batch.id);
+    const items = await prisma.paymentItem.findMany({
+      where: { tenancy: { ejariNo: "2025/118402" } },
+      orderBy: { seq: "asc" },
+    });
+    expect(items).toHaveLength(4);
+    const total = items.reduce((s, i) => s + Number(i.amount), 0);
+    expect(total).toBe(72000);
+  });
+});
