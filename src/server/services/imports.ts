@@ -1,6 +1,14 @@
 import { Prisma, type ContactKind, type ImportSource } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, assertSameWorkspace, require_, scope } from "../authz";
+import {
+  type AuthzContext,
+  AuthzError,
+  assertSameWorkspace,
+  isDelegateRole,
+  require_,
+  scope,
+} from "../authz";
+import { assertDelegateClientId } from "./delegateScope";
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
 import { toUtcDateOnly } from "../calculators/dates";
@@ -210,6 +218,21 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
       if (landlord.created && landlord.id) refs.push({ type: "Contact", id: landlord.id });
       if (tenant.created && tenant.id) refs.push({ type: "Contact", id: tenant.id });
 
+      // F6: the row supplies clientPrincipalId, so it gets the same guard
+      // createProperty uses. Property.clientPrincipalId has no FK, so an
+      // unvalidated value persists silently and the asset then falls outside
+      // resolveClientScopeIds -- invisible to the client it belongs to.
+      if (data.clientPrincipalId) {
+        if (isDelegateRole(ctx.role)) {
+          assertDelegateClientId(ctx, data.clientPrincipalId);
+        } else {
+          const client = await tx.clientPrincipal.findUnique({
+            where: { id: data.clientPrincipalId },
+          });
+          assertSameWorkspace(ctx, client);
+        }
+      }
+
       let property =
         (data.propertyId
           ? await tx.property.findFirst({
@@ -244,12 +267,14 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
           },
         });
         refs.push({ type: "Property", id: property.id });
-      } else if (!property.ownerContactId && landlord.id) {
-        property = await tx.property.update({
-          where: { id: property.id },
-          data: { ownerContactId: landlord.id },
-        });
       }
+      // Deliberately NOT back-filling ownerContactId on an existing property.
+      // It reads like a label but it is a scope grant: resolveContactScopeIds
+      // gives a LANDLORD persona EVERY tenancy on an owned property, broader
+      // than the landlord-of-record grant beside it. Assigning ownership as a
+      // side effect of importing one lease can hand an external landlord an
+      // entire client's portfolio for that unit. Ownership is set explicitly
+      // through updateProperty, which is capability-gated and audited.
 
       const contractDocId = batch!.source === "DOCUMENTS" ? batch!.fileDocId : null;
       const tenancy = await tx.tenancy.create({
@@ -537,6 +562,42 @@ function resolveSchedule(data: ImportRowData): NonNullable<ImportRowData["paymen
  * the same kind) or create one. Multiple name matches never auto-bind — the
  * reviewer must pick. Called inside the import transaction.
  */
+/**
+ * Submitted in a party's contact-id field when the reviewer explicitly chose
+ * "create new". Without it an empty field is indistinguishable from "no opinion",
+ * and the auto-match below would silently bind an existing same-name contact --
+ * the opposite of what the review screen promises. Contact identity is a scope
+ * grant (contactScope.ts derives persona and client-viewer visibility from
+ * tenancy parties), so a wrong merge is a cross-client read, not a cosmetic one.
+ */
+export const CREATE_NEW_CONTACT = "__create_new__";
+
+/**
+ * An implicit match binds an imported tenancy to a contact nobody explicitly
+ * chose. That is a scope decision, so it must leave a trace: without this the
+ * only audited outcome was contact.create, and a merge was invisible.
+ */
+async function auditPartyReuse(
+  tx: Prisma.TransactionClient,
+  ctx: AuthzContext,
+  contactId: string,
+  matchedBy: "emiratesId" | "name",
+) {
+  await recordAudit(
+    {
+      workspaceId: ctx.workspaceId,
+      actorType: ctx.isStaff ? "STAFF" : "USER",
+      actorId: ctx.userId,
+      onBehalfOfId: ctx.onBehalfOfId,
+      verb: "contact.reuse",
+      objectType: "Contact",
+      objectId: contactId,
+      payload: { matchedBy },
+    },
+    tx,
+  );
+}
+
 async function resolveImportParty(
   tx: Prisma.TransactionClient,
   ctx: AuthzContext,
@@ -547,24 +608,33 @@ async function resolveImportParty(
     fields?: ImportPartyFields;
   },
 ): Promise<{ id: string | null; created: boolean }> {
-  if (args.contactId) {
+  const forceCreate = args.contactId === CREATE_NEW_CONTACT;
+  if (args.contactId && !forceCreate) {
     const existing = await tx.contact.findFirst({
       where: { id: args.contactId, workspaceId: ctx.workspaceId, archivedAt: null },
     });
     if (!existing) throw new AuthzError("Contact not found", 404);
+    if (existing.kind !== args.kind) {
+      // Kind is load-bearing: an OWNER bound as landlord-of-record grants a
+      // LANDLORD persona every lease on the property (contactScope.ts).
+      throw new AuthzError("Contact is not the expected kind for this party", 422);
+    }
     return { id: existing.id, created: false };
   }
 
   const emiratesId = args.fields?.emiratesId?.trim() || undefined;
-  if (emiratesId) {
+  if (emiratesId && !forceCreate) {
     const byId = await tx.contact.findMany({
       where: { workspaceId: ctx.workspaceId, kind: args.kind, archivedAt: null, emiratesId },
     });
-    if (byId.length === 1) return { id: byId[0].id, created: false };
+    if (byId.length === 1) {
+      await auditPartyReuse(tx, ctx, byId[0].id, "emiratesId");
+      return { id: byId[0].id, created: false };
+    }
   }
 
   const name = args.name?.trim() ? collapseName(args.name) : undefined;
-  if (name) {
+  if (name && !forceCreate) {
     const byName = await tx.contact.findMany({
       where: {
         workspaceId: ctx.workspaceId,
@@ -573,7 +643,10 @@ async function resolveImportParty(
         name: { equals: name, mode: "insensitive" },
       },
     });
-    if (byName.length === 1) return { id: byName[0].id, created: false };
+    if (byName.length === 1) {
+      await auditPartyReuse(tx, ctx, byName[0].id, "name");
+      return { id: byName[0].id, created: false };
+    }
   }
 
   if (!name) return { id: null, created: false };

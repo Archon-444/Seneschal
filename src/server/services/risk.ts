@@ -133,6 +133,9 @@ async function clearFlag(
  * CHEQUE_TOTAL_MISMATCH, NOTICE_GATE_WITHIN_30D. Called on write and nightly.
  */
 export async function evaluateRiskForTenancy(tenancyId: string, db: Db = prisma) {
+  // scope-audit: system derivation. Runs post-commit for a tenancy the caller
+  // already authorized (or from the nightly sweep, which iterates by workspace);
+  // raises/clears flags for that tenancy only.
   const tenancy = await db.tenancy.findUnique({
     where: { id: tenancyId },
     include: { paymentItems: true },
@@ -258,6 +261,8 @@ export async function clearProofOverdue(proofRequestId: string, workspaceId: str
  * the underlying raise/clear are no-ops if state already matches.
  */
 export async function evaluateRenewalRisk(renewalCaseId: string, db: Db = prisma) {
+  // scope-audit: system derivation for one renewal case already resolved by a
+  // scoped caller or the public tenant-link path, which has no ctx by design.
   const rc = await db.renewalCase.findUnique({ where: { id: renewalCaseId } });
   if (!rc || rc.archivedAt) return;
 

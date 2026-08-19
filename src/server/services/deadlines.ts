@@ -20,6 +20,9 @@ function computedFrom(calc: CalcResult): Prisma.InputJsonValue {
 async function upsertDeadline(
   db: Db,
   args: {
+  // scope-audit: internal derivation helper. No ctx by design; it is called only
+  // by the regenerate/sync functions below with a tenancyId their caller already
+  // authorized, and it writes only Deadline rows derived from that tenancy.
     workspaceId: string;
     tenancyId: string;
     propertyId: string;
@@ -63,6 +66,9 @@ async function upsertDeadline(
 
 /** Recompute all deadlines for a tenancy from its current state. */
 export async function regenerateDeadlinesForTenancy(tenancyId: string, db: Db = prisma) {
+  // scope-audit: system derivation. Callers (createTenancy, setPaymentSchedule,
+  // import commit, mint) have already gated the tenancy; this recomputes that
+  // tenancy's own deadlines and touches nothing outside it.
   const tenancy = await db.tenancy.findUnique({
     where: { id: tenancyId },
     include: { paymentItems: true },
@@ -120,6 +126,8 @@ export async function regenerateDeadlinesForTenancy(tenancyId: string, db: Db = 
  */
 export async function syncListingPermitDeadline(
   listing: {
+  // scope-audit: system derivation for one listing already resolved by a scoped
+  // caller; writes only that listing's permit deadline.
     id: string;
     workspaceId: string;
     propertyId: string;

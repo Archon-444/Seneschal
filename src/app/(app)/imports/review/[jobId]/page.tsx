@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CREATE_NEW_CONTACT } from "@/server/services/imports";
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import {
@@ -240,7 +241,7 @@ export default async function ExtractionReviewPage({
                   className={inputClass}
                   defaultValue={landlordMatch?.id ?? ""}
                 >
-                  <option value="">— create new below —</option>
+                  <option value={CREATE_NEW_CONTACT}>— create new below —</option>
                   {owners.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -273,7 +274,7 @@ export default async function ExtractionReviewPage({
                   className={inputClass}
                   defaultValue={tenantMatch?.id ?? ""}
                 >
-                  <option value="">— create new below —</option>
+                  <option value={CREATE_NEW_CONTACT}>— create new below —</option>
                   {tenants.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
