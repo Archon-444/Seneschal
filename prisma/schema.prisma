@@ -161,6 +161,7 @@ model ClientPrincipal {
   notes       String?
   createdAt   DateTime @default(now())
   archivedAt  DateTime?            // D12: archive lifecycle, never hard delete
+  properties  Property[]           // #58: non-polymorphic trust ref from Property.clientPrincipalId
   @@index([workspaceId])
 }
 
@@ -186,6 +187,10 @@ model Contact {
   verifiedById String?
   createdAt   DateTime    @default(now())
   archivedAt  DateTime?
+  ownedProperties    Property[] @relation("PropertyOwner")
+  assignedProperties Property[] @relation("PropertyAgent")
+  landlordTenancies  Tenancy[]  @relation("TenancyLandlord")
+  tenantTenancies    Tenancy[]  @relation("TenancyTenant")
   @@index([workspaceId, kind])
 }
 
@@ -221,7 +226,7 @@ model Property {
   makaniNo          String?
   dewaPremiseNo     String?
   sizeSqm           Decimal?  @db.Decimal(10, 2)
-  assignedAgentId   String?          // Contact
+  assignedAgentId   String?          // Contact — the assigned agent; not a User
   serviceChargeInfo Json?
   riskStatus        String?
   notes             String?
@@ -229,6 +234,9 @@ model Property {
   archivedAt        DateTime?
   tenancies         Tenancy[]
   listings          Listing[]
+  clientPrincipal   ClientPrincipal? @relation(fields: [clientPrincipalId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  owner             Contact?         @relation("PropertyOwner", fields: [ownerContactId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignedAgent     Contact?         @relation("PropertyAgent", fields: [assignedAgentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   @@index([workspaceId, clientPrincipalId])
 }
 // TODO [later]: optional Unit entity under Property for multi-unit assets.
@@ -262,6 +270,8 @@ model Tenancy {
   successor        Tenancy?      @relation("TenancyRenewal")
   property         Property      @relation(fields: [propertyId], references: [id])
   contractDoc      Document?     @relation("TenancyContract", fields: [contractDocId], references: [id])
+  landlord         Contact?      @relation("TenancyLandlord", fields: [landlordContactId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tenant           Contact?      @relation("TenancyTenant", fields: [tenantContactId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   paymentItems     PaymentItem[]
   deadlines        Deadline[]
   @@index([workspaceId, propertyId])
