@@ -34,7 +34,7 @@ export function Sidebar({
     const tone = active
       ? "bg-navy-800 text-ivory-50"
       : accent
-        ? "text-gold-300 hover:bg-navy-800"
+        ? "text-verde-100 hover:bg-navy-800"
         : "text-ivory-200 hover:bg-navy-800 hover:text-ivory-50";
     return (
       <Link
@@ -57,7 +57,7 @@ export function Sidebar({
   const zoned = nav.some((i) => i.zone);
   const consoleBlock = isStaff && (
     // The platform console is a context-switch OUT of the workspace, not a feature: a divider
-    // above it and gold accent mark it as leaving the workspace plane.
+    // above it and a verde accent mark it as leaving the workspace plane.
     <div className="mt-auto border-t border-navy-800 px-3 pt-3 pb-1">
       {!collapsed && <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-300">Platform</div>}
       {link({ href: "/admin", label: "Platform console", icon: "staff" }, true)}

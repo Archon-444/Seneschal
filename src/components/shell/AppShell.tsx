@@ -112,7 +112,7 @@ export function AppShell({
       {/* Keyboard users: first Tab lands here and jumps past the chrome. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-navy-900 focus:shadow-md"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-sm focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-navy-900"
       >
         Skip to content
       </a>
@@ -202,7 +202,7 @@ export function AppShell({
               label="Create new"
               align="right"
               buttonClassName="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ivory-100 hover:bg-navy-800"
-              panelClassName="w-56 overflow-hidden rounded-lg border border-line bg-white py-1 shadow-lg"
+              panelClassName="w-56 overflow-hidden rounded-sm border border-line bg-white py-1"
               button={
                 <>
                   <span className="text-base leading-none" aria-hidden="true">+</span>

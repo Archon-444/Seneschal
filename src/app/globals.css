@@ -1,51 +1,52 @@
 @import "tailwindcss";
 
 @theme {
-  /* Seneschal palette: premium, calm, trustworthy — aligned to the design demo.
-     Token NAMES are kept stable (ivory/navy/gold/verde/claret) so all 21 screens
-     pick up the new hexes without markup changes. -100 shades are the soft tints
-     used for pill/stat backgrounds; -500 the solid accent; -700 the deep text. */
+  /* Registry file, not salon. Cool security-paper surfaces, carbon ink,
+     Ejari-green as the stamp/action colour. Gold is foil only — never a CTA.
+     Token NAMES stay ivory/navy/gold so existing screens pick up the hexes. */
 
-  /* surfaces */
-  --color-ivory-50: #f6f3eb;   /* app background */
-  --color-ivory-100: #fbf9f2;  /* raised panels / hover */
-  --color-ivory-200: #efe9d9;
-  --color-ivory-300: #e4decf;  /* hairline borders (line) */
+  /* surfaces — cheque-stock green-white, not latte cream */
+  --color-ivory-50: #eef2ee;
+  --color-ivory-100: #f6f8f5;
+  --color-ivory-200: #e2e8e2;
+  --color-ivory-300: #c5cdc6;
 
-  --color-navy-50: #eef1f6;
-  --color-navy-100: #d5dce8;
-  --color-navy-300: #8794ad;   /* secondary ink on navy surfaces · WCAG AA */
-  --color-navy-500: #30415f;   /* secondary ink */
-  --color-navy-700: #233252;
-  --color-navy-800: #1b2a45;
-  --color-navy-900: #16263f;   /* primary ink / sidebar */
+  --color-navy-50: #eef2ef;
+  --color-navy-100: #d4ddd6;
+  --color-navy-300: #9aa89f;   /* secondary ink on carbon · WCAG AA */
+  --color-navy-500: #3f4d45;
+  --color-navy-700: #2a342f;
+  --color-navy-800: #1c2420;
+  --color-navy-900: #141916;   /* carbon spine / primary ink */
 
-  --color-gold-300: #e3c882;
-  --color-gold-500: #bf9b53;   /* accent */
-  --color-gold-700: #705a28;   /* gold text on tint · WCAG AA */
-  --color-gold-100: #f0e6d2;   /* gold tint */
+  /* foil — muted brass, rules and seals only */
+  --color-gold-300: #c4b68a;
+  --color-gold-500: #8f7d45;
+  --color-gold-700: #5c5230;
+  --color-gold-100: #ebe6d6;
 
-  --color-verde-100: #e3f0e9;  /* green tint */
-  --color-verde-500: #2e7d5b;
-  --color-verde-700: #2a5a3a;
+  /* stamp / primary action — cooler Ejari green */
+  --color-verde-100: #d7ebe1;
+  --color-verde-500: #1f6b4c;
+  --color-verde-700: #154c37;
 
-  --color-amber-100: #f7ead8;  /* amber tint (in-progress) */
-  --color-amber-500: #b5722c;
-  --color-amber-700: #8a5520;
+  --color-amber-100: #f3ead8;
+  --color-amber-500: #a56a28;
+  --color-amber-700: #7a4e1c;
 
-  --color-claret-100: #f5e3e0; /* red tint */
-  --color-claret-500: #a8453b;
-  --color-claret-700: #7d2920;
+  --color-claret-100: #f3e2df;
+  --color-claret-500: #9c3f36;
+  --color-claret-700: #72261e;
 
-  /* semantic helpers */
-  --color-line: #e4decf;
-  --color-muted: #5f687b;      /* secondary text on ivory/white · WCAG AA */
+  --color-line: #c5cdc6;
+  --color-muted: #5a645c;
 
-  --radius: 12px;
+  --radius: 3px;
 
-  --font-display: var(--font-fraunces), "Georgia", serif;
-  --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-plex-condensed), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-arabic: var(--font-plex-arabic), sans-serif;
 }
 
 body {
@@ -54,9 +55,6 @@ body {
   font-family: var(--font-sans);
 }
 
-/* navy-300 is intentionally the on-navy secondary token. A few legacy views
-   use its utility on light surfaces; resolve those to the light-surface muted
-   token without weakening the dark shell's contrast. */
 .text-navy-300 {
   color: var(--color-muted);
 }
@@ -66,26 +64,56 @@ body {
 
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
+  font-weight: 600;
 }
 
-/* money and dates render in monospace per design language */
+.font-arabic {
+  font-family: var(--font-arabic);
+}
+
 .figure {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Type scale ─────────────────────────────────────────────────────────────
-   Centralizes the recurring text treatments so screens stop hand-rolling
-   text-[NNpx]. Values mirror the existing kit exactly (value-preserving). */
-.t-title { font-size: 30px; font-weight: 600; }
+.t-title { font-size: 1.75rem; font-weight: 600; letter-spacing: -0.03em; }
 .t-kpi { font-size: 2rem; line-height: 1; font-weight: 600; }
-.t-eyebrow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; }
-.t-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; }
-.t-th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; }
+.t-eyebrow { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+.t-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.t-th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 .t-caption { font-size: 11px; }
 
-/* ── Focus: a visible keyboard ring everywhere (quality floor) ─────────────── */
+/* Bilingual endorsement — the one signature mark. Rectangular like a
+   cheque/Ejari chop, not a rotated rubber-stamp gag. */
+.recorded-stamp {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  border: 1px solid var(--color-verde-700);
+  padding: 0.3rem 0.45rem;
+  color: var(--color-verde-700);
+  line-height: 1.15;
+  user-select: none;
+}
+.recorded-stamp-en {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.recorded-stamp-ar {
+  font-family: var(--font-arabic);
+  font-size: 11px;
+  font-weight: 600;
+}
+.recorded-stamp-date {
+  font-size: 9px;
+  color: var(--color-navy-500);
+}
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
@@ -93,12 +121,11 @@ select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible,
 .focus-ring:focus-visible {
-  outline: 2px solid var(--color-gold-500);
+  outline: 2px solid var(--color-verde-500);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
-/* ── Tables: consistent, calm row hover on the shared kit table ─────────────── */
 .ui-table tbody tr {
   transition: background-color 0.12s ease;
 }
@@ -106,8 +133,6 @@ textarea:focus-visible,
   background-color: var(--color-ivory-100);
 }
 
-/* ── Responsive table: opt-in stack-to-cards below sm ───────────────────────
-   Add `table-stack` to <Table>; pass `label` to each <Td> for the row label. */
 @media (max-width: 640px) {
   .table-stack thead { display: none; }
   .table-stack tbody tr {
@@ -125,15 +150,14 @@ textarea:focus-visible,
   .table-stack tbody td::before {
     content: attr(data-label);
     font-size: 10.5px;
-    font-weight: 700;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.025em;
+    letter-spacing: 0.04em;
     color: var(--color-muted);
     text-align: left;
   }
 }
 
-/* ── Skeleton shimmer (reduced-motion neutralizes the animation below) ─────── */
 @keyframes seneschal-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
@@ -147,10 +171,9 @@ textarea:focus-visible,
   );
   background-size: 200% 100%;
   animation: seneschal-shimmer 1.4s ease-in-out infinite;
-  border-radius: 6px;
+  border-radius: 2px;
 }
 
-/* ── Dialog & toast entrances (neutralized by the reduced-motion rule below) ── */
 @keyframes seneschal-pop-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
@@ -168,7 +191,6 @@ dialog.mobile-nav-drawer::backdrop {
   animation: seneschal-pop-in 0.18s ease-out;
 }
 
-/* ── Respect reduced-motion as a floor (without announcing it) ──────────────── */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
@@ -178,4 +200,13 @@ dialog.mobile-nav-drawer::backdrop {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .kit-pressable:hover {
+    filter: brightness(1.05);
+  }
+}
+.kit-pressable:active:not(:disabled) {
+  transform: scale(0.97);
 }

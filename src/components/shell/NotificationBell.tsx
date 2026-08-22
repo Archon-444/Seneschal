@@ -122,12 +122,12 @@ export function NotificationBell({ initialUnread }: { initialUnread: number }) {
       label={`Notifications${unread ? `, ${unread} unread` : ""}`}
       align="right"
       buttonClassName="relative grid h-9 w-9 place-items-center rounded-md text-ivory-200 hover:bg-navy-800 hover:text-ivory-50"
-      panelClassName="w-80 overflow-hidden rounded-lg border border-line bg-white shadow-lg"
+      panelClassName="w-80 overflow-hidden rounded-sm border border-line bg-white"
       button={
         <>
           <BellIcon />
           {unread > 0 && (
-            <span className="figure absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-gold-500 px-1 text-[10px] font-semibold text-navy-900">
+            <span className="figure absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-sm bg-verde-700 px-1 text-[10px] font-semibold text-white">
               {unread > 9 ? "9+" : unread}
             </span>
           )}
@@ -170,7 +170,7 @@ function BellPanel({
   return (
     <div>
       <div className="flex items-center justify-between border-b border-line px-3 py-2">
-        <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-gold-700">Notifications</span>
+        <span className="t-eyebrow text-muted">Notifications</span>
         {unread > 0 && (
           <button
             type="button"
@@ -193,7 +193,7 @@ function BellPanel({
               ? "border-l-transparent"
               : it.urgent
                 ? "border-l-claret-500 bg-claret-500/[0.04]"
-                : "border-l-gold-500 bg-gold-100/40";
+                : "border-l-verde-500 bg-verde-100/40";
             const cls = `group flex w-full items-center gap-2 border-b border-l-2 border-line/60 px-3 py-2 text-left hover:bg-ivory-100 ${tone}`;
             const inner = (
               <>

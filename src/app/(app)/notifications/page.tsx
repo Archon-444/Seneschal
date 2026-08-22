@@ -40,14 +40,14 @@ export default async function NotificationsPage() {
       {items.length === 0 ? (
         <EmptyState title="All caught up" message="No notifications yet — Seneschal will flag things here as they need you." />
       ) : (
-        <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+        <div className="divide-y divide-line overflow-hidden rounded-sm border border-line bg-white">
           {items.map((it) => {
             const href = notificationHref(it);
             const tone = it.readAt
               ? "border-l-transparent"
               : it.urgent
                 ? "border-l-claret-500 bg-claret-500/[0.04]"
-                : "border-l-gold-500 bg-gold-100/40";
+                : "border-l-verde-500 bg-verde-100/40";
             const inner = (
               <>
                 <div className="min-w-0 flex-1">
@@ -59,7 +59,7 @@ export default async function NotificationsPage() {
                   )}
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-gold-700">
+                  <div className="t-eyebrow text-muted">
                     {CATEGORY_LABEL[it.category ?? ""] ?? ""}
                   </div>
                   <div className="mt-0.5 text-[11px] text-muted"><DubaiDate value={it.createdAt} /></div>

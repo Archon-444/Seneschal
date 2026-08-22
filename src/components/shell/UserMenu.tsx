@@ -43,10 +43,10 @@ export function UserMenu({
       label="Account menu"
       align="right"
       buttonClassName="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-navy-800"
-      panelClassName="w-60 overflow-hidden rounded-lg border border-line bg-white py-1 shadow-lg"
+      panelClassName="w-60 overflow-hidden rounded-sm border border-line bg-white py-1"
       button={
         <>
-          <span className="figure grid h-8 w-8 place-items-center rounded-full bg-gold-100 text-xs font-semibold text-gold-700">
+          <span className="figure grid h-8 w-8 place-items-center rounded-sm bg-verde-100 text-xs font-semibold text-verde-700">
             {initials(name, email)}
           </span>
           <span className="hidden min-w-0 sm:block">
