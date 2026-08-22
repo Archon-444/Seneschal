@@ -3,13 +3,15 @@ import type { ReactNode } from "react";
 import { formatDubaiDate, formatDubaiDateTime } from "@/server/calculators/dates";
 import { badgeTone, BADGE_LABELS } from "./badgeTones";
 
-// Shared UI primitives — Seneschal design language: ivory surfaces, navy ink,
-// gold accents, Fraunces display, Public Sans body, mono figures. Restyling
-// here propagates to every screen. Type treatments use the .t-* scale and
-// money/dates always render mono via .figure (see globals.css).
+// Registry kit primitives. Screens compose these; they do not fork them.
+// Cool security-paper surfaces, carbon ink, IBM Plex (condensed display /
+// sans body / mono figures). Ejari-green is the stamp and the primary action.
+// Gold is foil only — never eyebrows, ticks, or CTAs. Radius is 2–4px; no
+// card shadows. Type treatments use the .t-* scale; money/dates always
+// render mono via .figure (see globals.css).
 
 export function Eyebrow({ children }: { children: ReactNode }) {
-  return <p className="t-eyebrow mb-2 text-gold-700">{children}</p>;
+  return <p className="t-eyebrow mb-2 text-muted">{children}</p>;
 }
 
 export function PageHeader({
@@ -45,7 +47,7 @@ export function Card({
   hover?: boolean;
 }) {
   const hoverClass = hover
-    ? "transition hover:border-gold-500 hover:shadow-md"
+    ? "transition-colors hover:border-verde-500"
     : "";
   // Tailwind utilities have stylesheet order, not call-site order. Omitting the
   // default surface when a caller supplies one ensures semantic navy/tinted
@@ -53,7 +55,7 @@ export function Card({
   const surfaceClass = /(?:^|\s)bg-[^\s]+/.test(className) ? "" : "bg-white";
   return (
     <div
-      className={`rounded-xl border border-line ${surfaceClass} p-5 shadow-sm ${hoverClass} ${className}`}
+      className={`rounded-sm border border-line ${surfaceClass} p-5 ${hoverClass} ${className}`}
     >
       {children}
     </div>
@@ -82,23 +84,23 @@ export function KpiCard({
     danger: "text-claret-500",
     good: "text-verde-700",
   }[tone];
-  // The ledger "tick": a short hairline-gold rule under every figure — the one
-  // recurring signature mark, quiet enough to live on every screen.
+  // A 1px Ejari-green rule under every figure. The bilingual RecordedStamp
+  // is the signature mark; this rule is the quieter ledger tick.
   const inner =
     variant === "risk" ? (
       <div
-        className={`rounded-xl border border-navy-900 bg-navy-900 p-5 text-white shadow-sm ${href ? "transition hover:brightness-110" : ""}`}
+        className={`rounded-sm border border-navy-900 bg-navy-900 p-5 text-white ${href ? "transition hover:brightness-110" : ""}`}
       >
-        <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-gold-500">{label}</div>
+        <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-navy-300">{label}</div>
         <div className="figure t-kpi mt-2">{value}</div>
-        <div className="mt-3 h-px w-7 bg-gold-500/60" />
+        <div className="mt-3 h-px w-7 bg-verde-500" />
         {sub && <div className="mt-2 text-[11px] text-white/75">{sub}</div>}
       </div>
     ) : (
       <Card hover={!!href}>
         <div className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">{label}</div>
         <div className={`figure t-kpi mt-2 ${toneClass}`}>{value}</div>
-        <div className="mt-3 h-px w-7 bg-gold-500/40" />
+        <div className="mt-3 h-px w-7 bg-verde-500" />
         {sub && <div className="mt-2 text-[11px] text-muted">{sub}</div>}
       </Card>
     );
@@ -122,7 +124,7 @@ export function Badge({
   const text = label ?? BADGE_LABELS[value] ?? value.replace(/_/g, " ");
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${tone}`}
+      className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-0.5 text-xs font-bold ${tone}`}
     >
       {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
       {text}
@@ -142,7 +144,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-dashed border-line bg-ivory-100 p-10 text-center">
+    <div className="rounded-sm border border-dashed border-line bg-ivory-100 p-10 text-center">
       {title && <p className="mb-1 text-sm font-semibold text-navy-900">{title}</p>}
       <p className="text-sm text-muted">{message}</p>
       {action && <div className="mt-4 flex justify-center">{action}</div>}
@@ -162,7 +164,7 @@ export function Table({
   stack?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-sm border border-line bg-white">
       <table className={`ui-table w-full text-sm ${stack ? "table-stack" : ""}`}>
         <thead>
           <tr className="border-b border-line bg-ivory-100 text-left">
@@ -208,10 +210,10 @@ export function Reminder({
   sub?: ReactNode;
   hot?: boolean;
 }) {
-  const chip = hot ? "bg-claret-100 text-claret-700" : "bg-gold-100 text-gold-700";
+  const chip = hot ? "bg-claret-100 text-claret-700" : "bg-ivory-100 text-navy-700";
   return (
     <div className="flex items-start gap-3 border-b border-dashed border-line py-2.5 last:border-0">
-      <span className={`figure min-w-16 rounded-md px-2 py-1 text-center text-[11.5px] font-semibold ${chip}`}>
+      <span className={`figure min-w-16 rounded-sm px-2 py-1 text-center text-[11.5px] font-semibold ${chip}`}>
         {date}
       </span>
       <div>
@@ -228,13 +230,13 @@ export function Button({
   ...props
 }: { children: ReactNode; variant?: "primary" | "secondary" | "danger" } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const styles = {
-    primary: "bg-navy-900 text-ivory-50 hover:brightness-110",
+    primary: "bg-verde-700 text-white hover:bg-verde-500",
     secondary: "border border-line bg-white text-navy-700 hover:bg-ivory-100",
     danger: "bg-claret-500 text-white hover:bg-claret-700",
   }[variant];
   return (
     <button
-      className={`rounded-lg px-4 py-2.5 text-sm font-bold transition disabled:opacity-50 ${styles}`}
+      className={`kit-pressable rounded-sm px-4 py-2.5 text-sm font-bold transition disabled:opacity-50 ${styles}`}
       {...props}
     >
       {children}
@@ -244,10 +246,10 @@ export function Button({
 
 export function LinkButton({ href, children, variant = "secondary" }: { href: string; children: ReactNode; variant?: "primary" | "secondary" }) {
   const styles = {
-    primary: "bg-navy-900 text-ivory-50 hover:brightness-110",
+    primary: "bg-verde-700 text-white hover:bg-verde-500",
     secondary: "border border-line bg-white text-navy-700 hover:bg-ivory-100",
   }[variant];
-  const className = `inline-block rounded-lg px-4 py-2.5 text-sm font-bold transition ${styles}`;
+  const className = `kit-pressable inline-block rounded-sm px-4 py-2.5 text-sm font-bold transition ${styles}`;
   // API routes are file downloads (evidence pack, CSV export), not client-navigable
   // pages. next/link prefetches every href it is given, so pointing it at one makes
   // the router fetch that route as an RSC payload, which it cannot serve: the
@@ -292,7 +294,7 @@ export function Field({
       <span className="t-label mb-1 block text-muted">
         {label}
         {required && (
-          <span className="ml-0.5 text-gold-700" aria-hidden="true">
+          <span className="ml-0.5 text-claret-700" aria-hidden="true">
             *
           </span>
         )}
@@ -310,7 +312,7 @@ export function Field({
 }
 
 export const inputClass =
-  "w-full rounded-lg border border-line bg-ivory-100 px-3 py-2.5 text-sm text-navy-900 focus:border-gold-500 focus:bg-white focus:outline-none";
+  "w-full rounded-sm border border-line bg-ivory-100 px-3 py-2.5 text-sm text-navy-900 focus:border-verde-500 focus:bg-white focus:outline-none";
 
 export function Money({ amount }: { amount: string | number }) {
   const n = typeof amount === "string" ? Number(amount) : amount;
@@ -405,7 +407,7 @@ export function ErrorState({
   retryLabel?: string;
 }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-10 text-center shadow-sm">
+    <div className="rounded-sm border border-line bg-white p-10 text-center">
       <p className="font-display text-lg font-semibold text-navy-900">{title}</p>
       <p className="mx-auto mt-1 max-w-md text-sm text-muted">{message}</p>
       {onRetry && (
@@ -492,12 +494,38 @@ export function FormActions({ children, note }: { children: ReactNode; note?: Re
 export function FormStatus({ error, success }: { error?: string | null; success?: string | null }) {
   if (!error && !success) return null;
   return error ? (
-    <p role="alert" className="rounded-lg bg-claret-100 px-3 py-2 text-sm text-claret-700">
+    <p role="alert" className="rounded-sm bg-claret-100 px-3 py-2 text-sm text-claret-700">
       {error}
     </p>
   ) : (
-    <p role="status" className="rounded-lg bg-verde-100 px-3 py-2 text-sm text-verde-700">
+    <p role="status" className="rounded-sm bg-verde-100 px-3 py-2 text-sm text-verde-700">
       {success}
     </p>
+  );
+}
+
+/** Bilingual endorsement — the one signature mark. Rectangular like a
+ *  cheque/Ejari chop, not a rotated rubber-stamp gag. Put this on trusted
+ *  records (evidence events), not on every card. */
+export function RecordedStamp({
+  at,
+  className = "",
+}: {
+  at?: Date | string;
+  className?: string;
+}) {
+  const date = at == null ? null : typeof at === "string" ? new Date(at) : at;
+  const dateLabel = date ? formatDubaiDate(date) : null;
+  return (
+    <span
+      className={`recorded-stamp ${className}`}
+      aria-label={dateLabel ? `Recorded ${dateLabel}` : "Recorded"}
+    >
+      <span className="recorded-stamp-en">Recorded</span>
+      <span className="recorded-stamp-ar" lang="ar" dir="rtl">
+        مسجّل
+      </span>
+      {dateLabel ? <span className="recorded-stamp-date figure">{dateLabel}</span> : null}
+    </span>
   );
 }

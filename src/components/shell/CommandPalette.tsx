@@ -118,7 +118,7 @@ export function CommandPalette({ search }: { search: (q: string) => Promise<Sear
         ref={dialogRef}
         onClose={reset}
         aria-label="Search records"
-        className="seneschal-dialog mx-auto mt-[12vh] w-full max-w-lg rounded-xl border border-line bg-white p-0 shadow-lg"
+        className="seneschal-dialog mx-auto mt-[12vh] w-full max-w-lg rounded-sm border border-line bg-white p-0"
       >
         <div className="border-b border-line p-3">
           <input

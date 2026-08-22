@@ -5,16 +5,19 @@ Next.js 15 (App Router, server components) · TypeScript · Prisma 6 · PostgreS
 
 ## Design language (stay on-brand — don't ship a generic dashboard)
 
-Calm, trustworthy, document-grade. **Not** a marketplace/SaaS look; no shadcn-gray defaults.
-Use the **`frontend-design`** skill (`.claude/skills/frontend-design`) when building or reshaping UI.
+Registry file, not salon. Seneschal is Dubai tenancy evidence — Ejari, cheque stock, DLD stamp — not a family-office cream dashboard and not a marketplace.
+Use the **`frontend-design`** skill (`.claude/skills/frontend-design`) when building or reshaping UI. Do **not** reintroduce warm ivory + serif + gold (AI-dashboard cluster #1), dark+neon, or newspaper broadsheet.
 
-- **Fonts** (`next/font`, self-hosted): Fraunces = display (`.font-display`), Public Sans = body, IBM Plex Mono = money & dates (`.figure`). Money and dates are **always** mono.
-- **Palette** (Tailwind `@theme` tokens in `src/app/globals.css`):
-  - Surfaces: `ivory-50` (app bg) · `ivory-100` (panels/hover) · `white` (cards) · `line` (#e4decf hairlines)
-  - Ink: `navy-900` (primary) · `navy-500` (secondary) · `muted` (#6b7385)
-  - Accent: `gold-500` (accent) / `gold-700` (text on tint) / `gold-100` (tint)
-  - Semantic: `verde` = good · `amber` = in-progress/warn · `claret` = risk/danger
-- **Reuse the kit** in `src/components/ui.tsx` (`PageHeader`, `Card`, `KpiCard`, `Badge`, `Table`/`Td`, `Money`, `Field`, `inputClass`, `SearchForm`…) and `formatDubaiDate` / `todayInDubai` from `src/server/calculators/dates.ts`. Don't hand-roll a second money or date formatter.
+- **Fonts** (`next/font`, self-hosted): IBM Plex Sans Condensed = display (`.font-display`) · IBM Plex Sans = body · IBM Plex Mono = money & dates (`.figure`) · IBM Plex Sans Arabic = stamp (`.font-arabic` / `.recorded-stamp-ar`). Money and dates are **always** mono. Do not add Fraunces or Public Sans.
+- **Palette** (Tailwind `@theme` tokens in `src/app/globals.css`). Token **names** stay `ivory-*` / `navy-*` / `gold-*` so existing class names pick up the hexes — the hexes themselves are cool security paper, carbon ink, and muted brass.
+  - Surfaces: `ivory-50` (app bg, cheque-green white `#eef2ee`) · `ivory-100` (panels/hover) · `white` (cards) · `line` (`#c5cdc6` hairlines)
+  - Ink: `navy-900` (carbon `#141916`) · `navy-500` (secondary) · `muted` (`#5a645c`)
+  - **Stamp / primary action:** `verde-700` (CTA fill) / `verde-500` (rules, focus, ticks, unread) / `verde-100` (tint)
+  - **Foil only:** `gold-*` is muted brass for seals and rules that are actually metallic. Never eyebrows, KPI ticks, focus rings, or buttons.
+  - Semantic: `verde` = recorded / good / action · `amber` = in-progress/warn · `claret` = risk/danger
+- **Shape:** radius 2–4px (`rounded-sm`, `--radius: 3px`). Hairlines, **no card shadows**. Badges are rectangular stamps, not pills.
+- **Signature:** bilingual **Recorded / مسجّل** (`RecordedStamp` in `src/components/ui.tsx`) on trusted records (evidence events). Rectangular green chop, never rotated.
+- **Reuse the kit** in `src/components/ui.tsx` (`PageHeader`, `Card`, `KpiCard`, `Badge`, `Table`/`Td`, `Money`, `Field`, `inputClass`, `SearchForm`, `RecordedStamp`, `Button`/`LinkButton` with `.kit-pressable`…) and `formatDubaiDate` / `todayInDubai` from `src/server/calculators/dates.ts`. Don't hand-roll a second money or date formatter. Don't restyle quarantined marketplace/passport screens (`QUARANTINE.md`).
 
 ## Engineering non-negotiables (the parts that actually have to be right)
 

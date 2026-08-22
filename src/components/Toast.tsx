@@ -31,7 +31,7 @@ export function useToast(): { show: ShowToast } {
 const DOT: Record<ToastTone, string> = {
   success: "bg-verde-500",
   error: "bg-claret-500",
-  info: "bg-gold-500",
+  info: "bg-verde-500",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -81,7 +81,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role={t.tone === "error" ? "alert" : "status"}
-            className="seneschal-toast pointer-events-auto flex items-start gap-2.5 rounded-xl border border-line bg-white px-4 py-3 shadow-md"
+            className="seneschal-toast pointer-events-auto flex items-start gap-2.5 rounded-sm border border-line bg-white px-4 py-3"
           >
             <span aria-hidden="true" className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${DOT[t.tone]}`} />
             <p className="flex-1 text-sm text-navy-900">{t.message}</p>

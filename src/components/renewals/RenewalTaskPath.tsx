@@ -35,9 +35,9 @@ export function RenewalTaskPath({
             <li key={task.code}>
               <details
                 open={expanded}
-                className={`group rounded-xl border ${
+                className={`group rounded-sm border ${
                   task.state === "CURRENT"
-                    ? "border-gold-500 bg-gold-100/30"
+                    ? "border-verde-500 bg-verde-100/30"
                     : task.state === "BLOCKED"
                       ? "border-amber-500/50 bg-amber-100/30"
                       : completed
@@ -45,9 +45,9 @@ export function RenewalTaskPath({
                         : "border-line bg-ivory-100/60"
                 }`}
               >
-                <summary className="flex cursor-pointer list-none items-start gap-3 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 [&::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer list-none items-start gap-3 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-verde-500 [&::-webkit-details-marker]:hidden">
                   <span
-                    className={`figure flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    className={`figure flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-xs font-bold ${
                       completed
                         ? "bg-verde-700 text-white"
                         : task.state === "CURRENT"

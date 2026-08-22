@@ -11,10 +11,10 @@ export function SkeletonKpiRow({ count = 4 }: { count?: number }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-xl border border-line bg-white p-5 shadow-sm">
+        <div key={i} className="rounded-sm border border-line bg-white p-5">
           <div className="skeleton h-3 w-20" />
           <div className="skeleton mt-3 h-8 w-2/3" />
-          <div className="mt-3 h-px w-7 bg-gold-500/40" />
+          <div className="mt-3 h-px w-7 bg-verde-500" />
         </div>
       ))}
     </div>
@@ -23,7 +23,7 @@ export function SkeletonKpiRow({ count = 4 }: { count?: number }) {
 
 export function SkeletonTable({ rows = 6, cols = 4 }: { rows?: number; cols?: number }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+    <div className="overflow-hidden rounded-sm border border-line bg-white">
       <div className="border-b border-line bg-ivory-100 px-4 py-3">
         <div className="skeleton h-3 w-32" />
       </div>
@@ -45,7 +45,7 @@ export function SkeletonTable({ rows = 6, cols = 4 }: { rows?: number; cols?: nu
  *  layout instead of flashing a generic table. */
 export function SkeletonTimeline({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
+    <div className="rounded-sm border border-line bg-white p-5">
       <div className="relative ml-1 space-y-4 border-l border-line pl-5">
         {Array.from({ length: rows }).map((_, i) => (
           <div key={i} className="space-y-1.5">
