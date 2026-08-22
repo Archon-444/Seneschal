@@ -3,12 +3,10 @@ import { resetAndSeedE2E } from "../fixtures/globalSetup";
 import { readManifest } from "../fixtures/manifest";
 import { authState } from "../fixtures/paths";
 
-// Visual baselines are committed for darwin only; CI runs linux, where every
-// contract fails as "snapshot doesn't exist" rather than as a real regression.
-// Opt-in until linux baselines are established and reviewed (see #99), so the
-// functional, accessibility and journey gates can protect main meanwhile.
-// Run locally with: E2E_VISUAL=1 pnpm test:e2e:visual
-test.skip(!process.env.E2E_VISUAL, "visual baselines not established for this platform (see #99)");
+// Linux and Darwin Chromium baselines live in
+// e2e/visual/pilot-screens.spec.ts-snapshots/. Dates are masked; the rest is
+// the visual contract. Pixel-diff gates re-break on font/browser bumps —
+// maxDiffPixelRatio: 0.01 absorbs anti-aliasing, not a Chromium major.
 
 const formattedDate = /\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept|Oct|Nov|Dec) \d{4}\b/;
 
@@ -21,6 +19,11 @@ function dynamicDateMasks(page: Page) {
   ];
 }
 
+/** Wait until the route has painted real content, not the segment skeleton. */
+async function settled(page: Page, marker: string | RegExp) {
+  await expect(page.getByText(marker).first()).toBeVisible();
+}
+
 test.beforeAll(async ({}, testInfo) => {
   await resetAndSeedE2E(String(testInfo.project.use.baseURL ?? "http://127.0.0.1:3000"));
 });
@@ -28,14 +31,15 @@ test.beforeAll(async ({}, testInfo) => {
 test.describe("operator visual contract", () => {
   test.use({ storageState: authState.workspaceAdmin, viewport: { width: 1440, height: 1000 } });
 
-  for (const [name, href] of [
-    ["dashboard", "/dashboard"],
-    ["renewal-pipeline", "/renewals"],
-    ["evidence-record", "/evidence"],
-    ["proof-requests-writer", "/proofs"],
+  for (const [name, href, marker] of [
+    ["dashboard", "/dashboard", "Know what is due"],
+    ["renewal-pipeline", "/renewals", "A task-led queue"],
+    ["evidence-record", "/evidence", "Fiduciary record"],
+    ["proof-requests-writer", "/proofs", "Proof requests"],
   ] as const) {
     test(`${name} visual`, async ({ page }) => {
       await page.goto(href);
+      await settled(page, marker);
       await expect(page).toHaveScreenshot(`${name}.png`, {
         fullPage: true,
         mask: dynamicDateMasks(page),
@@ -54,6 +58,7 @@ test.describe("operator visual contract", () => {
       const manifest = await readManifest();
       const tenancyId = manifest[tenancyKey];
       await page.goto(`/renewals/${tenancyId}?view=${view}`);
+      await settled(page, "Renewal case workspace");
       await expect(page).toHaveScreenshot(`${name}.png`, {
         fullPage: true,
         mask: dynamicDateMasks(page),
@@ -70,6 +75,7 @@ test("read-only proof layout visual", async ({ browser, baseURL }) => {
   });
   const page = await context.newPage();
   await page.goto("/proofs");
+  await settled(page, "Proof requests");
   await expect(page).toHaveScreenshot("proof-requests-read-only.png", { fullPage: true, mask: dynamicDateMasks(page) });
   await context.close();
 });
@@ -83,6 +89,7 @@ for (const [name, storageState] of [["tenant-portal", authState.tenant], ["landl
     });
     const page = await context.newPage();
     await page.goto("/portal");
+    await settled(page, name === "tenant-portal" ? "Tenant portal" : "Landlord portal");
     await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true, mask: dynamicDateMasks(page) });
     await context.close();
   });
@@ -96,7 +103,9 @@ test("mobile drawer visual", async ({ browser, baseURL }) => {
   });
   const page = await context.newPage();
   await page.goto("/dashboard");
+  await settled(page, "Know what is due");
   await page.getByRole("button", { name: "Open navigation menu" }).click();
+  await expect(page.getByRole("dialog", { name: "Navigation menu" })).toBeVisible();
   await expect(page).toHaveScreenshot("mobile-navigation-open.png", { mask: dynamicDateMasks(page) });
   await context.close();
 });

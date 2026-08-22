@@ -77,7 +77,10 @@ links (T7.2), upload pipeline (T5.1/2) and the extraction harness vs
   TENANCY_OVERLAP. One open flag per code per scope; raise/clear write evidence.
 - **Schema**: `prisma/schema.prisma` is the provided v1.0 schema with two
   declared adjustments — enums expanded to Prisma's multi-line syntax, and
-  `AuthOtp`/`Session` tables appended for the OTP auth abstraction.
+  `AuthOtp`/`Session` tables appended for the OTP auth abstraction. Non-polymorphic
+  trust refs (`Tenancy` parties, `Property` client/owner/agent) are real FKs
+  (`docs/trust-references.md`). The Stage 2 renewal loop is mapped in
+  `docs/renewal-loop.md`.
 
 ## Stage 1A acceptance walkthrough (T11.2)
 
@@ -157,14 +160,13 @@ emit. The automated form of this checklist is the renewal integration suite
    and can Accept, Counter or Ask. Accept records consent and moves the case to
    AGREED; evidence shows `TENANT_ACKNOWLEDGED` → `OFFER_ACCEPTED`. (A counter
    writes `OFFER_COUNTERED` and keeps the case negotiating.)
-7. **Mint the successor tenancy** — with the case AGREED, `mintRenewedTenancy`
-   creates the successor in one transaction: it carries `renewsFromTenancyId`, the
-   predecessor flips to RENEWED, the case flips to RENEWED with `renewedTenancyId`
-   set, and exactly one `RENEWAL_COMPLETED` row is written — prior events are *not*
-   back-filled, so the timeline stays truthful. Concurrent mints collapse to one
-   successor and the loser gets a clean 409. *UI status: this final step is
-   currently a service-layer action with no button yet (driven by the seed/worker
-   and covered by `renewalWalkthrough.test.ts`).*
+7. **Mint the successor tenancy** — with the case AGREED, **Create successor
+   tenancy** on the renewal workspace runs `mintRenewedTenancy` in one transaction:
+   it carries `renewsFromTenancyId`, the predecessor flips to RENEWED, the case
+   flips to RENEWED with `renewedTenancyId` set, and exactly one `RENEWAL_COMPLETED`
+   row is written — prior events are *not* back-filled, so the timeline stays
+   truthful. Concurrent mints collapse to one successor and the loser gets a clean
+   409. (Covered by `renewalWalkthrough.test.ts` and the Playwright renewal journey.)
 8. **Evidence + risk timeline** — `/evidence` shows the full chronology with
    strictly-monotonic timestamps (no batch-stamp at mint); `/risk` shows the
    renewal flags raised and cleared by the nightly sweep (`evaluateWorkspaceRisk`,
@@ -186,11 +188,23 @@ local-dev runner.
 | `EMAIL_PROVIDER` / `RESEND_API_KEY` / `EMAIL_FROM` | `resend` + your key + verified sender |
 | `STORAGE_DRIVER` / `BLOB_READ_WRITE_TOKEN` | `blob` + token from the attached Blob store |
 | `CRON_SECRET` | `openssl rand -hex 32` (auth for the cron route) |
+| `SEED_API_ENABLED` | leave unset. Only set to `true` while bootstrapping via `POST /api/v1/jobs/seed`, then unset — the route is default-deny on this flag *and* `CRON_SECRET` |
 | `EXTRACTION_PROVIDER` | `mock`, or `gemini` + `GEMINI_API_KEY`, or `anthropic` + `ANTHROPIC_API_KEY` |
 
 After the first deploy, seed once from any machine:
 `DATABASE_URL=<neon-url> APP_BASE_URL=<https-url> pnpm db:seed` — idempotent, and
 it prints the live external proof-upload link.
+
+Two alternatives to running it from your own machine, both default-deny:
+
+- `SEED_ON_DEPLOY=true` runs the same idempotent seed during `vercel-build`. In
+  production the build log deliberately withholds the proof-upload link (it is a
+  live bearer credential and build logs are a passive record) — open it from the
+  proof request in the app instead.
+- `POST /api/v1/jobs/seed` with `Authorization: Bearer $CRON_SECRET` runs it
+  inside the deployment, so no database credential leaves the project. It
+  requires `SEED_API_ENABLED=true` **as well as** the secret; unset the flag once
+  you are done.
 
 **Storage:** the Vercel Blob store is **private** — bytes are reachable only via the
 SDK with `BLOB_READ_WRITE_TOKEN`, the stored url is not publicly fetchable, and client

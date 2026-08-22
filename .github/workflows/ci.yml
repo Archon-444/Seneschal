@@ -31,6 +31,7 @@ jobs:
       STORAGE_DRIVER: local
       EXTRACTION_PROVIDER: mock
       E2E_WEB_SERVER_COMMAND: pnpm start
+      E2E_VISUAL: "1"
       TZ: Asia/Dubai
     steps:
       - uses: actions/checkout@v4
