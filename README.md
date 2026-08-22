@@ -77,7 +77,10 @@ links (T7.2), upload pipeline (T5.1/2) and the extraction harness vs
   TENANCY_OVERLAP. One open flag per code per scope; raise/clear write evidence.
 - **Schema**: `prisma/schema.prisma` is the provided v1.0 schema with two
   declared adjustments — enums expanded to Prisma's multi-line syntax, and
-  `AuthOtp`/`Session` tables appended for the OTP auth abstraction.
+  `AuthOtp`/`Session` tables appended for the OTP auth abstraction. Non-polymorphic
+  trust refs (`Tenancy` parties, `Property` client/owner/agent) are real FKs
+  (`docs/trust-references.md`). The Stage 2 renewal loop is mapped in
+  `docs/renewal-loop.md`.
 
 ## Stage 1A acceptance walkthrough (T11.2)
 
@@ -157,14 +160,13 @@ emit. The automated form of this checklist is the renewal integration suite
    and can Accept, Counter or Ask. Accept records consent and moves the case to
    AGREED; evidence shows `TENANT_ACKNOWLEDGED` → `OFFER_ACCEPTED`. (A counter
    writes `OFFER_COUNTERED` and keeps the case negotiating.)
-7. **Mint the successor tenancy** — with the case AGREED, `mintRenewedTenancy`
-   creates the successor in one transaction: it carries `renewsFromTenancyId`, the
-   predecessor flips to RENEWED, the case flips to RENEWED with `renewedTenancyId`
-   set, and exactly one `RENEWAL_COMPLETED` row is written — prior events are *not*
-   back-filled, so the timeline stays truthful. Concurrent mints collapse to one
-   successor and the loser gets a clean 409. *UI status: this final step is
-   currently a service-layer action with no button yet (driven by the seed/worker
-   and covered by `renewalWalkthrough.test.ts`).*
+7. **Mint the successor tenancy** — with the case AGREED, **Create successor
+   tenancy** on the renewal workspace runs `mintRenewedTenancy` in one transaction:
+   it carries `renewsFromTenancyId`, the predecessor flips to RENEWED, the case
+   flips to RENEWED with `renewedTenancyId` set, and exactly one `RENEWAL_COMPLETED`
+   row is written — prior events are *not* back-filled, so the timeline stays
+   truthful. Concurrent mints collapse to one successor and the loser gets a clean
+   409. (Covered by `renewalWalkthrough.test.ts` and the Playwright renewal journey.)
 8. **Evidence + risk timeline** — `/evidence` shows the full chronology with
    strictly-monotonic timestamps (no batch-stamp at mint); `/risk` shows the
    renewal flags raised and cleared by the nightly sweep (`evaluateWorkspaceRisk`,
