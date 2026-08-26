@@ -1,6 +1,6 @@
 import { Prisma, type Role, type WorkspaceType } from "@prisma/client";
 import { prisma } from "./db";
-import { generateToken, sha256Hex } from "./crypto";
+import { generateToken, hashPassword, sha256Hex } from "./crypto";
 import { toUtcDateOnly } from "./calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./services/deadlines";
 import { PROOF_LINK_DEFAULT_MAX_USES } from "./services/secureLinks";
@@ -27,7 +27,7 @@ async function findOrCreate<T>(find: () => Promise<T | null>, create: () => Prom
 /**
  * Normalize and validate an operator email before it becomes a login-capable
  * FIDUCIARY user. A blank or malformed value would create an account that can
- * never receive its OTP, so reject it loudly instead.
+ * never receive a password-reset mail, so reject it loudly instead.
  */
 export function normalizeAdminEmail(raw: string): string {
   const email = raw.trim().toLowerCase();
@@ -859,6 +859,16 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     const shell = await seedTypeShell(type);
     workspaces.push({ name: shell.name, type });
     memberLogins.push({ email: shell.adminEmail, role: "WORKSPACE_ADMIN", home: homeFor("WORKSPACE_ADMIN") });
+  }
+
+  const demoPassword = process.env.SEED_DEMO_PASSWORD?.trim() || (process.env.NODE_ENV === "production" ? null : "seneschal-dev");
+  if (demoPassword) {
+    const passwordHash = await hashPassword(demoPassword);
+    const emails = [...new Set([...memberLogins.map((m) => m.email), operatorEmail, "staff@seneschal.example"])];
+    await prisma.user.updateMany({
+      where: { email: { in: emails } },
+      data: { passwordHash, passwordSetAt: new Date(), failedLoginCount: 0, loginLockedUntil: null },
+    });
   }
 
   return { proofLinkUrl, memberLogins, linkUrls, workspaces };

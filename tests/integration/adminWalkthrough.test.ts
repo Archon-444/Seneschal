@@ -32,7 +32,10 @@ describe("admin acceptance walkthrough", () => {
     await expect(authz(operator.id, workspaceId)).rejects.toThrow(/No access/);
 
     // 2. The principal accepts and now has a readable context — PRINCIPAL (see-all-do-all).
-    const { userId: principalId } = await acceptInvite(inviteToken, { confirmEmail: "principal@crescent.example" });
+    const { userId: principalId } = await acceptInvite(inviteToken, {
+      confirmEmail: "principal@crescent.example",
+      password: "test-passphrase",
+    });
     const principalCtx = await authz(principalId, workspaceId);
     expect(principalCtx.role).toBe("WORKSPACE_ADMIN");
     expect(hasCapability(principalCtx, "tenancies.read")).toBe(true);
@@ -40,7 +43,7 @@ describe("admin acceptance walkthrough", () => {
 
     // 3. The principal onboards an office manager (ORG_ADMIN) — people-power, zero data.
     const orgInvite = await inviteOrgAdmin(principalCtx, "office@crescent.example");
-    const { userId: officeId } = await acceptInvite(orgInvite.token);
+    const { userId: officeId } = await acceptInvite(orgInvite.token, { password: "test-passphrase" });
     const officeCtx = await authz(officeId, workspaceId);
     expect(officeCtx.role).toBe("ORG_ADMIN");
     expect(hasCapability(officeCtx, "tenancies.read")).toBe(false);

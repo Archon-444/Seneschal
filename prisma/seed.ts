@@ -11,7 +11,7 @@ runSeed()
     console.log("Workspaces (one per type):");
     for (const w of result.workspaces) console.log(`  • ${w.name} [${w.type}]`);
 
-    console.log("\nMember logins — recurring relationships (OTP prints to the worker/console log in dev):");
+    console.log("\nMember logins — recurring relationships (dev password: seneschal-dev, unless SEED_DEMO_PASSWORD is set):");
     for (const m of result.memberLogins) {
       console.log(`  • ${m.email.padEnd(32)} ${String(m.role).padEnd(16)} → ${m.home}`);
     }

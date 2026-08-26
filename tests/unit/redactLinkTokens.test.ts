@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { redactLinkTokens } from "@/server/notify/email";
 
-// The console email adapter logs message bodies outside production so the builder can retrieve
-// seeded OTP codes. Secure-link tokens are bearer credentials and must be stripped from that log.
+// Console adapter logs message bodies outside production. Bearer credentials
+// (secure-link tokens and password-reset URLs) must be stripped from that log.
 describe("redactLinkTokens", () => {
   it("redacts a /link/<token> URL", () => {
     const out = redactLinkTokens("Open https://app.example/link/abc-123_DEF to respond.");
@@ -16,6 +16,13 @@ describe("redactLinkTokens", () => {
     expect(out).toContain("proof+[redacted]@");
   });
 
+  it("redacts a /login/reset/<token> URL", () => {
+    const token = "Zt9_kQ-7LmReset";
+    const out = redactLinkTokens(`Reset at https://app.example/login/reset/${token}`);
+    expect(out).not.toContain(token);
+    expect(out).toContain("/login/reset/[redacted]");
+  });
+
   it("redacts both forms when a body carries the token twice", () => {
     const token = "Zt9_kQ-7Lm";
     const out = redactLinkTokens(
@@ -24,8 +31,8 @@ describe("redactLinkTokens", () => {
     expect(out).not.toContain(token);
   });
 
-  it("leaves a 6-digit OTP code intact (dev sign-in retrieval still works)", () => {
-    const out = redactLinkTokens("Your sign-in code is 424242. It expires in 10 minutes.");
-    expect(out).toContain("424242");
+  it("leaves ordinary prose intact", () => {
+    const out = redactLinkTokens("Your password reset link expires in 1 hour.");
+    expect(out).toBe("Your password reset link expires in 1 hour.");
   });
 });

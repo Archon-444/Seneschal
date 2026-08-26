@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { prisma } from "../db";
 import { sessionUser } from "./index";
@@ -13,6 +14,33 @@ import {
 
 export const SESSION_COOKIE = "seneschal_session";
 export const WORKSPACE_COOKIE = "seneschal_workspace";
+
+const SESSION_COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
+
+export async function establishSessionCookie(sessionToken: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(SESSION_COOKIE, sessionToken, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: SESSION_COOKIE_MAX_AGE,
+    path: "/",
+  });
+}
+
+/** Redirect a just-signed-in user to their home. Never returns. */
+export async function landSignedIn(): Promise<never> {
+  const user = await currentUser();
+  if (user?.isPlatformAdmin) redirect("/admin");
+  let target = "/dashboard";
+  try {
+    const ctx = await requireCtx();
+    target = homePathFor(ctx.role);
+  } catch {
+    // Signed in without a membership — stay out of a redirect loop.
+  }
+  redirect(target);
+}
 
 /** Resolve the signed-in user from the request cookies, or null. */
 export async function currentUser() {

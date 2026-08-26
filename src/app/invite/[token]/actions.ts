@@ -1,7 +1,10 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { acceptInvite } from "@/server/services/members";
+import { createSession } from "@/server/auth";
+import { prisma } from "@/server/db";
+import { establishSessionCookie, landSignedIn } from "@/server/auth/request";
 
 export type AcceptState = { error: string } | null;
 
@@ -9,11 +12,24 @@ export async function acceptInviteAction(_prev: AcceptState, formData: FormData)
   const token = String(formData.get("token"));
   const name = String(formData.get("name") ?? "").trim();
   const confirmEmail = String(formData.get("confirmEmail") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  if (password !== confirm) return { error: "Passwords do not match." };
   try {
-    await acceptInvite(token, { name: name || undefined, confirmEmail: confirmEmail || undefined });
+    const { userId } = await acceptInvite(token, {
+      name: name || undefined,
+      confirmEmail: confirmEmail || undefined,
+      password,
+    });
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const h = await headers();
+    const sessionToken = await createSession(user.id, user.isPlatformAdmin, {
+      ip: h.get("x-forwarded-for") ?? undefined,
+      device: h.get("user-agent") ?? undefined,
+    });
+    await establishSessionCookie(sessionToken);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not accept this invitation." };
   }
-  // The invitee now sets their own sign-in (email OTP) — the operator never set a credential.
-  redirect("/login?invited=1");
+  await landSignedIn();
 }

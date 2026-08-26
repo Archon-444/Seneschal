@@ -23,6 +23,7 @@ Use the **`frontend-design`** skill (`.claude/skills/frontend-design`) when buil
 - **Payments are record-keeping only** — Seneschal never holds funds. Say so in payment UI.
 - **Dates are date-only, reasoned in Asia/Dubai** (UTC+4, no DST): store UTC midnight via `toUtcDateOnly`; never `new Date()`-compare contract dates. Calculators carry `{rule, version, inputs}` so every derived row cites its math (`dates.ts`, `rent.ts`).
 - **Secure links**: raw token returned once; only the hash is stored; never log tokens. Public token routes live under `src/app/link/[token]`.
+- **Auth**: email + password for Users (scrypt hash; hashed `Session` cookie). Invite-accept and forgot-password set the hash. Tenants stay on SecureLink — they never get a password. Never log passwords or raw reset tokens.
 
 ## Dev workflow
 

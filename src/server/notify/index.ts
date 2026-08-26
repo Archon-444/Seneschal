@@ -31,7 +31,7 @@ export interface NotifyInput {
 export async function notify(input: NotifyInput, db: Prisma.TransactionClient = prisma) {
   const isInApp = input.channel === "INAPP";
   const sensitive = isSensitiveTemplate(input.templateCode);
-  // A sensitive body is a secret (OTP) — it must never become an in-app feed item, the very
+  // A sensitive body is a secret (a password-reset URL, or a secure-link token) — it must never become an in-app feed item, the very
   // thing INAPP is. Fail closed: a sensitive template has no business on the INAPP channel.
   if (sensitive && isInApp) {
     throw new Error(`Sensitive template ${input.templateCode} cannot be delivered in-app`);

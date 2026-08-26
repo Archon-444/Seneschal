@@ -38,10 +38,14 @@ model User {
   email           String   @unique
   phone           String?  @unique
   name            String
-  locale          String   @default("en")
-  isPlatformAdmin Boolean  @default(false)   // Seneschal operator: lifecycle/billing/aggregate stats only, NEVER customer data (F-Admin §3). Holds zero Membership rows.
-  createdAt       DateTime @default(now())
-  memberships     Membership[]
+  locale            String    @default("en")
+  isPlatformAdmin   Boolean   @default(false)   // Seneschal operator: lifecycle/billing/aggregate stats only, NEVER customer data (F-Admin §3). Holds zero Membership rows.
+  passwordHash      String?                    // scrypt; null until invite-accept or password reset
+  passwordSetAt     DateTime?
+  failedLoginCount  Int       @default(0)
+  loginLockedUntil  DateTime?
+  createdAt         DateTime  @default(now())
+  memberships       Membership[]
 }
 
 model Membership {
@@ -1487,7 +1491,18 @@ model AuthOtp {
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
   @@index([email, expiresAt])
-  @@index([email, createdAt]) // H8: resend cooldown lookup (latest OTP per email)
+  @@index([email, createdAt]) // leftover OTP table; login no longer writes it
+}
+
+// One-shot password set/reset. Same token-hash discipline as WorkspaceInvite / SecureLink.
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  @@index([userId])
 }
 
 model Session {
@@ -1508,7 +1523,7 @@ model Session {
 // single atomic upsert (see consumeRateLimit) so concurrent hits on one key
 // can't race — the same TOCTOU class H4 fixed for secure links.
 model RateLimit {
-  key         String   @id           // e.g. "proof:<linkId>:<ip>" or "otp:<email>"
+  key         String   @id           // e.g. "proof:<linkId>:<ip>" or "login-ip:<ip>"
   windowStart DateTime @default(now())
   count       Int      @default(0)
   updatedAt   DateTime @updatedAt

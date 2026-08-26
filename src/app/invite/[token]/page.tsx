@@ -2,8 +2,8 @@ import { peekInvite } from "@/server/services/members";
 import { Logo } from "@/components/Logo";
 import { AcceptForm } from "./AcceptForm";
 
-// Public invite-accept (F-Admin §7) — mobile-first like the proof-upload page. The invitee
-// confirms their details and sets their own sign-in next; the operator set no credential.
+// Public invite-accept (F-Admin §7). The invitee confirms email and sets a password;
+// the operator set no credential.
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const invite = await peekInvite(token);
@@ -24,8 +24,8 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             <>
               <h1 className="font-display text-xl text-navy-900">Join {invite.workspaceName}</h1>
               <p className="mb-4 mt-1 text-sm text-muted">
-                You&apos;ve been invited as an organisation admin. Confirm your details — you&apos;ll set
-                up sign-in on the next step.
+                You&apos;ve been invited as an organisation admin. Confirm your details and choose a
+                password to join this workspace.
               </p>
               <AcceptForm token={token} email={invite.email} />
             </>

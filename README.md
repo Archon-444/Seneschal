@@ -11,8 +11,8 @@ AI never writes trusted records; every extracted field passes human review.
 
 ## Stack
 
-Next.js (App Router) · TypeScript · Tailwind · Prisma + PostgreSQL · email OTP
-auth · private object storage with signed expiring URLs · Resend email gateway
+Next.js (App Router) · TypeScript · Tailwind · Prisma + PostgreSQL · email +
+password auth · private object storage with signed expiring URLs · Resend email gateway
 (WhatsApp Meta Cloud API adapter built, off by default) · Outbox + in-process
 job runner · Vitest.
 
@@ -29,9 +29,10 @@ pnpm dev                        # app on :3000
 pnpm worker                     # outbox runner + daily jobs (separate shell)
 ```
 
-Sign in as `operator@example.com` — with `EMAIL_PROVIDER=console` the OTP is
-printed by whichever process flushes the outbox (the dev server flushes
-immediately after you request the code; check its terminal).
+Sign in as `operator@example.com` / `seneschal-dev` (or `SEED_DEMO_PASSWORD` if
+you set one). Forgot-password mails go to Mailpit when `SMTP_URL` is set, or
+the terminal when `EMAIL_PROVIDER=console`. Production seed does not apply a
+shared password unless `SEED_DEMO_PASSWORD` is set — first login is via reset.
 
 `pnpm db:seed` prints a **live external proof-upload link** (`/link/<token>`);
 open it in a private window or on a phone — no login involved.
@@ -77,7 +78,8 @@ links (T7.2), upload pipeline (T5.1/2) and the extraction harness vs
   TENANCY_OVERLAP. One open flag per code per scope; raise/clear write evidence.
 - **Schema**: `prisma/schema.prisma` is the provided v1.0 schema with two
   declared adjustments — enums expanded to Prisma's multi-line syntax, and
-  `AuthOtp`/`Session` tables appended for the OTP auth abstraction. Non-polymorphic
+  `Session` / `PasswordReset` tables appended for the password door (`AuthOtp`
+  remains in the catalog unused). Non-polymorphic
   trust refs (`Tenancy` parties, `Property` client/owner/agent) are real FKs
   (`docs/trust-references.md`). The Stage 2 renewal loop is mapped in
   `docs/renewal-loop.md`.
@@ -176,7 +178,7 @@ emit. The automated form of this checklist is the renewal integration suite
 
 The repo is serverless-ready: `vercel-build` runs `prisma migrate deploy` before
 `next build`, `vercel.json` schedules the daily job pass at 03:00 UTC (07:00
-Dubai) against `/api/v1/jobs/run`, and user-facing sends (OTP, proof links) flush
+Dubai) against `/api/v1/jobs/run`, and user-facing sends (reset, invite, proof links) flush
 the outbox inline with the cron as retry backstop. `pnpm worker` remains the
 local-dev runner.
 

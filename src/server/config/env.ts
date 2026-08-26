@@ -3,7 +3,7 @@
 // `crypto.ts` only throws on missing `APP_SECRET`, and only on first use.
 // Email defaults to console, storage defaults to local, base URL defaults to
 // localhost, CRON_SECRET is checked only on cron requests. The net effect is a
-// prod deployment can boot, accept traffic, and silently swallow OTP emails or
+// prod deployment can boot, accept traffic, and silently swallow reset/invite emails or
 // drop documents on a non-persistent disk before anyone notices.
 //
 // This validator is the single boot gate. Called from `instrumentation.ts`

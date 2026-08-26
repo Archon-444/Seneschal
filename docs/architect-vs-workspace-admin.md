@@ -100,15 +100,15 @@ workspace and three further per-type shells (`OWNER` / `OPERATOR` / `INTERNAL`):
   links. The demo "tenant view" is the `/link/[token]` surface.
 
 The CLI (`prisma/seed.ts`) prints three blocks — workspaces, member logins (with
-their landing route), and link-party URLs. OTP codes print to the worker/console
-log in dev.
+their landing route), and link-party URLs. Dev password is `seneschal-dev` unless
+`SEED_DEMO_PASSWORD` is set.
 
 ## 4. Gaps closed alongside this note
 
 | Gap | Resolution |
 | --- | --- |
 | Seed seated the tenant as a persona member, contradicting the boundary | Tenant reseeded as a link-party; orchestrators seeded by enum-iteration; absentee landlord = `CLIENT_VIEWER` plus a live `APPROVAL` link; builder = sole `WORKSPACE_ADMIN` (`seed.ts`, `tests/integration/seed.test.ts`) |
-| OTP code persisted readably (`NotificationMessage.bodyRef`, retained `Outbox.payload`) | Sensitive templates store a redacted placeholder; the live body rides the outbox payload to the adapter and is **stripped on the terminal flip**; delivery **fails closed** if the body is absent (`notify/*`, `outbox/index.ts`, `tests/integration/notifySensitive.test.ts`) |
+| Reset URL / secure-link token persisted readably (`NotificationMessage.bodyRef`, retained `Outbox.payload`) | Sensitive templates store a redacted placeholder; the live body rides the outbox payload to the adapter and is **stripped on the terminal flip**; delivery **fails closed** if the body is absent (`notify/*`, `outbox/index.ts`, `tests/integration/notifySensitive.test.ts`) |
 | Archive was one-way | `unarchiveWorkspace` + action + console button; round-trip re-opens authz and the daily sweep (`provisioning.ts`, `(staff)/admin/*`) |
 | Handler re-gate and member-power edges untested | `requirePlatformAdmin` 403 at the handler; data-only members rejected on `inviteOrgAdmin`/`grantBundle`; the data-blind leak-check extended to named customer rows (`tests/integration/platformAdminGate.test.ts`, `members.test.ts`, `platformPlane.test.ts`) |
 
