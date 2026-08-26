@@ -13,13 +13,27 @@ export function ForgotForm() {
       <p className="mb-3 text-sm text-navy-700">
         Enter the email on your account. If it matches, we will send a one-time reset link.
       </p>
-      <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
+      <label htmlFor="reset-email" className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
         Email address
       </label>
-      <input name="email" type="email" required autoFocus autoComplete="username" className={inputClass} />
-      {state?.error && <p className="mt-2 text-sm text-claret-500">{state.error}</p>}
+      <input
+        id="reset-email"
+        name="email"
+        type="email"
+        required
+        autoFocus
+        autoComplete="username"
+        aria-invalid={state?.error ? true : undefined}
+        aria-describedby={state?.error ? "reset-request-error" : state?.ok ? "reset-request-status" : undefined}
+        className={inputClass}
+      />
+      {state?.error && (
+        <p id="reset-request-error" className="mt-2 text-sm text-claret-500" role="alert">
+          {state.error}
+        </p>
+      )}
       {state?.ok && (
-        <p className="mt-2 text-sm text-verde-700" role="status">
+        <p id="reset-request-status" className="mt-2 text-sm text-verde-700" role="status">
           If that email has an account, a reset link is on its way.
         </p>
       )}

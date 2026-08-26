@@ -10,10 +10,11 @@ export function LoginForm() {
 
   return (
     <form action={formAction} className="rounded-lg border border-ivory-300 bg-white p-6 shadow-sm">
-      <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
+      <label htmlFor="login-email" className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
         Email address
       </label>
       <input
+        id="login-email"
         name="email"
         type="email"
         required
@@ -22,17 +23,24 @@ export function LoginForm() {
         placeholder="you@example.com"
         className={inputClass}
       />
-      <label className="mb-1 mt-4 block text-xs font-medium uppercase tracking-wide text-navy-500">
+      <label htmlFor="login-password" className="mb-1 mt-4 block text-xs font-medium uppercase tracking-wide text-navy-500">
         Password
       </label>
       <input
+        id="login-password"
         name="password"
         type="password"
         required
         autoComplete="current-password"
+        aria-invalid={state?.error ? true : undefined}
+        aria-describedby={state?.error ? "login-error" : undefined}
         className={inputClass}
       />
-      {state?.error && <p className="mt-2 text-sm text-claret-500">{state.error}</p>}
+      {state?.error && (
+        <p id="login-error" className="mt-2 text-sm text-claret-500" role="alert">
+          {state.error}
+        </p>
+      )}
       <button
         type="submit"
         disabled={pending}

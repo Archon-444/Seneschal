@@ -10,24 +10,43 @@ export function ResetForm({ token }: { token: string }) {
   return (
     <form action={formAction} className="rounded-lg border border-ivory-300 bg-white p-6 shadow-sm">
       <input type="hidden" name="token" value={token} />
-      <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
+      <label htmlFor="new-password" className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
         New password
       </label>
       <input
+        id="new-password"
         name="password"
         type="password"
         required
         minLength={10}
         autoComplete="new-password"
         autoFocus
+        aria-describedby={state?.error ? "reset-error reset-hint" : "reset-hint"}
+        aria-invalid={state?.error ? true : undefined}
         className={inputClass}
       />
-      <label className="mb-1 mt-4 block text-xs font-medium uppercase tracking-wide text-navy-500">
+      <label htmlFor="confirm-password" className="mb-1 mt-4 block text-xs font-medium uppercase tracking-wide text-navy-500">
         Confirm password
       </label>
-      <input name="confirm" type="password" required minLength={10} autoComplete="new-password" className={inputClass} />
-      <p className="mt-2 text-xs text-muted">At least 10 characters.</p>
-      {state?.error && <p className="mt-2 text-sm text-claret-500">{state.error}</p>}
+      <input
+        id="confirm-password"
+        name="confirm"
+        type="password"
+        required
+        minLength={10}
+        autoComplete="new-password"
+        aria-describedby={state?.error ? "reset-error reset-hint" : "reset-hint"}
+        aria-invalid={state?.error ? true : undefined}
+        className={inputClass}
+      />
+      <p id="reset-hint" className="mt-2 text-xs text-muted">
+        At least 10 characters.
+      </p>
+      {state?.error && (
+        <p id="reset-error" className="mt-2 text-sm text-claret-500" role="alert">
+          {state.error}
+        </p>
+      )}
       <button
         type="submit"
         disabled={pending}
