@@ -51,6 +51,7 @@ describe("seat-zero provisioning", () => {
     expect(invite!.platformIssued).toBe(true);
     expect(invite!.invitedById).toBeNull();
     expect(invite!.intendedBundles).toEqual(["PRINCIPAL"]);
+    expect(invite!.intendedRole).toBe("WORKSPACE_ADMIN");
     expect(invite!.expiresAt.getTime()).toBeGreaterThan(Date.now());
 
     // Empty at provision: zero confidential rows exist at the moment the operator touched it.

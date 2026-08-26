@@ -1,9 +1,10 @@
-import type { Bundle } from "@prisma/client";
+import type { Bundle, Role } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, pickMembership, require_ } from "../authz";
 import { GRANT_HONORED_BUNDLES } from "../capabilities";
 import { recordAudit } from "../audit";
 import { generateToken, hashPassword, hashToken, PasswordPolicyError } from "../crypto";
+import { isInviteableSeat, memberSeatLabel, ROLE_SEAT_LABEL, type InviteableSeat } from "@/lib/seats";
 
 // In-org member management (F-Admin §4.1). The people view behind members.read|invite|manage:
 // invite by hashed-token, overlay/revoke the ORG_ADMIN people-power bundle, remove. Every act is
@@ -44,38 +45,79 @@ export async function listMembers(ctx: AuthzContext) {
     }),
     prisma.workspaceInvite.findMany({
       where: { workspaceId: ctx.workspaceId, acceptedAt: null, revokedAt: null },
-      select: { id: true, email: true, intendedBundles: true, expiresAt: true },
+      select: { id: true, email: true, intendedRole: true, expiresAt: true },
       orderBy: { createdAt: "desc" },
     }),
   ]);
   return {
-    members: memberships.map((m) => ({
-      membershipId: m.id,
-      role: m.role,
-      name: m.user.name,
-      email: m.user.email,
-      bundles: m.grants.map((g) => g.bundle),
-      isSelf: m.userId === ctx.userId,
+    members: memberships.map((m) => {
+      const bundles = m.grants.map((g) => g.bundle);
+      return {
+        membershipId: m.id,
+        role: m.role,
+        seatLabel: memberSeatLabel(m.role, bundles.includes("ORG_ADMIN")),
+        officeAdminOverlay: bundles.includes("ORG_ADMIN") && m.role !== "ORG_ADMIN",
+        name: m.user.name,
+        email: m.user.email,
+        isSelf: m.userId === ctx.userId,
+      };
+    }),
+    invites: invites.map((inv) => ({
+      id: inv.id,
+      email: inv.email,
+      seatLabel: inv.intendedRole ? ROLE_SEAT_LABEL[inv.intendedRole] : "Invite",
+      expiresAt: inv.expiresAt,
     })),
-    invites,
   };
 }
 
-/** Invite an office manager (ORG_ADMIN) by email. Only the token hash is stored. */
-export async function inviteOrgAdmin(
+function intendedBundlesForSeat(role: InviteableSeat): Bundle[] {
+  return role === "ORG_ADMIN" ? ["ORG_ADMIN"] : [];
+}
+
+/** Invite a member by seat. Only the token hash is stored. One live invite per workspace+email. */
+export async function inviteMember(
   ctx: AuthzContext,
-  email: string,
+  args: { email: string; role: Role; subjectContactId?: string },
 ): Promise<{ inviteId: string; token: string; url: string }> {
   require_(ctx, "members.invite");
-  const normalized = email.trim().toLowerCase();
+  const normalized = args.email.trim().toLowerCase();
   if (!normalized) throw new AuthzError("Email required", 422);
+  if (!isInviteableSeat(args.role)) {
+    throw new AuthzError("That seat is not invited from here.", 422);
+  }
+  if (args.subjectContactId) {
+    throw new AuthzError("Owner invites are not issued from this flow yet.", 422);
+  }
+
+  const live = await prisma.workspaceInvite.findFirst({
+    where: {
+      workspaceId: ctx.workspaceId,
+      email: normalized,
+      acceptedAt: null,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+  });
+  if (live) throw new AuthzError("An invitation is already outstanding for this email.", 409);
+
+  if (args.role !== "ORG_ADMIN") {
+    const existingUser = await prisma.user.findUnique({ where: { email: normalized }, select: { id: true } });
+    if (existingUser) {
+      const member = await prisma.membership.findFirst({
+        where: { workspaceId: ctx.workspaceId, userId: existingUser.id, revokedAt: null },
+      });
+      if (member) throw new AuthzError("That person is already a member of this workspace.", 409);
+    }
+  }
 
   const { token, tokenHash } = generateToken();
   const invite = await prisma.workspaceInvite.create({
     data: {
       workspaceId: ctx.workspaceId,
       email: normalized,
-      intendedBundles: ["ORG_ADMIN"],
+      intendedRole: args.role,
+      intendedBundles: intendedBundlesForSeat(args.role),
       tokenHash,
       invitedById: ctx.userId,
       platformIssued: false,
@@ -85,6 +127,14 @@ export async function inviteOrgAdmin(
   await recordAudit({ ...actor(ctx), verb: "invite.issue", objectType: "WorkspaceInvite", objectId: invite.id });
   const base = process.env.APP_BASE_URL ?? "http://localhost:3000";
   return { inviteId: invite.id, token, url: `${base}/invite/${token}` };
+}
+
+/** Invite an office admin (ORG_ADMIN) by email. */
+export async function inviteOrgAdmin(
+  ctx: AuthzContext,
+  email: string,
+): Promise<{ inviteId: string; token: string; url: string }> {
+  return inviteMember(ctx, { email, role: "ORG_ADMIN" });
 }
 
 export async function revokeInvite(ctx: AuthzContext, inviteId: string): Promise<void> {
@@ -103,7 +153,7 @@ export async function revokeInvite(ctx: AuthzContext, inviteId: string): Promise
 export async function acceptInvite(
   token: string,
   opts?: { name?: string; confirmEmail?: string; password?: string },
-): Promise<{ workspaceId: string; userId: string; isPlatformAdmin: boolean }> {
+): Promise<{ workspaceId: string; userId: string; isPlatformAdmin: boolean; intendedRole: Role | null }> {
   const invite = await prisma.workspaceInvite.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!invite) throw new AuthzError("Invalid invite", 404);
   if (invite.revokedAt) throw new AuthzError("This invite was revoked", 410);
@@ -137,32 +187,44 @@ export async function acceptInvite(
   }
 
   if (!invite.platformIssued) {
-    if (!invite.intendedBundles.includes("ORG_ADMIN")) {
+    const seat: Role | null =
+      invite.intendedRole ?? (invite.intendedBundles.includes("ORG_ADMIN") ? "ORG_ADMIN" : null);
+    if (!seat || !isInviteableSeat(seat)) {
       throw new AuthzError("Unsupported invite", 422);
     }
-    // If the invitee is already a member, OVERLAY the ORG_ADMIN people-power bundle onto their
-    // resolved membership — minting a second ORG_ADMIN membership would let pickMembership mask
-    // their real role (a FIDUCIARY never gains people-power; a MANAGER/MANAGING_AGENT loses its
-    // data/delegate scope on the next request). A genuinely new person gets a fresh membership.
+
     const existing = await prisma.membership.findMany({
       where: { workspaceId: invite.workspaceId, userId: user.id, revokedAt: null },
     });
-    if (existing.length === 0) {
-      await prisma.membership.create({
-        data: { workspaceId: invite.workspaceId, userId: user.id, role: "ORG_ADMIN" },
-      });
-    } else {
-      const target = pickMembership(existing)!;
-      const alreadyAdmin =
-        target.role === "ORG_ADMIN" ||
-        (await prisma.membershipGrant.findFirst({
-          where: { membershipId: target.id, bundle: "ORG_ADMIN", revokedAt: null },
-        })) !== null;
-      if (!alreadyAdmin) {
-        await prisma.membershipGrant.create({
-          data: { membershipId: target.id, bundle: "ORG_ADMIN", grantedById: invite.invitedById ?? user.id },
+
+    if (seat === "ORG_ADMIN") {
+      // If the invitee is already a member, OVERLAY the ORG_ADMIN people-power onto their
+      // resolved membership — minting a second ORG_ADMIN membership would let pickMembership mask
+      // their real role. A genuinely new person gets a fresh office-admin membership.
+      if (existing.length === 0) {
+        await prisma.membership.create({
+          data: { workspaceId: invite.workspaceId, userId: user.id, role: "ORG_ADMIN" },
         });
+      } else {
+        const target = pickMembership(existing)!;
+        const alreadyAdmin =
+          target.role === "ORG_ADMIN" ||
+          (await prisma.membershipGrant.findFirst({
+            where: { membershipId: target.id, bundle: "ORG_ADMIN", revokedAt: null },
+          })) !== null;
+        if (!alreadyAdmin) {
+          await prisma.membershipGrant.create({
+            data: { membershipId: target.id, bundle: "ORG_ADMIN", grantedById: invite.invitedById ?? user.id },
+          });
+        }
       }
+    } else {
+      if (existing.length > 0) {
+        throw new AuthzError("That person is already a member of this workspace.", 409);
+      }
+      await prisma.membership.create({
+        data: { workspaceId: invite.workspaceId, userId: user.id, role: seat },
+      });
     }
   }
 
@@ -178,21 +240,37 @@ export async function acceptInvite(
     objectType: "WorkspaceInvite",
     objectId: invite.id,
   });
-  return { workspaceId: invite.workspaceId, userId: user.id, isPlatformAdmin: user.isPlatformAdmin };
+  return {
+    workspaceId: invite.workspaceId,
+    userId: user.id,
+    isPlatformAdmin: user.isPlatformAdmin,
+    intendedRole:
+      invite.intendedRole ?? (invite.intendedBundles.includes("ORG_ADMIN") ? "ORG_ADMIN" : null),
+  };
 }
 
 /** Public, read-only invite preview for the accept screen (the token is the secret that authorises it). */
 export async function peekInvite(
   token: string,
-): Promise<{ email: string; workspaceName: string; valid: boolean } | null> {
+): Promise<{ email: string; workspaceName: string; valid: boolean; intendedRole: Role | null } | null> {
   const invite = await prisma.workspaceInvite.findUnique({
     where: { tokenHash: hashToken(token) },
-    select: { email: true, expiresAt: true, acceptedAt: true, revokedAt: true, workspaceId: true },
+    select: {
+      email: true,
+      expiresAt: true,
+      acceptedAt: true,
+      revokedAt: true,
+      workspaceId: true,
+      intendedRole: true,
+      intendedBundles: true,
+    },
   });
   if (!invite) return null;
   const ws = await prisma.workspace.findUnique({ where: { id: invite.workspaceId }, select: { name: true } });
   const valid = !invite.acceptedAt && !invite.revokedAt && invite.expiresAt.getTime() > Date.now();
-  return { email: invite.email, workspaceName: ws?.name ?? "", valid };
+  const intendedRole =
+    invite.intendedRole ?? (invite.intendedBundles.includes("ORG_ADMIN") ? "ORG_ADMIN" : null);
+  return { email: invite.email, workspaceName: ws?.name ?? "", valid, intendedRole };
 }
 
 /** Overlay the ORG_ADMIN people-power bundle on an existing member (e.g. a delegate who also runs onboarding). */

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireCtx } from "@/server/auth/request";
 import { listMembers } from "@/server/services/members";
-import { Badge, DubaiDate, FormSection, LinkButton, PageHeader, Table, Td } from "@/components/ui";
+import { DubaiDate, FormSection, LinkButton, PageHeader, Table, Td } from "@/components/ui";
 import { InviteForm } from "./InviteForm";
 import {
   grantOrgAdminAction,
@@ -11,7 +11,7 @@ import {
 } from "./actions";
 
 // In-org member management (F-Admin §4.1, §7). Gated by members.read at the handler; the nav
-// entry is cosmetic. An org-admin sees this; a data role's route fails closed in listMembers.
+// entry is cosmetic. An office admin sees this; a data role's route fails closed in listMembers.
 export default async function MembersPage() {
   let data;
   try {
@@ -24,24 +24,19 @@ export default async function MembersPage() {
     <>
       <PageHeader
         title="Members & access"
-        subtitle="Who can act in this workspace. Org-admins onboard people and wire delegate assignments — they hold no data access."
+        subtitle="Who can act in this workspace. Invite by seat — they choose a password when they accept. Workspace admin is seated when the workspace is provisioned, not from here."
         actions={
-          // Assignment is a relationship edit, not a top-level destination — reached from here.
-          // Anyone with members.read also holds clients.assign (both are PEOPLE_ADMIN).
           <LinkButton href="/members/assignments" variant="secondary">
             Assignments
           </LinkButton>
         }
       />
 
-      <FormSection title="Invite an org-admin" className="mb-6">
-        <p className="mb-3 text-sm text-muted">
-          People-power only: an org-admin manages members and assignments but cannot open a tenancy.
-        </p>
+      <FormSection title="Invite someone" className="mb-6">
         <InviteForm />
       </FormSection>
 
-      <Table stack headers={["Name", "Email", "Role", "Bundles", ""]}>
+      <Table stack headers={["Name", "Email", "Seat", ""]}>
         {data.members.map((m) => (
           <tr key={m.membershipId}>
             <Td label="Name">
@@ -51,32 +46,23 @@ export default async function MembersPage() {
             <Td label="Email" className="text-xs">
               {m.email}
             </Td>
-            <Td label="Role">
-              <Badge value={m.role} />
-            </Td>
-            <Td label="Bundles">
-              {m.bundles.length ? (
-                m.bundles.map((b) => <Badge key={b} value={b} />)
-              ) : (
-                <span className="text-muted">—</span>
-              )}
-            </Td>
+            <Td label="Seat">{m.seatLabel}</Td>
             <Td>
               {!m.isSelf && (
                 <div className="flex flex-wrap justify-end gap-1.5 text-xs">
-                  {m.role !== "ORG_ADMIN" && !m.bundles.includes("ORG_ADMIN") && (
+                  {m.role !== "ORG_ADMIN" && !m.officeAdminOverlay && (
                     <form action={grantOrgAdminAction}>
                       <input type="hidden" name="membershipId" value={m.membershipId} />
                       <button className="rounded-md border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
-                        + Org-admin
+                        + Office admin
                       </button>
                     </form>
                   )}
-                  {m.bundles.includes("ORG_ADMIN") && (
+                  {m.officeAdminOverlay && (
                     <form action={revokeOrgAdminAction}>
                       <input type="hidden" name="membershipId" value={m.membershipId} />
                       <button className="rounded-md border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
-                        − Org-admin
+                        − Office admin
                       </button>
                     </form>
                   )}
@@ -96,17 +82,13 @@ export default async function MembersPage() {
       {data.invites.length > 0 && (
         <>
           <h2 className="font-display mt-8 mb-3 text-lg text-navy-900">Pending invites</h2>
-          <Table stack headers={["Email", "Bundles", "Expires", ""]}>
+          <Table stack headers={["Email", "Seat", "Expires", ""]}>
             {data.invites.map((inv) => (
               <tr key={inv.id}>
                 <Td label="Email" className="text-xs">
                   {inv.email}
                 </Td>
-                <Td label="Bundles">
-                  {inv.intendedBundles.map((b) => (
-                    <Badge key={b} value={b} />
-                  ))}
-                </Td>
+                <Td label="Seat">{inv.seatLabel}</Td>
                 <Td label="Expires">
                   <DubaiDate value={inv.expiresAt} className="text-xs" />
                 </Td>
