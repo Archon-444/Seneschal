@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual, type BinaryLike, type ScryptOptions } from "node:crypto";
 import { promisify } from "node:util";
 
 export function sha256Hex(data: Buffer | string): string {
@@ -42,7 +42,12 @@ export function generateOtp(): { code: string; codeHash: string } {
   return { code, codeHash: sha256Hex(code) };
 }
 
-const scrypt = promisify(scryptCb);
+const scrypt = promisify(scryptCb) as (
+  password: BinaryLike,
+  salt: BinaryLike,
+  keylen: number,
+  options: ScryptOptions,
+) => Promise<Buffer>;
 const SCRYPT_N = 16384;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
@@ -66,11 +71,11 @@ export function assertPasswordPolicy(plain: string): void {
 export async function hashPassword(plain: string): Promise<string> {
   assertPasswordPolicy(plain);
   const salt = randomBytes(16);
-  const key = (await scrypt(plain, salt, SCRYPT_KEYLEN, {
+  const key = await scrypt(plain, salt, SCRYPT_KEYLEN, {
     N: SCRYPT_N,
     r: SCRYPT_R,
     p: SCRYPT_P,
-  })) as Buffer;
+  });
   return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString("base64url")}$${key.toString("base64url")}`;
 }
 
@@ -90,6 +95,6 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
     return false;
   }
   if (salt.length === 0 || expected.length === 0) return false;
-  const key = (await scrypt(plain, salt, expected.length, { N, r, p })) as Buffer;
+  const key = await scrypt(plain, salt, expected.length, { N, r, p });
   return key.length === expected.length && timingSafeEqual(key, expected);
 }

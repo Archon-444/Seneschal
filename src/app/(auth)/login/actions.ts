@@ -43,7 +43,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   if ("error" in result) return { error: result.error };
 
   await establishSessionCookie(result.sessionToken);
-  await landSignedIn();
+  return landSignedIn();
 }
 
 export async function requestResetAction(_prev: ResetRequestState, formData: FormData): Promise<ResetRequestState> {
@@ -66,7 +66,7 @@ export async function resetPasswordAction(_prev: ResetState, formData: FormData)
   const result = await resetPassword(token, password, await clientMeta());
   if ("error" in result) return { error: result.error };
   await establishSessionCookie(result.sessionToken);
-  await landSignedIn();
+  return landSignedIn();
 }
 
 export async function logoutAction() {
