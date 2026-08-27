@@ -59,7 +59,7 @@ export async function addMember(
   role: Role,
   clientPrincipalId?: string,
   subjectContactId?: string,
-  assignedClientIds?: string[],
+  assignedPropertyIds?: string[],
 ): Promise<TestActor> {
   const user = await prisma.user.create({
     data: { email: `${randomUUID()}@test.example`, name: "member" },
@@ -73,21 +73,21 @@ export async function addMember(
       subjectContactId: subjectContactId ?? null,
     },
   });
-  // F-Admin (D3): a delegate's scope is live ClientAssignment rows, not an array column.
-  const clientIds = assignedClientIds ?? [];
-  for (const cpId of clientIds) {
-    await prisma.clientAssignment.create({
-      data: { workspaceId, membershipId: membership.id, clientPrincipalId: cpId, assignedById: user.id },
+  // F-Admin: a delegate's scope is live PropertyAssignment rows (one member per property).
+  const propertyIds = assignedPropertyIds ?? [];
+  for (const propertyId of propertyIds) {
+    await prisma.propertyAssignment.create({
+      data: { workspaceId, membershipId: membership.id, propertyId, assignedById: user.id },
     });
   }
   return {
-    ctx: contextFromMembership(user, membership, [], clientIds),
+    ctx: contextFromMembership(user, membership, [], propertyIds),
     userId: user.id,
     workspaceId,
   };
 }
 
-/** Add a MANAGING_AGENT (execution delegate) scoped to a set of ClientPrincipals. */
-export async function makeDelegate(workspaceId: string, assignedClientIds: string[]): Promise<TestActor> {
-  return addMember(workspaceId, "MANAGING_AGENT", undefined, undefined, assignedClientIds);
+/** Add a MANAGING_AGENT (execution delegate) scoped to a set of properties. */
+export async function makeDelegate(workspaceId: string, assignedPropertyIds: string[]): Promise<TestActor> {
+  return addMember(workspaceId, "MANAGING_AGENT", undefined, undefined, assignedPropertyIds);
 }

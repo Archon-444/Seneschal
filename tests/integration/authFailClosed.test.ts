@@ -17,7 +17,7 @@ describe("auth fails closed when the scope load throws", () => {
   it("authz() rejects (deny-by-absence) when the assignment load throws", async () => {
     await resetDb();
     const W = await makeWorkspace("Fail-closed WS");
-    vi.spyOn(dbPrisma.clientAssignment, "findMany").mockRejectedValueOnce(new Error("db down"));
+    vi.spyOn(dbPrisma.propertyAssignment, "findMany").mockRejectedValueOnce(new Error("db down"));
     // No context is returned → no downstream read can happen.
     await expect(authz(W.userId, W.workspaceId)).rejects.toThrow(/db down/);
   });
@@ -29,7 +29,7 @@ describe("auth fails closed when the scope load throws", () => {
     const B = await makeWorkspace("Workspace B");
     await prisma.membership.create({ data: { workspaceId: B.workspaceId, userId: A.userId, role: "MANAGER" } });
 
-    vi.spyOn(dbPrisma.clientAssignment, "findMany").mockRejectedValueOnce(new Error("db down"));
+    vi.spyOn(dbPrisma.propertyAssignment, "findMany").mockRejectedValueOnce(new Error("db down"));
 
     // Pre-fix this fell through and resolved B's context; post-fix the denial propagates.
     await expect(resolveCtxFor(A.userId, A.workspaceId)).rejects.toThrow(/db down/);

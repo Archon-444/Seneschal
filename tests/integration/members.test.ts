@@ -217,14 +217,16 @@ describe("invite by seat", () => {
     expect(listed.members.some((m) => m.email === "staff@x.example" && m.seatLabel === "Staff")).toBe(true);
   });
 
-  it("seats an agent membership without building a login context (empty book)", async () => {
+  it("seats an agent with an empty book that can build a login context", async () => {
     const { token } = await inviteMember(admin.ctx, { email: "agent-seat@x.example", role: "MANAGING_AGENT" });
     const { userId } = await acceptInvite(token, { name: "Agent", password: ACCEPT_PASSWORD });
     const membership = await prisma.membership.findFirstOrThrow({
       where: { workspaceId: W.workspaceId, userId, revokedAt: null },
     });
     expect(membership.role).toBe("MANAGING_AGENT");
-    await expect(authz(userId, W.workspaceId)).rejects.toThrow(/missing client scope/);
+    const ctx = await authz(userId, W.workspaceId);
+    expect(ctx.role).toBe("MANAGING_AGENT");
+    expect(ctx.delegatePropertyIds).toEqual([]);
   });
 
   it("refuses a staff invite for an email that is already a member", async () => {

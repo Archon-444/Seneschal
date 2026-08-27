@@ -39,7 +39,8 @@ const SCOPE_TOKENS = [
   "scopeMatchClauses", "scopeBelongsTo",
   // delegate (F0d) doors:
   "clientSetScopedWhere", "resolveDelegateScopeIds", "resolveDelegateContactIds",
-  "assertClientInDelegateScope", "assertDelegateClientId", "clientOfScope",
+  "assertPropertyInDelegateScope", "assertDelegatePropertyId", "assertDelegateServesClient",
+  "propertyIdOfScope", "inIds(",
   // by-id getters / loaders that themselves enforce the contact scope:
   "getTenancy(", "getListing(", "getProperty(", "getDocument(", "getProofRequest(",
   "getContact(", "loadMoveIn(", "loadPack(", "getOrCreateMyPassport(", "getPassport(",
@@ -101,13 +102,13 @@ function selftest() {
   const good = `export async function ok(ctx) {\n  return prisma.document.findMany({ where: { ...scope(ctx) } });\n}`;
   const annotated = `export async function cron(workspaceId) {\n  // scope-audit: nightly batch, no persona ctx\n  return prisma.document.findMany({ where: { workspaceId } });\n}`;
   const badWrite = `export async function leakW(ctx, id) {\n  return prisma.property.update({ where: { id }, data: {} });\n}`;
-  const goodWrite = `export async function okW(ctx, row) {\n  assertClientInDelegateScope(ctx, row);\n  return prisma.property.update({ where: { id: row.id }, data: {} });\n}`;
+  const goodWrite = `export async function okW(ctx, row) {\n  assertPropertyInDelegateScope(ctx, row, row.id);\n  return prisma.property.update({ where: { id: row.id }, data: {} });\n}`;
   // Analytic reads: an ungated count is flagged; a resolver-scoped one passes. NOTE the
   // limitation — token-matching cannot tell a hand-rolled delegate branch sitting beside a
   // `scope(ctx)`/resolver token from a fully-scoped one; the structural fix is to scope every
   // count off the single resolveClientScopeIds id-set (see dashboard.ts), not the gate.
   const badCount = `export async function leakC(ctx) {\n  return prisma.property.count({ where: { workspaceId: ctx.workspaceId } });\n}`;
-  const goodCount = `export async function okC(ctx) {\n  const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.delegateClientIds);\n  return prisma.property.count({ where: { id: { in: ids.propertyIds } } });\n}`;
+  const goodCount = `export async function okC(ctx) {\n  const ids = await resolveDelegateScopeIds(ctx);\n  return prisma.property.count({ where: { id: inIds(ids.propertyIds) } });\n}`;
   const fails = [];
   if (scanSource("bad.ts", bad).length !== 1) fails.push("expected the ungated read to be flagged");
   if (scanSource("good.ts", good).length !== 0) fails.push("a scope(ctx) read must pass");

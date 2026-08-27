@@ -7,7 +7,7 @@ import {
   resolveDelegateContactIds,
   resolveDelegateScopeIds,
 } from "./delegateScope";
-import { contactIdsForScope, resolveClientScopeIds } from "./clientScope";
+import { contactIdsForScope, inIds, resolveClientScopeIds } from "./clientScope";
 
 // Contact directory (T2.2). Agent/vendor contacts are the assignees of proof requests.
 
@@ -99,8 +99,8 @@ export async function getContactDetail(ctx: AuthzContext, id: string) {
   let proofFilter: Record<string, unknown> = {};
   if (isDelegateRole(ctx.role)) {
     const ids = await resolveDelegateScopeIds(ctx);
-    tenancyFilter = { id: { in: ids.tenancyIds } };
-    proofFilter = { id: { in: ids.proofRequestIds } };
+    tenancyFilter = { id: inIds(ids.tenancyIds) };
+    proofFilter = { id: inIds(ids.proofRequestIds) };
   } else if (ctx.clientPrincipalId) {
     tenancyFilter = { property: { clientPrincipalId: ctx.clientPrincipalId } };
   }

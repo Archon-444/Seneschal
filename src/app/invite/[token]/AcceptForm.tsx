@@ -7,13 +7,6 @@ import { SubmitButton } from "@/components/SubmitButton";
 
 export function AcceptForm({ token, email }: { token: string; email: string }) {
   const [state, action] = useActionState<AcceptState, FormData>(acceptInviteAction, null);
-  if (state && "awaitingAssignment" in state) {
-    return (
-      <p className="text-sm text-navy-700" role="status">
-        Your password is set. Ask your office to assign your book, then sign in.
-      </p>
-    );
-  }
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="token" value={token} />
@@ -36,7 +29,7 @@ export function AcceptForm({ token, email }: { token: string; email: string }) {
       <Field label="Confirm password">
         <input name="confirm" type="password" className={inputClass} required minLength={10} autoComplete="new-password" />
       </Field>
-      <FormStatus error={state && "error" in state ? state.error : undefined} />
+      <FormStatus error={state?.error} />
       <SubmitButton pendingLabel="Accepting…">Set password and join</SubmitButton>
     </form>
   );

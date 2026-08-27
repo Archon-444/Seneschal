@@ -60,7 +60,7 @@ model Membership {
   workspace         Workspace @relation(fields: [workspaceId], references: [id])
   user              User      @relation(fields: [userId], references: [id])
   grants            MembershipGrant[]
-  clientAssignments ClientAssignment[]   // F-Admin (D3): a MANAGING_AGENT's delegate scope (was assignedClientIds[])
+  propertyAssignments PropertyAssignment[] // agent book: one responsible member per property
   @@unique([workspaceId, userId, role])
   @@index([workspaceId])
   @@index([userId])
@@ -84,25 +84,26 @@ model MembershipGrant {
   // plain @@unique would collide on re-grant-after-revoke.
 }
 
-// F-Admin (D3): the people×clients assignment grid — the delegate's scope, as an AUDITED
-// join (was Membership.assignedClientIds[]). An assignment is a delegation ACT, not state, so
-// provenance (assignedById/assignedAt, revokedAt/revokedById) is inseparable from the row.
-// resolveClientScopeIds reads the LIVE rows; there is no cached array to drift.
-model ClientAssignment {
-  id                String     @id @default(uuid())
-  workspaceId       String
-  membershipId      String                  // the delegate (MANAGING_AGENT)
-  clientPrincipalId String
-  assignedById      String?                 // null = backfilled/system: provenance is pre-audit, never fabricated
-  assignedAt        DateTime   @default(now())
-  backfilledAt      DateTime?                // set ONLY by the array→table backfill; flags "we don't know who originally granted"
-  revokedAt         DateTime?
-  revokedById       String?
-  membership        Membership @relation(fields: [membershipId], references: [id])
+// Agent book (people×properties): one responsible MANAGING_AGENT per property. An assignment
+// is a delegation ACT, so provenance (assignedById/assignedAt, revokedAt/revokedById) is
+// inseparable from the row. authz() reads the LIVE rows into AuthzContext.delegatePropertyIds;
+// an empty book is a valid login (empty lists, writes 404). Vacant sibling units of the same
+// client stay invisible until assigned. Live-uniqueness — one non-revoked row per property —
+// is a raw PARTIAL unique index in the migration (WHERE "revokedAt" IS NULL).
+model PropertyAssignment {
+  id           String     @id @default(uuid())
+  workspaceId  String
+  membershipId String                  // the delegate (MANAGING_AGENT)
+  propertyId   String
+  assignedById String?                 // null = backfilled/system: provenance is pre-audit, never fabricated
+  assignedAt   DateTime   @default(now())
+  backfilledAt DateTime?                // set ONLY by the ClientAssignment→property backfill
+  revokedAt    DateTime?
+  revokedById  String?
+  membership   Membership @relation(fields: [membershipId], references: [id])
+  property     Property   @relation(fields: [propertyId], references: [id])
   @@index([workspaceId, membershipId])
-  // Live-uniqueness — one non-revoked assignment per (membership, client) — is a raw PARTIAL
-  // unique index in the migration (WHERE "revokedAt" IS NULL). Prisma can't express a filtered
-  // unique; a plain @@unique would collide the instant a revoked client is re-assigned.
+  @@index([propertyId])
 }
 
 enum Role {
@@ -112,7 +113,7 @@ enum Role {
   ORG_ADMIN         // F-Admin: people/config power, ZERO data caps (onboards staff, wires delegate assignments, cannot open a tenancy)
   CLIENT_VIEWER
   AGENT             // reserved; not seated in the pilot gallery (Postgres cannot drop enum values without a type rewrite)
-  MANAGING_AGENT    // execution delegate: read + broad write, confined to its live ClientAssignment rows
+  MANAGING_AGENT    // execution delegate: read + broad write, confined to its live PropertyAssignment book
   LICENSED_PARTNER  // reserved marketplace role; read-only in the capability matrix, not seated in the pilot gallery
   VENDOR            // reserved marketplace role; proofs.read only; real vendors act via VENDOR_LINK, not a membership
   AUDITOR
@@ -242,6 +243,7 @@ model Property {
   clientPrincipal   ClientPrincipal? @relation(fields: [clientPrincipalId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   owner             Contact?         @relation("PropertyOwner", fields: [ownerContactId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   assignedAgent     Contact?         @relation("PropertyAgent", fields: [assignedAgentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignments       PropertyAssignment[]
   @@index([workspaceId, clientPrincipalId])
 }
 // TODO [later]: optional Unit entity under Property for multi-unit assets.

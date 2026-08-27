@@ -21,6 +21,16 @@ export interface ClientScopeIds {
 type Db = Prisma.TransactionClient;
 
 /**
+ * Prisma `in: []` has historically dropped the predicate (a workspace-wide leak).
+ * Always emit a never-match sentinel so an empty book cannot skip the scope filter.
+ */
+export const NEVER_MATCH_ID = "00000000-0000-4000-8000-000000000000";
+
+export function inIds(ids: readonly string[]): { in: string[] } {
+  return { in: ids.length > 0 ? [...ids] : [NEVER_MATCH_ID] };
+}
+
+/**
  * Resolve the record-id set covering one client (CLIENT_VIEWER) or several
  * (MANAGING_AGENT delegate — F0d). The traversal keys on `clientPrincipalId`, which
  * Prisma accepts as `{ in: [...] }`, so single- and multi-client callers share one
@@ -33,26 +43,26 @@ export async function resolveClientScopeIds(
 ): Promise<ClientScopeIds> {
   const clientPrincipalIds = Array.isArray(clientPrincipalId) ? clientPrincipalId : [clientPrincipalId];
   const properties = await db.property.findMany({
-    where: { workspaceId, clientPrincipalId: { in: clientPrincipalIds } },
+    where: { workspaceId, clientPrincipalId: inIds(clientPrincipalIds) },
     select: { id: true },
   });
   const propertyIds = properties.map((p) => p.id);
 
   const tenancies = await db.tenancy.findMany({
-    where: { workspaceId, propertyId: { in: propertyIds } },
+    where: { workspaceId, propertyId: inIds(propertyIds) },
     select: { id: true },
   });
   const tenancyIds = tenancies.map((t) => t.id);
 
   const paymentItems = await db.paymentItem.findMany({
-    where: { workspaceId, tenancyId: { in: tenancyIds } },
+    where: { workspaceId, tenancyId: inIds(tenancyIds) },
     select: { id: true },
   });
   const paymentItemIds = paymentItems.map((i) => i.id);
 
   const ownScopeIds = [...clientPrincipalIds, ...propertyIds, ...tenancyIds, ...paymentItemIds];
   const proofRequests = await db.proofRequest.findMany({
-    where: { workspaceId, scopeId: { in: ownScopeIds } },
+    where: { workspaceId, scopeId: inIds(ownScopeIds) },
     select: { id: true },
   });
   const proofRequestIds = proofRequests.map((r) => r.id);
@@ -127,11 +137,11 @@ export function scopeMatchClauses(ids: ClientScopeIds): {
   scopeId: { in: string[] };
 }[] {
   return [
-    { scopeType: "CLIENT", scopeId: { in: ids.clientPrincipalIds } },
-    { scopeType: "PROPERTY", scopeId: { in: ids.propertyIds } },
-    { scopeType: "TENANCY", scopeId: { in: ids.tenancyIds } },
-    { scopeType: "PAYMENT_ITEM", scopeId: { in: ids.paymentItemIds } },
-    { scopeType: "PROOF_REQUEST", scopeId: { in: ids.proofRequestIds } },
+    { scopeType: "CLIENT", scopeId: inIds(ids.clientPrincipalIds) },
+    { scopeType: "PROPERTY", scopeId: inIds(ids.propertyIds) },
+    { scopeType: "TENANCY", scopeId: inIds(ids.tenancyIds) },
+    { scopeType: "PAYMENT_ITEM", scopeId: inIds(ids.paymentItemIds) },
+    { scopeType: "PROOF_REQUEST", scopeId: inIds(ids.proofRequestIds) },
   ];
 }
 

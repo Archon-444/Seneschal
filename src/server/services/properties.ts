@@ -2,7 +2,8 @@ import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, clientScope, isDelegateRole, require_, scope } from "../authz";
 import { recordAudit } from "../audit";
 import { assertReadable, contactScopedWhere } from "./contactScope";
-import { assertDelegateClientId, clientSetScopedWhere } from "./delegateScope";
+import { claimCreatedProperty } from "./assignments";
+import { assertDelegateServesClient, clientSetScopedWhere } from "./delegateScope";
 
 // Property CRUD + archive (T2.3). Fiduciary workspaces require a client on
 // every property; archiving a property never archives its evidence.
@@ -79,8 +80,8 @@ export async function createProperty(ctx: AuthzContext, data: PropertyInput) {
   }
   if (data.clientPrincipalId) {
     if (isDelegateRole(ctx.role)) {
-      // Delegate: the input client must be in the assigned set (no row exists yet).
-      assertDelegateClientId(ctx, data.clientPrincipalId);
+      // Delegate: they may only attach a new unit to a client they already serve.
+      await assertDelegateServesClient(ctx, data.clientPrincipalId);
     } else {
       const client = await prisma.clientPrincipal.findUnique({
         where: { id: data.clientPrincipalId },
@@ -91,6 +92,9 @@ export async function createProperty(ctx: AuthzContext, data: PropertyInput) {
   const property = await prisma.property.create({
     data: { workspaceId: ctx.workspaceId, ...data },
   });
+  if (isDelegateRole(ctx.role)) {
+    await claimCreatedProperty(ctx, property.id);
+  }
   await recordAudit({
     workspaceId: ctx.workspaceId,
     actorType: ctx.isStaff ? "STAFF" : "USER",
@@ -112,7 +116,7 @@ export async function updateProperty(ctx: AuthzContext, id: string, data: Partia
   // client (or null it out of scope) and an operator could point it at another workspace.
   if (data.clientPrincipalId !== undefined) {
     if (isDelegateRole(ctx.role)) {
-      assertDelegateClientId(ctx, data.clientPrincipalId);
+      await assertDelegateServesClient(ctx, data.clientPrincipalId);
     } else if (data.clientPrincipalId) {
       const client = await prisma.clientPrincipal.findUnique({ where: { id: data.clientPrincipalId } });
       assertSameWorkspace(ctx, client);

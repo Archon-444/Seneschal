@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { addMember, makeDelegate, makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
-import { scope, assertSameWorkspace } from "@/server/authz";
+import { makeDelegate, makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
+import { scope, assertSameWorkspace, authz } from "@/server/authz";
 import { assertReadable } from "@/server/services/contactScope";
 import * as clients from "@/server/services/clients";
 import * as contacts from "@/server/services/contacts";
@@ -15,8 +15,11 @@ import { dashboardKpis } from "@/server/services/dashboard";
 
 // F0d ⛔ Execution-delegate (MANAGING_AGENT) scoping suite — release blocking.
 //
-// A delegate reads AND WRITES, but confined to the ClientPrincipal set on its
-// membership (delegateClientIds). The security model is the CLIENT_VIEWER join with
+// A delegate reads AND WRITES, but confined to the properties on its
+// membership (delegatePropertyIds). The security model is the CLIENT_VIEWER join with
+// `IN` for `=`, keyed on Property rather than ClientPrincipal — a vacant sibling
+// unit of an assigned client's other properties is DENIED. Forget the filter on any
+// read OR write path and the default Prisma query spans every client in the workspace.
 // `IN` for `=`, widened from read to write: forget the filter on any read OR write
 // path and the default Prisma query spans every client in the workspace. This suite
 // asserts, for every capability-reachable read and write, that an UNASSIGNED sibling
@@ -38,9 +41,11 @@ interface Bundle {
   documentId: string;
   proofRequestId: string;
 }
-let A: Bundle; // assigned
+let A: Bundle; // assigned to D
 let B: Bundle; // sibling — NOT assigned
-let C: Bundle; // assigned to D2 only
+let C: Bundle; // assigned to D2
+let E: Bundle; // also assigned to D2 (union)
+let vacantAId = ""; // same client as A, unassigned — vacant leak
 
 async function makeBundle(label: string, rent: number): Promise<Bundle> {
   const client = await clients.createClient(W.ctx, { displayName: `${label} Co` });
@@ -105,14 +110,30 @@ beforeAll(async () => {
   A = await makeBundle("A", 72000);
   B = await makeBundle("B", 90000);
   C = await makeBundle("C", 60000);
-  D = await makeDelegate(W.workspaceId, [A.clientId]);
-  D2 = await makeDelegate(W.workspaceId, [A.clientId, C.clientId]);
+  E = await makeBundle("E", 50000);
+  const vacant = await properties.createProperty(W.ctx, {
+    clientPrincipalId: A.clientId,
+    ownerContactId: A.ownerContactId,
+    community: "Vacant A",
+    building: "Unassigned",
+    unitNo: "1",
+  });
+  vacantAId = vacant.id;
+  D = await makeDelegate(W.workspaceId, [A.propertyId]);
+  D2 = await makeDelegate(W.workspaceId, [C.propertyId, E.propertyId]);
 });
 
 describe("membership guard", () => {
-  it("rejects a MANAGING_AGENT membership with no assigned clients (fail closed)", async () => {
-    await expect(makeDelegate(W.workspaceId, [])).rejects.toThrow(/client scope/);
-    await expect(addMember(W.workspaceId, "MANAGING_AGENT")).rejects.toThrow(/client scope/);
+  it("an empty agent book still builds a login context", async () => {
+    const empty = await makeDelegate(W.workspaceId, []);
+    const ctx = await authz(empty.userId, W.workspaceId);
+    expect(ctx.role).toBe("MANAGING_AGENT");
+    expect(ctx.delegatePropertyIds).toEqual([]);
+    expect(await properties.listProperties(ctx)).toEqual([]);
+    await expect(
+      properties.createProperty(ctx, { clientPrincipalId: A.clientId, community: "X", building: "Y", unitNo: "1" }),
+    ).rejects.toThrow();
+    await expect(properties.getProperty(ctx, A.propertyId)).rejects.toThrow();
   });
 });
 
@@ -131,11 +152,13 @@ describe("reads: assigned client served, sibling denied", () => {
     expect(ids).toContain(A.propertyId);
     expect(ids).not.toContain(B.propertyId);
     expect(ids).not.toContain(C.propertyId);
+    expect(ids).not.toContain(vacantAId);
   });
 
-  it("properties.getProperty: A resolves, B denied", async () => {
+  it("properties.getProperty: A resolves, B and vacant sibling denied", async () => {
     await expect(properties.getProperty(D.ctx, A.propertyId)).resolves.toBeTruthy();
     await expect(properties.getProperty(D.ctx, B.propertyId)).rejects.toThrow();
+    await expect(properties.getProperty(D.ctx, vacantAId)).rejects.toThrow();
   });
 
   it("tenancies.getTenancy: A resolves, B denied", async () => {
@@ -228,11 +251,13 @@ describe("assertReadable discriminates WITHIN the workspace for a delegate", () 
   });
 });
 
-describe("multi-client union is real (D2 assigned [A, C])", () => {
-  it("reads both A and C, never B", async () => {
+describe("multi-property union is real (D2 assigned [C, E])", () => {
+  it("reads both C and E, never A, B, or A's vacant sibling", async () => {
     const ids = (await properties.listProperties(D2.ctx)).map((p) => p.id);
-    expect(ids).toEqual(expect.arrayContaining([A.propertyId, C.propertyId]));
+    expect(ids).toEqual(expect.arrayContaining([C.propertyId, E.propertyId]));
+    expect(ids).not.toContain(A.propertyId);
     expect(ids).not.toContain(B.propertyId);
+    expect(ids).not.toContain(vacantAId);
   });
 });
 
@@ -276,6 +301,16 @@ describe("writes denied for sibling B (capability ≠ scope)", () => {
     // The property stays with A — the rejected writes did not take effect.
     const row = await prisma.property.findUniqueOrThrow({ where: { id: A.propertyId } });
     expect(row.clientPrincipalId).toBe(A.clientId);
+  });
+  it("createTenancy on A's vacant sibling → denied", async () => {
+    await expect(
+      tenancies.createTenancy(D.ctx, {
+        propertyId: vacantAId,
+        startDate: new Date("2025-09-16"),
+        endDate: new Date("2026-09-15"),
+        annualRent: 50000,
+      }),
+    ).rejects.toThrow();
   });
   it("createTenancy on B's property → denied", async () => {
     await expect(

@@ -101,7 +101,7 @@ describe("evidence pack export", () => {
     await expect(exportEvidencePack(viewer.ctx, tenancyId)).rejects.toBeInstanceOf(AuthzError);
     await expect(exportEvidencePack(viewer.ctx, tenancyId)).rejects.toMatchObject({ status: 403 });
 
-    const delegate = await addMember(W.workspaceId, "MANAGING_AGENT", undefined, undefined, [clientId]);
+    const delegate = await addMember(W.workspaceId, "MANAGING_AGENT");
     await expect(exportEvidencePack(delegate.ctx, tenancyId)).rejects.toMatchObject({ status: 403 });
   });
 

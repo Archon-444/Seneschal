@@ -7,7 +7,7 @@ import { toUtcDateOnly } from "../calculators/dates";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
 import { evaluateRiskForTenancy } from "./risk";
 import { assertReadable } from "./contactScope";
-import { assertClientInDelegateScope } from "./delegateScope";
+import { assertPropertyInDelegateScope } from "./delegateScope";
 import { ingestDocument, logDocumentAccess } from "./documents";
 
 // Tenancy CRUD (T2.4). Create/update regenerates deadlines (T3.2); status
@@ -84,7 +84,7 @@ export interface TenancyInput {
 export async function createTenancy(ctx: AuthzContext, data: TenancyInput) {
   require_(ctx, "tenancies.write");
   const property = await prisma.property.findUnique({ where: { id: data.propertyId } });
-  if (isDelegateRole(ctx.role)) assertClientInDelegateScope(ctx, property);
+  if (isDelegateRole(ctx.role)) assertPropertyInDelegateScope(ctx, property, property?.id);
   else assertSameWorkspace(ctx, property);
 
   const tenancy = await prisma.tenancy.create({

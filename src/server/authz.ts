@@ -15,11 +15,11 @@ export interface AuthzContext {
   /** Set for TENANT | LANDLORD: limits every read to this Contact's records. */
   subjectContactId: string | null;
   /**
-   * Set for MANAGING_AGENT: the ClientPrincipal ids this execution delegate may
-   * read AND write. Empty for every other role; non-empty is the fail-closed
-   * invariant for a delegate (an empty set would be a workspace-wide leak).
+   * Set for MANAGING_AGENT: the Property ids this execution delegate may read AND
+   * write (the agent book). Empty is a valid login — lists resolve to nothing,
+   * writes 404. A dropped empty `IN ()` filter would be a workspace-wide leak.
    */
-  delegateClientIds: string[];
+  delegatePropertyIds: string[];
   /**
    * F-Admin (D1): the live capability bundles granted to THIS membership, on top of its
    * role. Effective caps = roleMap(role) ∪ expand(grantedBundles). Empty for every existing
@@ -56,7 +56,7 @@ export function isPersonaRole(role: Role): role is "TENANT" | "LANDLORD" {
 
 /**
  * MANAGING_AGENT is the execution delegate: read + broad write, but confined to
- * the set of ClientPrincipals on its membership (AuthzContext.delegateClientIds).
+ * the properties on its membership (AuthzContext.delegatePropertyIds).
  * It is NOT a persona (no subjectContactId), so the fail-closed primitives gate it
  * by role, not by contact scope.
  */
@@ -88,9 +88,9 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
 
   // F-Admin (D1/D3): grants and delegate client-scope are now AUDITED join rows, not columns on
   // the membership, so they must be loaded async here and threaded into the (sync) context builder.
-  const [grantedBundles, delegateClientIds, workspace] = await Promise.all([
+  const [grantedBundles, delegatePropertyIds, workspace] = await Promise.all([
     liveGrantBundles(membership.id),
-    liveDelegateClientIds(membership.id, membership.workspaceId),
+    liveDelegatePropertyIds(membership.id, membership.workspaceId),
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { suspendedAt: true, archivedAt: true } }),
   ]);
   // F-Admin §3.2: a platform suspend/archive pauses the customer workspace — its members cannot
@@ -102,7 +102,7 @@ export async function authz(userId: string, workspaceId: string): Promise<AuthzC
   // (terminal) is excluded from both planes.
   if (workspace?.archivedAt) throw new AuthzError("Workspace archived", 403);
   if (workspace?.suspendedAt) throw new AuthzError("Workspace suspended", 403);
-  return contextFromMembership(user, membership, grantedBundles, delegateClientIds);
+  return contextFromMembership(user, membership, grantedBundles, delegatePropertyIds);
 }
 
 /**
@@ -122,16 +122,16 @@ async function liveGrantBundles(membershipId: string): Promise<Bundle[]> {
 }
 
 /**
- * The live (non-revoked) client ids a delegate membership is assigned (F-Admin D3). Filtered by
+ * The live (non-revoked) property ids a delegate membership is assigned. Filtered by
  * the membership's own workspace as a fail-closed guard: a join row that somehow referenced
  * another workspace's membership contributes nothing rather than widening scope.
  */
-async function liveDelegateClientIds(membershipId: string, workspaceId: string): Promise<string[]> {
-  const rows = await prisma.clientAssignment.findMany({
+async function liveDelegatePropertyIds(membershipId: string, workspaceId: string): Promise<string[]> {
+  const rows = await prisma.propertyAssignment.findMany({
     where: { membershipId, workspaceId, revokedAt: null },
-    select: { clientPrincipalId: true },
+    select: { propertyId: true },
   });
-  return rows.map((r) => r.clientPrincipalId);
+  return rows.map((r) => r.propertyId);
 }
 
 /**
@@ -177,7 +177,7 @@ export function contextFromMembership(
   user: User,
   membership: Membership,
   grantedBundles: Bundle[] = [],
-  delegateClientIds: string[] = [],
+  delegatePropertyIds: string[] = [],
 ): AuthzContext {
   if (membership.role === "CLIENT_VIEWER" && !membership.clientPrincipalId) {
     throw new AuthzError("CLIENT_VIEWER membership missing client scope");
@@ -185,20 +185,14 @@ export function contextFromMembership(
   if (isPersonaRole(membership.role) && !membership.subjectContactId) {
     throw new AuthzError(`${membership.role} membership missing contact scope`);
   }
-  if (isDelegateRole(membership.role) && delegateClientIds.length === 0) {
-    // An unscoped delegate would read+write the whole workspace — fail closed,
-    // exactly as a persona without a subjectContactId does above. The scope now comes
-    // from live ClientAssignment rows (D3), so a delegate whose assignments were all
-    // revoked can no longer build a readable context at all.
-    throw new AuthzError("MANAGING_AGENT membership missing client scope");
-  }
+  // An empty agent book is a valid login: lists are empty, writes 404. Do not throw.
   return {
     userId: user.id,
     workspaceId: membership.workspaceId,
     role: membership.role,
     clientPrincipalId: membership.role === "CLIENT_VIEWER" ? membership.clientPrincipalId : null,
     subjectContactId: isPersonaRole(membership.role) ? membership.subjectContactId : null,
-    delegateClientIds: isDelegateRole(membership.role) ? delegateClientIds : [],
+    delegatePropertyIds: isDelegateRole(membership.role) ? delegatePropertyIds : [],
     grantedBundles,
     isStaff: user.isPlatformAdmin,
   };
@@ -236,7 +230,7 @@ export function require_(ctx: AuthzContext, capability: Capability): void {
  * instead of returning the whole workspace. This is the list-family choke point.
  *
  * Same fail-closed treatment for a MANAGING_AGENT (F0d): a delegate is confined to
- * its assigned clients, so any list path not routed through `clientSetScopedWhere`
+ * its assigned properties, so any list path not routed through `clientSetScopedWhere`
  * must throw rather than return every client's rows.
  */
 export function scope(ctx: AuthzContext): { workspaceId: string } {
@@ -267,7 +261,7 @@ export function clientScope(ctx: AuthzContext): { clientPrincipalId?: string } {
  *
  * A MANAGING_AGENT (F0d) is gated the same way: workspace match is not a sufficient
  * check (a sibling client's row is in the same workspace), so delegate read/write
- * paths must use `assertReadable` / `assertClientInDelegateScope`. A path that still
+ * paths must use `assertReadable` / `assertPropertyInDelegateScope`. A path that still
  * calls this with a delegate context fails closed.
  */
 export function assertSameWorkspace(
@@ -278,7 +272,7 @@ export function assertSameWorkspace(
     throw new AuthzError("Persona context must be checked via assertReadable, not assertSameWorkspace");
   }
   if (isDelegateRole(ctx.role)) {
-    throw new AuthzError("Delegate context must be checked via assertClientInDelegateScope, not assertSameWorkspace");
+    throw new AuthzError("Delegate context must be checked via assertPropertyInDelegateScope, not assertSameWorkspace");
   }
   if (!row || row.workspaceId !== ctx.workspaceId) {
     // 404, not 403: never confirm existence of another workspace's records.

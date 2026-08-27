@@ -7,7 +7,7 @@ import { notify } from "../notify";
 import { evaluateRenewalRisk, evaluateRiskForTenancy } from "./risk";
 import { evenChequeSchedule, setPaymentSchedule } from "./payments";
 import { regenerateDeadlinesForTenancy } from "./deadlines";
-import { resolveClientScopeIds } from "./clientScope";
+import { inIds, resolveClientScopeIds } from "./clientScope";
 import { resolveDelegateScopeIds } from "./delegateScope";
 import { createSecureLink, consumeLinkUse } from "./secureLinks";
 import { getTenancy, setTenancyStatus } from "./tenancies";
@@ -609,7 +609,7 @@ export async function listRenewalPipeline(
     where: {
       ...wsFilter,
       archivedAt: null,
-      ...(scopedTenancyIds ? { id: { in: scopedTenancyIds } } : {}),
+      ...(scopedTenancyIds ? { id: inIds(scopedTenancyIds) } : {}),
       OR: [
         { endDate: { lte: horizon } },
         { id: { in: retainedCaseTenancyIds } },

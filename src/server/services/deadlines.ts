@@ -4,7 +4,7 @@ import { type AuthzContext, AuthzError, assertSameWorkspace, isDelegateRole, req
 import { recordAudit } from "../audit";
 import { resolveClientScopeIds } from "./clientScope";
 import { contactScopedWhere } from "./contactScope";
-import { assertClientInDelegateScope, clientSetScopedWhere, resolveDelegateScopeIds } from "./delegateScope";
+import { assertPropertyInDelegateScope, clientSetScopedWhere, resolveDelegateScopeIds } from "./delegateScope";
 import { chequeDue, contractExpiry, noticeGate, renewalDate, toUtcDateOnly, type CalcResult } from "../calculators/dates";
 
 // Deadline generation (T3.2): regenerated on every tenancy create/update and
@@ -282,17 +282,14 @@ export async function createManualDeadline(ctx: AuthzContext, input: ManualDeadl
   if (input.tenancyId) {
     const tenancy = await prisma.tenancy.findUnique({ where: { id: input.tenancyId }, include: { property: true } });
     if (isDelegateRole(ctx.role)) {
-      assertClientInDelegateScope(
-        ctx,
-        tenancy ? { workspaceId: tenancy.workspaceId, clientPrincipalId: tenancy.property.clientPrincipalId } : null,
-      );
+      assertPropertyInDelegateScope(ctx, tenancy, tenancy?.propertyId);
     } else {
       assertSameWorkspace(ctx, tenancy);
     }
     propertyId = propertyId ?? tenancy!.propertyId;
   } else if (propertyId) {
     const property = await prisma.property.findUnique({ where: { id: propertyId } });
-    if (isDelegateRole(ctx.role)) assertClientInDelegateScope(ctx, property);
+    if (isDelegateRole(ctx.role)) assertPropertyInDelegateScope(ctx, property, property?.id);
     else assertSameWorkspace(ctx, property);
   }
   const deadline = await prisma.deadline.create({

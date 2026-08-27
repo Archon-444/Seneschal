@@ -1,43 +1,41 @@
 import { prisma } from "../db";
 import { type AuthzContext, hasCapability, isDelegateRole, require_, scope } from "../authz";
-import { allScopeIds, resolveClientScopeIds } from "./clientScope";
+import { allScopeIds, inIds, resolveClientScopeIds } from "./clientScope";
+import { resolveDelegateScopeIds } from "./delegateScope";
 import { todayInDubai } from "../calculators/dates";
 
 // Workspace dashboard + client-viewer + delegate dashboard KPIs (T10.2).
 
 export async function dashboardKpis(ctx: AuthzContext) {
   require_(ctx, "properties.read");
-  // A delegate (MANAGING_AGENT) is confined to its assigned client set; a CLIENT_VIEWER
-  // to one client. Both resolve through the SAME sanctioned resolver (resolveClientScopeIds)
-  // and every scoped count is derived from its id-sets — no bespoke per-table predicate that
-  // could drift from clientSetScopedWhere. LANDLORD also holds properties.read but is a
-  // persona — wsScope keeps scope(ctx)'s fail-closed throw for it (a persona must not see
-  // workspace-wide counts).
+  // A delegate (MANAGING_AGENT) is confined to its assigned properties; a CLIENT_VIEWER
+  // to one client. Delegate counts go through resolveDelegateScopeIds (property book);
+  // CLIENT_VIEWER through resolveClientScopeIds. LANDLORD also holds properties.read but
+  // is a persona — wsScope keeps scope(ctx)'s fail-closed throw for it.
   const delegate = isDelegateRole(ctx.role);
-  const scopeClientIds = delegate
-    ? ctx.delegateClientIds
+  const ids = delegate
+    ? await resolveDelegateScopeIds(ctx)
     : ctx.clientPrincipalId
-      ? [ctx.clientPrincipalId]
+      ? await resolveClientScopeIds(ctx.workspaceId, ctx.clientPrincipalId)
       : null;
   const wsScope = delegate ? { workspaceId: ctx.workspaceId } : scope(ctx);
-  const ids = scopeClientIds ? await resolveClientScopeIds(ctx.workspaceId, scopeClientIds) : null;
   const today = todayInDubai();
   const in30 = new Date(today.getTime() + 30 * 86_400_000);
 
   const [properties, tenancies, upcomingDeadlines, overdueDeadlines, openFlags, openProofs, latePayments] =
     await Promise.all([
       prisma.property.count({
-        where: { ...wsScope, ...(ids ? { id: { in: ids.propertyIds } } : {}), archivedAt: null },
+        where: { ...wsScope, ...(ids ? { id: inIds(ids.propertyIds) } : {}), archivedAt: null },
       }),
       prisma.tenancy.count({
-        where: { ...wsScope, archivedAt: null, ...(ids ? { id: { in: ids.tenancyIds } } : {}) },
+        where: { ...wsScope, archivedAt: null, ...(ids ? { id: inIds(ids.tenancyIds) } : {}) },
       }),
       hasCapability(ctx, "deadlines.read") ? prisma.deadline.count({
         where: {
           ...wsScope,
           status: "OPEN",
           dueAt: { gte: today, lte: in30 },
-          ...(ids ? { OR: [{ propertyId: { in: ids.propertyIds } }, { tenancyId: { in: ids.tenancyIds } }] } : {}),
+          ...(ids ? { OR: [{ propertyId: inIds(ids.propertyIds) }, { tenancyId: inIds(ids.tenancyIds) }] } : {}),
         },
       }) : Promise.resolve(null),
       hasCapability(ctx, "deadlines.read") ? prisma.deadline.count({
@@ -45,25 +43,25 @@ export async function dashboardKpis(ctx: AuthzContext) {
           ...wsScope,
           status: "OPEN",
           dueAt: { lt: today },
-          ...(ids ? { OR: [{ propertyId: { in: ids.propertyIds } }, { tenancyId: { in: ids.tenancyIds } }] } : {}),
+          ...(ids ? { OR: [{ propertyId: inIds(ids.propertyIds) }, { tenancyId: inIds(ids.tenancyIds) }] } : {}),
         },
       }) : Promise.resolve(null),
       hasCapability(ctx, "riskflags.read") ? prisma.riskFlag.count({
         where: {
           ...wsScope,
           status: { in: ["OPEN", "ACKNOWLEDGED"] },
-          ...(ids ? { scopeId: { in: allScopeIds(ids) } } : {}),
+          ...(ids ? { scopeId: inIds(allScopeIds(ids)) } : {}),
         },
       }) : Promise.resolve(null),
       hasCapability(ctx, "proofs.read") ? prisma.proofRequest.count({
         where: {
           ...wsScope,
           status: { notIn: ["APPROVED", "CLOSED"] },
-          ...(ids ? { id: { in: ids.proofRequestIds } } : {}),
+          ...(ids ? { id: inIds(ids.proofRequestIds) } : {}),
         },
       }) : Promise.resolve(null),
       hasCapability(ctx, "payments.read") ? prisma.paymentItem.count({
-        where: { ...wsScope, status: { in: ["LATE", "BOUNCED"] }, ...(ids ? { tenancyId: { in: ids.tenancyIds } } : {}) },
+        where: { ...wsScope, status: { in: ["LATE", "BOUNCED"] }, ...(ids ? { tenancyId: inIds(ids.tenancyIds) } : {}) },
       }) : Promise.resolve(null),
     ]);
 

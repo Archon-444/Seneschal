@@ -3,7 +3,7 @@ import { prisma, resetDb } from "../helpers";
 import { authz, hasCapability, type PlatformAdminContext } from "@/server/authz";
 import { provisionWorkspace } from "@/server/admin/provisioning";
 import { acceptInvite, inviteOrgAdmin } from "@/server/services/members";
-import { assignClient } from "@/server/services/assignments";
+import { assignProperty } from "@/server/services/assignments";
 import * as clients from "@/server/services/clients";
 import * as contacts from "@/server/services/contacts";
 import * as properties from "@/server/services/properties";
@@ -65,11 +65,11 @@ describe("admin acceptance walkthrough", () => {
     });
 
     // …and the OFFICE MANAGER (no data caps) wires the delegate to the client via the grid.
-    await assignClient(officeCtx, { membershipId: agentMembership.id, clientPrincipalId: client.id });
+    await assignProperty(officeCtx, { membershipId: agentMembership.id, propertyId: property.id });
 
-    // 5. The delegate's scope now resolves to exactly that client — proven through the read path.
+    // 5. The delegate's scope now resolves to exactly that property — proven through the read path.
     const agentCtx = await authz(agentUser.id, workspaceId);
-    expect(agentCtx.delegateClientIds).toEqual([client.id]);
+    expect(agentCtx.delegatePropertyIds).toEqual([property.id]);
     expect((await properties.listProperties(agentCtx)).map((p) => p.id)).toEqual([property.id]);
 
     // 6. The whole governance chain is in the audit trail.
