@@ -285,7 +285,7 @@ describe("role capability matrix", () => {
 
   // MANAGING_AGENT (F0d) is the execution delegate: read + broad operational write,
   // but NEVER the fiduciary-control / roster / cross-client capabilities. Scoping to
-  // the assigned ClientPrincipal set is enforced separately in delegateScope.
+  // the assigned property book is enforced separately in delegateScope.
   it("MANAGING_AGENT holds operational read+write but no fiduciary-control caps", () => {
     const forbidden = [
       "proofs.decide", "clients.read", "clients.write", "members.manage", "workspace.manage",

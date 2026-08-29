@@ -701,10 +701,9 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     },
   });
 
-  // ── Execution-delegate login (F0d): a MANAGING_AGENT assigned to ONLY Al Noor.
-  // Al Noor owns Marina/Bayview/Palm Vista; Private Client A's JVC unit is the built-in
-  // sibling the delegate must never see. He can read+write his assigned clients' work
-  // (cheques, tenancies, proofs, documents) but holds no fiduciary-control caps.
+  // ── Execution-delegate login (F0d): a MANAGING_AGENT assigned to Al Noor's units
+  // (Marina / Bayview / Palm Vista). Private Client A's JVC unit is the built-in
+  // sibling the delegate must never see.
   const agentUser = await prisma.user.upsert({
     where: { email: "managing-agent@example.com" },
     update: {},
@@ -721,19 +720,22 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
       role: "MANAGING_AGENT",
     },
   });
-  // F-Admin (D3): the delegate's scope is now a live ClientAssignment row (assigned to ONLY Al Noor).
-  const existingAssignment = await prisma.clientAssignment.findFirst({
-    where: { membershipId: agentMembership.id, clientPrincipalId: alNoor.id, revokedAt: null },
-  });
-  if (!existingAssignment) {
-    await prisma.clientAssignment.create({
-      data: {
-        workspaceId: workspace.id,
-        membershipId: agentMembership.id,
-        clientPrincipalId: alNoor.id,
-        assignedById: platformOperator.id,
-      },
+  // Agent book: one PropertyAssignment per Al Noor unit (not the client — vacant
+  // sibling units of other clients stay out of scope).
+  for (const property of [marina, bayview, palmVista]) {
+    const existingAssignment = await prisma.propertyAssignment.findFirst({
+      where: { membershipId: agentMembership.id, propertyId: property.id, revokedAt: null },
     });
+    if (!existingAssignment) {
+      await prisma.propertyAssignment.create({
+        data: {
+          workspaceId: workspace.id,
+          membershipId: agentMembership.id,
+          propertyId: property.id,
+          assignedById: platformOperator.id,
+        },
+      });
+    }
   }
 
   // ── Listings (1B): a draft listing on the vacant Palm Vista villa. Deliberately
@@ -838,7 +840,7 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
     "WORKSPACE_ADMIN", // builder
     "FIDUCIARY", // Farina
     "LANDLORD", // self-managing owner persona
-    "MANAGING_AGENT", // delegate (+ ClientAssignment)
+    "MANAGING_AGENT", // delegate (+ PropertyAssignment book)
     "CLIENT_VIEWER", // absentee landlord (+ approval link)
     "TENANT", // link-party — never a member (boundary rule)
   ]);

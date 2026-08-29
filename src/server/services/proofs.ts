@@ -6,9 +6,9 @@ import { notify } from "../notify";
 import { ingestDocument, logDocumentAccess } from "./documents";
 import { createSecureLink, PROOF_LINK_DEFAULT_MAX_USES } from "./secureLinks";
 import { raiseProofOverdue, clearProofOverdue } from "./risk";
-import { resolveClientScopeIds } from "./clientScope";
+import { inIds, resolveClientScopeIds } from "./clientScope";
 import { assertReadable, contactScopedWhere } from "./contactScope";
-import { assertDelegateClientId, clientOfScope, clientSetScopedWhere } from "./delegateScope";
+import { assertDelegatePropertyId, clientSetScopedWhere, propertyIdOfScope } from "./delegateScope";
 import { todayInDubai } from "../calculators/dates";
 
 // Proof requests (E7) — the core verb: ask an external party for evidence,
@@ -128,23 +128,21 @@ async function assertProofRequestSelection(
 /** Minimum-data, scope-aware options for the proof creation form. */
 export async function proofRequestOptions(ctx: AuthzContext): Promise<ProofRequestScopeOption[]> {
   require_(ctx, "proofs.write");
-  const clientIds = isDelegateRole(ctx.role) ? ctx.delegateClientIds : null;
+  const delegate = isDelegateRole(ctx.role);
   const [clients, properties] = await Promise.all([
-    prisma.clientPrincipal.findMany({
-      where: {
-        workspaceId: ctx.workspaceId,
-        archivedAt: null,
-        ...(clientIds ? { id: { in: clientIds } } : {}),
-      },
-      select: { id: true, displayName: true },
-      orderBy: { displayName: "asc" },
-    }),
-    // scope-audit: proofRequestOptions requires proofs.write and applies delegate client ids before reading properties.
+    delegate
+      ? Promise.resolve([] as { id: string; displayName: string }[])
+      : prisma.clientPrincipal.findMany({
+          where: { workspaceId: ctx.workspaceId, archivedAt: null },
+          select: { id: true, displayName: true },
+          orderBy: { displayName: "asc" },
+        }),
+    // scope-audit: proofRequestOptions requires proofs.write and applies the agent book before reading properties.
     prisma.property.findMany({
       where: {
         workspaceId: ctx.workspaceId,
         archivedAt: null,
-        ...(clientIds ? { clientPrincipalId: { in: clientIds } } : {}),
+        ...(delegate ? { id: inIds(ctx.delegatePropertyIds) } : {}),
       },
       select: { id: true, clientPrincipalId: true, community: true, building: true, unitNo: true },
       orderBy: [{ community: "asc" }, { building: "asc" }, { unitNo: "asc" }],
@@ -157,7 +155,7 @@ export async function proofRequestOptions(ctx: AuthzContext): Promise<ProofReque
   const propertyContacts = new Map(propertyContactEntries);
   const allContactIds = [...new Set(propertyContactEntries.flatMap(([, ids]) => ids))];
   const contacts = await prisma.contact.findMany({
-    where: { workspaceId: ctx.workspaceId, archivedAt: null, id: { in: allContactIds } },
+    where: { workspaceId: ctx.workspaceId, archivedAt: null, id: inIds(allContactIds) },
     select: { id: true, name: true, kind: true },
     orderBy: { name: "asc" },
   });
@@ -206,10 +204,8 @@ export async function createProofRequest(
     throw new AuthzError(`scopeId required for ${args.scopeType}-scoped proof requests`, 422);
   }
   if (isDelegateRole(ctx.role)) {
-    // The proof's subject (scopeType/scopeId) must resolve to an assigned client; a
-    // WORKSPACE-scoped proof has no client and so is denied (cross-client).
-    const clientId = await clientOfScope(ctx.workspaceId, args.scopeType, args.scopeId ?? null);
-    assertDelegateClientId(ctx, clientId);
+    const propertyId = await propertyIdOfScope(ctx.workspaceId, args.scopeType, args.scopeId ?? null);
+    assertDelegatePropertyId(ctx, propertyId);
   }
   await assertProofRequestSelection(ctx, args);
 

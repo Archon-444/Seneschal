@@ -8,7 +8,8 @@ import {
   require_,
   scope,
 } from "../authz";
-import { assertDelegateClientId } from "./delegateScope";
+import { assertDelegatePropertyId, assertDelegateServesClient } from "./delegateScope";
+import { claimCreatedProperty } from "./assignments";
 import { recordAudit } from "../audit";
 import { recordEvidence } from "../evidence";
 import { toUtcDateOnly } from "../calculators/dates";
@@ -244,7 +245,7 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
       // resolveClientScopeIds -- invisible to the client it belongs to.
       if (data.clientPrincipalId) {
         if (isDelegateRole(ctx.role)) {
-          assertDelegateClientId(ctx, data.clientPrincipalId);
+          await assertDelegateServesClient(ctx, data.clientPrincipalId, tx);
         } else {
           const client = await tx.clientPrincipal.findUnique({
             where: { id: data.clientPrincipalId },
@@ -268,6 +269,7 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
             archivedAt: null,
           },
         }));
+      let createdProperty = false;
       if (!property) {
         property = await tx.property.create({
           data: {
@@ -287,6 +289,14 @@ export async function commitImportBatch(ctx: AuthzContext, batchId: string) {
           },
         });
         refs.push({ type: "Property", id: property.id });
+        createdProperty = true;
+      }
+      if (isDelegateRole(ctx.role)) {
+        if (createdProperty) {
+          await claimCreatedProperty(ctx, property.id, tx);
+        } else {
+          assertDelegatePropertyId(ctx, property.id);
+        }
       }
       // Deliberately NOT back-filling ownerContactId on an existing property.
       // It reads like a label but it is a scope grant: resolveContactScopeIds

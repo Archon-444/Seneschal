@@ -39,7 +39,7 @@ change to it.
 | --- | --- |
 | What is authority? | A **workspace membership** with `renewals.write` / `renewals.decide`, scoped by `AuthzContext`. There is no separate “landlord mandate” aggregate. |
 | Verified ownership? | `Contact.verifiedAt` + append-only `LANDLORD_VERIFIED` (`src/server/services/landlords.ts`). Used as a listing badge / fact. **Not a gate** on `openRenewalCase`, `proposeOffer`, or `mintRenewedTenancy`. |
-| Delegated portfolio authority? | `MANAGING_AGENT` via live `ClientAssignment` rows (`delegateScope.ts`). The delegate may prepare inside the assigned client set. |
+| Delegated portfolio authority? | `MANAGING_AGENT` via live `PropertyAssignment` rows (`delegateScope.ts`). The delegate may prepare inside the assigned property book. |
 | Signed landlord mandate? | Episodic **`APPROVAL` secure link** to the absentee owner (`decideApprovalViaLink`). Optional on an offer; the seed demonstrates it. Not required before opening an assessment. |
 | Can an operator prepare without proven authority? | **Yes.** `openRenewalCase` only checks `renewals.write` and tenancy scope. Serving notice, proposing, and minting are further capability / case-state checks, not a verified-landlord check. |
 | Minimum pilot-safe proof for one landlord / one property / one tenancy? | Seed path: OWNER contact on the tenancy (`landlordContactId` / `ownerContactId`), fiduciary or manager membership to run the loop, tenant as `TENANT_OFFER` link-party. Optional: verify the OWNER contact; optional: mint an `APPROVAL` link for absentee sign-off. |

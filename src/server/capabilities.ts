@@ -112,7 +112,7 @@ const ORG_ADMIN_CAPS: Capability[] = [
 ];
 
 // Execution delegate (F0d): read + broad operational WRITE, every path confined to its live
-// ClientAssignment rows (AuthzContext.delegateClientIds) — see services/delegateScope.ts.
+// PropertyAssignment book (AuthzContext.delegatePropertyIds) — see services/delegateScope.ts.
 // NOT the fiduciary-control caps (proofs.decide), the roster (clients.*), members/workspace
 // admin, renewals.decide, landlords.verify, or cross-client reports.* — simply not granted.
 const DELEGATE_CAPS: Capability[] = [

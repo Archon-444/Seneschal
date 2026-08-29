@@ -2,6 +2,7 @@ import type { Prisma, ScopeType } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, isDelegateRole } from "../authz";
 import { resolveClientScopeIds, scopeBelongsToClient } from "./clientScope";
+import { resolveDelegateScopeIds } from "./delegateScope";
 
 // Persona (TENANT | LANDLORD) scoping. The demand/supply personas are scoped to
 // exactly ONE Contact (Membership.subjectContactId). Like CLIENT_VIEWER on the
@@ -263,17 +264,16 @@ export async function assertReadable(ctx: AuthzContext, target: ReadableTarget):
     return;
   }
 
-  // MANAGING_AGENT (F0d): restrict to records owned by an assigned client. The
-  // tenancy/property carry the owning client directly; the polymorphic rows resolve
-  // through the same client id-set as CLIENT_VIEWER (delegateClientIds, not one id).
+  // MANAGING_AGENT (F0d): restrict to records in the agent book (assigned properties).
+  // Tenancy/property match on property id; polymorphic rows resolve through the same
+  // id-set as clientSetScopedWhere (no CLIENT-scoped rows — those describe the whole client).
   if (isDelegateRole(ctx.role)) {
-    const ids = await resolveClientScopeIds(ctx.workspaceId, ctx.delegateClientIds);
-    const inSet = (c: string | null) => !!c && ctx.delegateClientIds.includes(c);
+    const ids = await resolveDelegateScopeIds(ctx);
     const ok =
       target.kind === "tenancy"
-        ? inSet(target.row!.property.clientPrincipalId)
+        ? ids.tenancyIds.includes(target.row!.id)
         : target.kind === "property"
-          ? inSet(target.row!.clientPrincipalId)
+          ? ids.propertyIds.includes(target.row!.id)
           : target.kind === "proofRequest"
             ? ids.proofRequestIds.includes(target.row!.id)
             : target.kind === "listing"

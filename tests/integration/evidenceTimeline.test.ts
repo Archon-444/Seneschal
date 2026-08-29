@@ -120,8 +120,7 @@ describe("paginated evidence timeline", () => {
   });
 
   it("denies the route to delegates that do not hold evidence-read capability", async () => {
-    const client = await clients.createClient(W.ctx, { displayName: "Assigned client" });
-    const delegate = await makeDelegate(W.workspaceId, [client.id]);
+    const delegate = await makeDelegate(W.workspaceId, []);
     await expect(getEvidenceTimeline(delegate.ctx)).rejects.toThrow();
   });
 });

@@ -2,16 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { requireCtx } from "@/server/auth/request";
-import { assignClient, revokeClient } from "@/server/services/assignments";
+import { assignProperty, revokeProperty } from "@/server/services/assignments";
 
 export async function toggleAssignmentAction(formData: FormData) {
   const ctx = await requireCtx();
   const membershipId = String(formData.get("membershipId"));
-  const clientPrincipalId = String(formData.get("clientPrincipalId"));
+  const propertyId = String(formData.get("propertyId"));
   if (formData.get("assigned") === "1") {
-    await revokeClient(ctx, { membershipId, clientPrincipalId });
+    await revokeProperty(ctx, { membershipId, propertyId });
   } else {
-    await assignClient(ctx, { membershipId, clientPrincipalId });
+    await assignProperty(ctx, { membershipId, propertyId });
   }
   revalidatePath("/members/assignments");
 }

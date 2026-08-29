@@ -10,7 +10,7 @@ function inviteBlurb(role: Role | null): string {
     case "MANAGER":
       return "You've been invited as staff. Confirm your details and choose a password to join this workspace.";
     case "MANAGING_AGENT":
-      return "You've been invited as an agent. Confirm your details and choose a password. After you join, your office will assign the properties you work.";
+      return "You've been invited as an agent. Confirm your details and choose a password. Your office assigns the properties you work on.";
     case "WORKSPACE_ADMIN":
       return "You've been invited to administer this workspace. Confirm your details and choose a password.";
     default:

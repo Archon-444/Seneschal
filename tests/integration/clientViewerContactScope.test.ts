@@ -25,6 +25,7 @@ interface Bundle {
   // A VENDOR who is only the assignee of an in-scope proof request, not a
   // tenancy party — the case Codex flagged as dropped by the F1 derivation.
   vendorContactId: string;
+  propertyId: string;
 }
 let A: Bundle;
 let B: Bundle;
@@ -69,6 +70,7 @@ async function makeBundle(label: string): Promise<Bundle> {
     ownerContactId: owner.id,
     tenantContactId: tenant.id,
     vendorContactId: vendor.id,
+    propertyId: property.id,
   };
 }
 
@@ -132,7 +134,7 @@ describe("CLIENT_VIEWER contact scope (F1)", () => {
 describe("delegate contact scope unchanged after refactor (F1 regression)", () => {
   it("a delegate assigned to A sees A's contacts, not B's", async () => {
     const { makeDelegate } = await import("../helpers");
-    const D = await makeDelegate(W.workspaceId, [A.clientId]);
+    const D = await makeDelegate(W.workspaceId, [A.propertyId]);
     const list = await contacts.listContacts(D.ctx);
     const ids = list.map((c) => c.id);
     expect(ids).toContain(A.ownerContactId);

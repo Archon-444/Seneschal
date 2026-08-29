@@ -40,7 +40,7 @@ export const INVITE_SEAT_COPY: { role: InviteableSeat; label: string; hint: stri
   {
     role: "MANAGING_AGENT",
     label: ROLE_SEAT_LABEL.MANAGING_AGENT,
-    hint: "Assign them to clients after they join. An agent with no assignments cannot sign in yet.",
+    hint: "Assign them to properties after they join. An empty book signs in to empty lists.",
   },
 ];
 

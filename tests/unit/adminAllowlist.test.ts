@@ -26,7 +26,7 @@ function walk(dir: string): string[] {
 describe("admin plane import allowlist", () => {
   it("self-check: the matcher flags a confidential import and passes infra", () => {
     expect(FORBIDDEN.test('import { getTenancy } from "@/server/services/tenancies";')).toBe(true);
-    expect(FORBIDDEN.test('import { assignClient } from "@/server/services/assignments";')).toBe(true);
+    expect(FORBIDDEN.test('import { assignProperty } from "@/server/services/assignments";')).toBe(true);
     expect(FORBIDDEN.test('import { recordEvidence } from "@/server/evidence";')).toBe(true);
     expect(FORBIDDEN.test('import { platformStats } from "@/server/admin/platformStats";')).toBe(false);
     expect(FORBIDDEN.test('import { prisma } from "@/server/db";')).toBe(false);

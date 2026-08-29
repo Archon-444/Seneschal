@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { type AuthzContext, isDelegateRole, require_, scope } from "../authz";
 import { resolveClientScopeIds, scopeMatchClauses } from "./clientScope";
 import { assertReadable, contactScopedWhere } from "./contactScope";
-import { assertDelegateClientId, clientOfScope, clientSetScopedWhere } from "./delegateScope";
+import { assertDelegatePropertyId, clientSetScopedWhere, propertyIdOfScope } from "./delegateScope";
 import { sha256Hex } from "../crypto";
 import { newStorageKey, signedFileUrl, storage } from "../storage";
 import { recordEvidence } from "../evidence";
@@ -37,9 +37,8 @@ export interface UploadInput {
 export async function uploadDocument(ctx: AuthzContext, input: UploadInput) {
   require_(ctx, "documents.write");
   if (isDelegateRole(ctx.role)) {
-    // A delegate may only attach a document to a scope owned by an assigned client.
-    const clientId = await clientOfScope(ctx.workspaceId, input.scopeType, input.scopeId ?? null);
-    assertDelegateClientId(ctx, clientId);
+    const propertyId = await propertyIdOfScope(ctx.workspaceId, input.scopeType, input.scopeId ?? null);
+    assertDelegatePropertyId(ctx, propertyId);
   }
   const doc = await ingestDocument({
     workspaceId: ctx.workspaceId,
@@ -78,7 +77,7 @@ export async function ingestDocument(args: {
   secureLinkId?: string;
 }) {
   // scope-audit: shared internal ingest path (no ctx). Callers gate the scope —
-  // uploadDocument (delegate clientOfScope), uploadTenancyDocument (getTenancy),
+  // uploadDocument (delegate propertyIdOfScope), uploadTenancyDocument (getTenancy),
   // and the public secure-link/email-intake paths (scoped by the link).
   const sha256 = sha256Hex(args.data);
   const storageKey = await storage().put(newStorageKey(args.workspaceId, args.fileName), args.data);

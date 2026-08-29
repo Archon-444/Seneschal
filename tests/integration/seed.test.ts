@@ -74,13 +74,13 @@ describe("runSeed — access-model gallery", () => {
     })).toBeTruthy();
   });
 
-  it("the MANAGING_AGENT delegate is scoped through a live ClientAssignment row (the normalised join table)", async () => {
+  it("the MANAGING_AGENT delegate is scoped through live PropertyAssignment rows", async () => {
     await runSeed({ adminEmail: "pilot@example.com" });
     const delegate = await prisma.user.findUniqueOrThrow({ where: { email: "managing-agent@example.com" } });
     const m = await prisma.membership.findFirstOrThrow({ where: { userId: delegate.id, revokedAt: null } });
     expect(m.role).toBe("MANAGING_AGENT");
-    const assignments = await prisma.clientAssignment.findMany({ where: { membershipId: m.id, revokedAt: null } });
-    expect(assignments).toHaveLength(1); // assigned to exactly one client (Al Noor)
+    const assignments = await prisma.propertyAssignment.findMany({ where: { membershipId: m.id, revokedAt: null } });
+    expect(assignments).toHaveLength(3); // Marina, Bayview, Palm Vista (Al Noor) — not Private Client A's JVC
   });
 
   it("produces four workspaces (one per type) with no duplicate ClientPrincipals on re-run", async () => {

@@ -9,7 +9,7 @@ import { recordNotification } from "../notify/record";
 import { workspaceOverseers } from "../notify/recipients";
 import { loadPreferenceMap, type PreferenceMap } from "../notify/preferences";
 import { assertReadable, contactScopedWhere } from "./contactScope";
-import { assertClientInDelegateScope, clientSetScopedWhere } from "./delegateScope";
+import { assertPropertyInDelegateScope, clientSetScopedWhere } from "./delegateScope";
 import { getTenancy } from "./tenancies";
 import { getDocument, logDocumentAccess } from "./documents";
 import { signedFileUrl } from "../storage";
@@ -125,10 +125,7 @@ export async function transitionPayment(
     include: { tenancy: { include: { property: true } } },
   });
   if (isDelegateRole(ctx.role)) {
-    assertClientInDelegateScope(
-      ctx,
-      item ? { workspaceId: item.workspaceId, clientPrincipalId: item.tenancy.property.clientPrincipalId } : null,
-    );
+    assertPropertyInDelegateScope(ctx, item, item?.tenancy.propertyId);
   } else {
     assertSameWorkspace(ctx, item);
   }
