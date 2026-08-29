@@ -70,6 +70,7 @@ export async function provisionWorkspace(
         workspaceId: workspace.id,
         email: input.customerEmail,
         intendedBundles: ["PRINCIPAL"],
+        intendedRole: "WORKSPACE_ADMIN",
         tokenHash,
         invitedById: null, // platform-issued seat-zero
         platformIssued: true,

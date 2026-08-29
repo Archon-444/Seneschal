@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { Role } from "@prisma/client";
 import { requireCtx } from "@/server/auth/request";
 import {
   grantBundle,
-  inviteOrgAdmin,
+  inviteMember,
   removeMember,
   revokeBundle,
   revokeInvite,
@@ -15,7 +16,10 @@ export type InviteState = { ok: true; url: string } | { ok: false; error: string
 export async function inviteAction(_prev: InviteState, formData: FormData): Promise<InviteState> {
   const ctx = await requireCtx();
   try {
-    const result = await inviteOrgAdmin(ctx, String(formData.get("email") ?? ""));
+    const result = await inviteMember(ctx, {
+      email: String(formData.get("email") ?? ""),
+      role: String(formData.get("role") ?? "") as Role,
+    });
     revalidatePath("/members");
     return { ok: true, url: result.url };
   } catch (e) {

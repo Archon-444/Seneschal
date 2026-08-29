@@ -141,6 +141,7 @@ model WorkspaceInvite {
   workspaceId     String
   email           String
   intendedBundles Bundle[]  @default([])
+  intendedRole    Role?                    // in-org seat (ORG_ADMIN / MANAGER / MANAGING_AGENT); WORKSPACE_ADMIN for platform seat-zero
   tokenHash       String    @unique
   invitedById     String?               // null when platform-issued seat-zero
   platformIssued  Boolean   @default(false)

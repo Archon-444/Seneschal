@@ -6,6 +6,7 @@ import { loginWithPassword } from "@/server/auth";
 import {
   acceptInvite,
   grantBundle,
+  inviteMember,
   inviteOrgAdmin,
   listMembers,
   removeMember,
@@ -181,5 +182,54 @@ describe("governance audit", () => {
     expect(verbs).toEqual(
       expect.arrayContaining(["invite.issue", "invite.accept", "grant.create", "grant.revoke", "membership.revoke"]),
     );
+  });
+});
+
+describe("invite by seat", () => {
+  it("refuses seats that are not invited from /members", async () => {
+    await expect(inviteMember(admin.ctx, { email: "x@x.example", role: "WORKSPACE_ADMIN" })).rejects.toThrow(
+      /not invited/,
+    );
+    await expect(inviteMember(admin.ctx, { email: "x@x.example", role: "FIDUCIARY" })).rejects.toThrow(/not invited/);
+    await expect(inviteMember(admin.ctx, { email: "x@x.example", role: "LANDLORD" })).rejects.toThrow(/not invited/);
+  });
+
+  it("allows only one live invite per workspace+email", async () => {
+    await inviteMember(admin.ctx, { email: "once@x.example", role: "MANAGER" });
+    await expect(inviteMember(admin.ctx, { email: "once@x.example", role: "ORG_ADMIN" })).rejects.toThrow(
+      /already outstanding/,
+    );
+  });
+
+  it("seats staff (MANAGER) on accept — not a second fiduciary invite", async () => {
+    const { token } = await inviteMember(admin.ctx, { email: "staff@x.example", role: "MANAGER" });
+    const invite = await prisma.workspaceInvite.findFirstOrThrow({ where: { email: "staff@x.example" } });
+    expect(invite.intendedRole).toBe("MANAGER");
+    expect(invite.intendedBundles).toEqual([]);
+
+    const { userId } = await acceptInvite(token, { name: "Staffer", password: ACCEPT_PASSWORD });
+    const ctx = await authz(userId, W.workspaceId);
+    expect(ctx.role).toBe("MANAGER");
+    expect(hasCapability(ctx, "tenancies.read")).toBe(true);
+    expect(hasCapability(ctx, "members.manage")).toBe(false);
+
+    const listed = await listMembers(admin.ctx);
+    expect(listed.members.some((m) => m.email === "staff@x.example" && m.seatLabel === "Staff")).toBe(true);
+  });
+
+  it("seats an agent membership without building a login context (empty book)", async () => {
+    const { token } = await inviteMember(admin.ctx, { email: "agent-seat@x.example", role: "MANAGING_AGENT" });
+    const { userId } = await acceptInvite(token, { name: "Agent", password: ACCEPT_PASSWORD });
+    const membership = await prisma.membership.findFirstOrThrow({
+      where: { workspaceId: W.workspaceId, userId, revokedAt: null },
+    });
+    expect(membership.role).toBe("MANAGING_AGENT");
+    await expect(authz(userId, W.workspaceId)).rejects.toThrow(/missing client scope/);
+  });
+
+  it("refuses a staff invite for an email that is already a member", async () => {
+    const existing = await addMember(W.workspaceId, "MANAGER");
+    const email = (await prisma.user.findUniqueOrThrow({ where: { id: existing.userId } })).email;
+    await expect(inviteMember(admin.ctx, { email, role: "MANAGER" })).rejects.toThrow(/already a member/);
   });
 });

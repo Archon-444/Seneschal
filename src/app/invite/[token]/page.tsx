@@ -1,6 +1,22 @@
 import { peekInvite } from "@/server/services/members";
 import { Logo } from "@/components/Logo";
 import { AcceptForm } from "./AcceptForm";
+import type { Role } from "@prisma/client";
+
+function inviteBlurb(role: Role | null): string {
+  switch (role) {
+    case "ORG_ADMIN":
+      return "You've been invited as an office admin. Confirm your details and choose a password to join this workspace.";
+    case "MANAGER":
+      return "You've been invited as staff. Confirm your details and choose a password to join this workspace.";
+    case "MANAGING_AGENT":
+      return "You've been invited as an agent. Confirm your details and choose a password. After you join, your office will assign the properties you work.";
+    case "WORKSPACE_ADMIN":
+      return "You've been invited to administer this workspace. Confirm your details and choose a password.";
+    default:
+      return "Confirm your details and choose a password to join this workspace.";
+  }
+}
 
 // Public invite-accept (F-Admin §7). The invitee confirms email and sets a password;
 // the operator set no credential.
@@ -23,10 +39,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           ) : (
             <>
               <h1 className="font-display text-xl text-navy-900">Join {invite.workspaceName}</h1>
-              <p className="mb-4 mt-1 text-sm text-muted">
-                You&apos;ve been invited as an organisation admin. Confirm your details and choose a
-                password to join this workspace.
-              </p>
+              <p className="mb-4 mt-1 text-sm text-muted">{inviteBlurb(invite.intendedRole)}</p>
               <AcceptForm token={token} email={invite.email} />
             </>
           )}

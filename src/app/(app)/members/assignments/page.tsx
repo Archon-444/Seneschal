@@ -23,7 +23,7 @@ export default async function AssignmentsPage() {
         subtitle="Toggle a cell to scope a delegate to a client. Every change is audited and takes effect on the delegate's next request."
       />
       {grid.delegates.length === 0 || grid.clients.length === 0 ? (
-        <EmptyState message="Add a delegate (managing agent) and at least one client to wire assignments." />
+        <EmptyState message="Add an agent and at least one client to wire assignments." />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
           <table className="w-full text-sm">
