@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { inviteAction, type InviteState } from "./actions";
 import { Field, inputClass } from "@/components/ui";
-import type { InviteableSeat, OwnerInviteContact } from "@/lib/seats";
+import { emailForOwnerContactChoice, type InviteableSeat, type OwnerInviteContact } from "@/lib/seats";
 
 export function InviteForm({
   seats,
@@ -83,8 +83,7 @@ export function InviteForm({
                 disabled={ownerBlocked}
                 defaultValue=""
                 onChange={(e) => {
-                  const chosen = ownerContacts.find((c) => c.id === e.target.value);
-                  if (chosen?.email) setEmail(chosen.email);
+                  setEmail(emailForOwnerContactChoice(ownerContacts, e.target.value));
                 }}
               >
                 <option value="" disabled>
