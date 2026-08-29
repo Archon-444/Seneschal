@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Role, WorkspaceType } from "@prisma/client";
 import {
+  emailForOwnerContactChoice,
   inviteableSeatsFor,
   inviteSeatCopyFor,
   isInviteableSeat,
@@ -44,5 +45,16 @@ describe("invite seats", () => {
     expect(memberSeatLabel("ORG_ADMIN", true)).toBe("Office admin");
     expect(memberSeatLabel("MANAGING_AGENT", false)).toBe("Agent");
     expect(memberSeatLabel("LANDLORD", false)).toBe("Owner");
+  });
+
+  it("clears a previous owner email when the next contact has none", () => {
+    const contacts = [
+      { id: "with-mail", email: "first@example.com" },
+      { id: "no-mail", email: null },
+    ];
+    expect(emailForOwnerContactChoice(contacts, "with-mail")).toBe("first@example.com");
+    expect(emailForOwnerContactChoice(contacts, "no-mail")).toBe("");
+    expect(emailForOwnerContactChoice(contacts, "")).toBe("");
+    expect(emailForOwnerContactChoice(contacts, "missing")).toBe("");
   });
 });

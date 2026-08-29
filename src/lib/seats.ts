@@ -61,6 +61,16 @@ export function inviteSeatCopyFor(workspaceType: WorkspaceType) {
   return INVITE_SEAT_COPY.filter((seat) => allowed.has(seat.role));
 }
 
+/** Email field value after picking an owner contact. Always replace — a
+ *  contact with no email must clear a previous auto-fill, not leave it. */
+export function emailForOwnerContactChoice(
+  contacts: { id: string; email: string | null }[],
+  contactId: string,
+): string {
+  if (!contactId) return "";
+  return contacts.find((c) => c.id === contactId)?.email ?? "";
+}
+
 export function memberSeatLabel(role: Role, overlayOfficeAdmin: boolean): string {
   const base = ROLE_SEAT_LABEL[role];
   if (overlayOfficeAdmin && role !== "ORG_ADMIN") return `${base} · office admin`;

@@ -342,4 +342,63 @@ describe("owner invite (agency only)", () => {
       inviteMember(admin.ctx, { email: "dup@x.example", role: "LANDLORD", subjectContactId: contact.id }),
     ).rejects.toThrow(/already has a member seat/);
   });
+
+  it("reactivates a removed owner when the same email is reinvited for that contact", async () => {
+    const contact = await ownerContact();
+    const { token } = await inviteMember(admin.ctx, {
+      email: "karim.rejoin@test.example",
+      role: "LANDLORD",
+      subjectContactId: contact.id,
+    });
+    const { userId } = await acceptInvite(token, { name: "Karim Mansour", password: ACCEPT_PASSWORD });
+    const first = await prisma.membership.findFirstOrThrow({
+      where: { workspaceId: W.workspaceId, userId, role: "LANDLORD" },
+    });
+    await removeMember(admin.ctx, first.id);
+
+    const again = await inviteMember(admin.ctx, {
+      email: "karim.rejoin@test.example",
+      role: "LANDLORD",
+      subjectContactId: contact.id,
+    });
+    const accepted = await acceptInvite(again.token, { password: ACCEPT_PASSWORD });
+    expect(accepted.userId).toBe(userId);
+
+    const rows = await prisma.membership.findMany({
+      where: { workspaceId: W.workspaceId, userId, role: "LANDLORD" },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(first.id);
+    expect(rows[0].revokedAt).toBeNull();
+    expect(rows[0].subjectContactId).toBe(contact.id);
+
+    const ctx = await authz(userId, W.workspaceId);
+    expect(ctx.role).toBe("LANDLORD");
+    expect(ctx.subjectContactId).toBe(contact.id);
+    expect(homePathFor(ctx.role)).toBe("/portal");
+  });
+});
+
+describe("reinvite after remove", () => {
+  it("reactivates a removed staff membership instead of inserting a second row", async () => {
+    const { token } = await inviteMember(admin.ctx, { email: "staff.rejoin@x.example", role: "MANAGER" });
+    const { userId } = await acceptInvite(token, { name: "Staff", password: ACCEPT_PASSWORD });
+    const first = await prisma.membership.findFirstOrThrow({
+      where: { workspaceId: W.workspaceId, userId, role: "MANAGER" },
+    });
+    await removeMember(admin.ctx, first.id);
+
+    const again = await inviteMember(admin.ctx, { email: "staff.rejoin@x.example", role: "MANAGER" });
+    await acceptInvite(again.token, { password: ACCEPT_PASSWORD });
+
+    const rows = await prisma.membership.findMany({
+      where: { workspaceId: W.workspaceId, userId, role: "MANAGER" },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(first.id);
+    expect(rows[0].revokedAt).toBeNull();
+
+    const ctx = await authz(userId, W.workspaceId);
+    expect(ctx.role).toBe("MANAGER");
+  });
 });

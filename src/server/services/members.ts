@@ -241,6 +241,48 @@ export async function revokeInvite(ctx: AuthzContext, inviteId: string): Promise
 }
 
 /**
+ * Seat a role on accept. Membership uniqueness is `(workspaceId, userId, role)` including
+ * revoked rows, so a removed member cannot be inserted again — clear `revokedAt` instead.
+ * Live rows of that tuple still 409; a different live role is refused by the caller.
+ */
+async function seatOrReactivate(args: {
+  workspaceId: string;
+  userId: string;
+  role: Role;
+  subjectContactId?: string | null;
+}): Promise<void> {
+  const existing = await prisma.membership.findUnique({
+    where: {
+      workspaceId_userId_role: {
+        workspaceId: args.workspaceId,
+        userId: args.userId,
+        role: args.role,
+      },
+    },
+  });
+  if (existing && !existing.revokedAt) {
+    throw new AuthzError("That person is already a member of this workspace.", 409);
+  }
+  const landlordFields =
+    args.role === "LANDLORD" ? { subjectContactId: args.subjectContactId ?? null } : {};
+  if (existing) {
+    await prisma.membership.update({
+      where: { id: existing.id },
+      data: { revokedAt: null, ...landlordFields },
+    });
+    return;
+  }
+  await prisma.membership.create({
+    data: {
+      workspaceId: args.workspaceId,
+      userId: args.userId,
+      role: args.role,
+      ...landlordFields,
+    },
+  });
+}
+
+/**
  * Public accept (no AuthzContext — the invitee is not yet signed in). Validates the token,
  * creates the membership for in-org invites (seat-zero memberships already exist), and marks the
  * invite used. The invitee sets a password here — the operator never set a credential.
@@ -297,8 +339,10 @@ export async function acceptInvite(
       // resolved membership — minting a second ORG_ADMIN membership would let pickMembership mask
       // their real role. A genuinely new person gets a fresh office-admin membership.
       if (existing.length === 0) {
-        await prisma.membership.create({
-          data: { workspaceId: invite.workspaceId, userId: user.id, role: "ORG_ADMIN" },
+        await seatOrReactivate({
+          workspaceId: invite.workspaceId,
+          userId: user.id,
+          role: "ORG_ADMIN",
         });
       } else {
         const target = pickMembership(existing)!;
@@ -321,13 +365,11 @@ export async function acceptInvite(
         if (!invite.subjectContactId) throw new AuthzError("Owner invite is missing its contact.", 422);
         await assertOwnerInviteContact(invite.workspaceId, invite.subjectContactId);
       }
-      await prisma.membership.create({
-        data: {
-          workspaceId: invite.workspaceId,
-          userId: user.id,
-          role: seat,
-          subjectContactId: seat === "LANDLORD" ? invite.subjectContactId : null,
-        },
+      await seatOrReactivate({
+        workspaceId: invite.workspaceId,
+        userId: user.id,
+        role: seat,
+        subjectContactId: seat === "LANDLORD" ? invite.subjectContactId : null,
       });
     }
   }
