@@ -96,6 +96,44 @@ describe("runSeed — access-model gallery", () => {
     expect(assignments).toHaveLength(3); // Marina, Bayview, Palm Vista (Al Noor) — not Private Client A's JVC
   });
 
+  it("re-homes Al Noor units onto the demo agent if another member already holds them", async () => {
+    await runSeed({ adminEmail: "pilot@example.com" });
+    const ws = await gallery();
+    const demo = await prisma.membership.findFirstOrThrow({
+      where: {
+        workspaceId: ws.id,
+        user: { email: "managing-agent@example.com" },
+        revokedAt: null,
+      },
+    });
+    const otherUser = await prisma.user.create({
+      data: { email: "other-agent@test.example", name: "Other Agent" },
+    });
+    const other = await prisma.membership.create({
+      data: { workspaceId: ws.id, userId: otherUser.id, role: "MANAGING_AGENT" },
+    });
+    const marina = await prisma.property.findFirstOrThrow({
+      where: { workspaceId: ws.id, building: "Marina Heights Tower", unitNo: "1204" },
+    });
+    await prisma.propertyAssignment.updateMany({
+      where: { propertyId: marina.id, revokedAt: null },
+      data: { membershipId: other.id },
+    });
+
+    await expect(runSeed({ adminEmail: "pilot@example.com" })).resolves.toBeTruthy();
+
+    const live = await prisma.propertyAssignment.findMany({
+      where: { propertyId: marina.id, revokedAt: null },
+    });
+    expect(live).toHaveLength(1);
+    expect(live[0].membershipId).toBe(demo.id);
+    expect(
+      await prisma.propertyAssignment.count({
+        where: { membershipId: demo.id, revokedAt: null },
+      }),
+    ).toBe(3);
+  });
+
   it("produces four workspaces (one per type) with no duplicate ClientPrincipals on re-run", async () => {
     await runSeed({ adminEmail: "pilot@example.com" });
     await runSeed({ adminEmail: "pilot@example.com" });

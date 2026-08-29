@@ -739,22 +739,31 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
       role: "MANAGING_AGENT",
     },
   });
-  // Agent book: one PropertyAssignment per Al Noor unit (not the client — vacant
-  // sibling units of other clients stay out of scope).
+  // Agent book: one live PropertyAssignment per Al Noor unit (not the client —
+  // vacant sibling units of other clients stay out of scope). Look up by
+  // property — the live unique key — not by membership. A shared preview DB
+  // may already have those units on another agent; inserting again 409s.
   for (const property of [marina, bayview, palmVista]) {
-    const existingAssignment = await prisma.propertyAssignment.findFirst({
-      where: { membershipId: agentMembership.id, propertyId: property.id, revokedAt: null },
+    const live = await prisma.propertyAssignment.findFirst({
+      where: { propertyId: property.id, revokedAt: null },
     });
-    if (!existingAssignment) {
-      await prisma.propertyAssignment.create({
-        data: {
-          workspaceId: workspace.id,
-          membershipId: agentMembership.id,
-          propertyId: property.id,
-          assignedById: platformOperator.id,
-        },
-      });
+    if (live) {
+      if (live.membershipId !== agentMembership.id) {
+        await prisma.propertyAssignment.update({
+          where: { id: live.id },
+          data: { membershipId: agentMembership.id, assignedById: platformOperator.id },
+        });
+      }
+      continue;
     }
+    await prisma.propertyAssignment.create({
+      data: {
+        workspaceId: workspace.id,
+        membershipId: agentMembership.id,
+        propertyId: property.id,
+        assignedById: platformOperator.id,
+      },
+    });
   }
 
   // ── Listings (1B): a draft listing on the vacant Palm Vista villa. Deliberately
