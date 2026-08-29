@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { WorkspaceType } from "@prisma/client";
 import { requirePlatformAdmin } from "@/server/auth/request";
+import { isProvisionableLicence } from "@/lib/licences";
 import {
   archiveWorkspace,
   provisionWorkspace,
@@ -14,7 +15,10 @@ import {
 // Platform-plane server actions. Every handler re-gates with requirePlatformAdmin() (defense in
 // depth over the layout gate) and runs under PlatformAdminContext — never a data service.
 
-export type ProvisionState = { ok: true; inviteUrl: string } | { ok: false; error: string } | null;
+export type ProvisionState =
+  | { ok: true; inviteUrl: string; licence: "FIDUCIARY" | "OWNER" }
+  | { ok: false; error: string }
+  | null;
 
 export async function provisionAction(_prev: ProvisionState, formData: FormData): Promise<ProvisionState> {
   const ctx = await requirePlatformAdmin();
@@ -25,10 +29,13 @@ export async function provisionAction(_prev: ProvisionState, formData: FormData)
   if (!name || !customerName || !customerEmail) {
     return { ok: false, error: "Organisation, principal name and email are all required." };
   }
+  if (!isProvisionableLicence(type)) {
+    return { ok: false, error: "Seneschal licences are Landlord or Fiduciary." };
+  }
   try {
     const result = await provisionWorkspace(ctx, { name, type, customerName, customerEmail });
     revalidatePath("/admin");
-    return { ok: true, inviteUrl: result.inviteUrl };
+    return { ok: true, inviteUrl: result.inviteUrl, licence: type };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Provisioning failed." };
   }

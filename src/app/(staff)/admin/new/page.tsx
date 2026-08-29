@@ -15,7 +15,7 @@ export default async function ProvisionPage() {
       <BackLink href="/admin" label="Platform console" />
       <PageHeader
         title="Provision workspace"
-        subtitle="Create a customer org and seat its principal. You set no password — they choose one when they accept the invite, and the workspace is empty until they populate it."
+        subtitle="Two licences: Landlord is a self-managing owner; Fiduciary is a family office or agency. You seat the principal and set no password — they choose one when they accept, and the workspace is empty until they populate it."
       />
       <Card className="max-w-xl">
         <ProvisionForm />

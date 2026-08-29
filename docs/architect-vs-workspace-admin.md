@@ -112,10 +112,33 @@ their landing route), and link-party URLs. Dev password is `seneschal-dev` unles
 | Archive was one-way | `unarchiveWorkspace` + action + console button; round-trip re-opens authz and the daily sweep (`provisioning.ts`, `(staff)/admin/*`) |
 | Handler re-gate and member-power edges untested | `requirePlatformAdmin` 403 at the handler; data-only members rejected on `inviteOrgAdmin`/`grantBundle`; the data-blind leak-check extended to named customer rows (`tests/integration/platformAdminGate.test.ts`, `members.test.ts`, `platformPlane.test.ts`) |
 
+## 5. Two licences, and who may invite an owner
+
+Workspace.type is a **licence**, not a layout switch. The platform provisions two:
+
+| Licence | `Workspace.type` | Who the principal is | Owner invite from `/members` |
+| --- | --- | --- | --- |
+| **Landlord** | `OWNER` | Self-managing owner of this book. Seat-zero `WORKSPACE_ADMIN`. | **No.** They already are the owner. |
+| **Fiduciary** | `FIDUCIARY` | Office principal. Seat-zero `WORKSPACE_ADMIN`. They invite staff, agents, and client owners. | **Yes** — `LANDLORD` + `subjectContactId` bound to a live `Contact(kind=OWNER)`. |
+
+`OPERATOR` and `INTERNAL` remain **demo shells** in the seed so every historical type is reachable. They are not provisionable licences (`provisionWorkspace` refuses them).
+
+**Seats invited by email** (never the Role enum on the members surface):
+
+- Office admin → `ORG_ADMIN`
+- Staff → `MANAGER` (FIDUCIARY is not a second invite seat)
+- Agent → `MANAGING_AGENT` (empty book signs in)
+- Owner → `LANDLORD` + OWNER contact — **fiduciary workspaces only**
+
+Workspace admin is **seat-zero** (provisioning). It is not invited from `/members`. Tenants stay link-parties. There is no custom role editor and no platform act-as.
+
+A landlord licence does not grow a second "owner" seat: the principal runs the book. A fiduciary invites a client owner so that person lands on `/portal`, scoped to the contact they act as. Vacant sibling units of a client the office serves stay invisible to that owner until those units are recorded against their contact.
+
 ## Out of scope (deliberately)
 
 - Migrating tenants/landlords to link-only in the **schema** (removing enum
   values, reworking `/portal` auth) — unnecessary; the intent lives in the seed
   and this note.
-- Type-differentiated UI, or any act-as / workspace switcher — they contradict the
-  data-blind design.
+- A workspace-type **layout switcher** or any act-as rail — they contradict the
+  data-blind design. Provision copy differs by licence; in-app navigation stays
+  role-driven via `homePathFor`.

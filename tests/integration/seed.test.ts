@@ -74,6 +74,19 @@ describe("runSeed — access-model gallery", () => {
     })).toBeTruthy();
   });
 
+  it("records Private Client A's owner as an OWNER contact with no LANDLORD seat", async () => {
+    await runSeed({ adminEmail: "pilot@example.com" });
+    const karim = await prisma.contact.findFirstOrThrow({ where: { name: "Karim Mansour" } });
+    expect(karim.kind).toBe("OWNER");
+    expect(
+      await prisma.membership.count({
+        where: { role: "LANDLORD", subjectContactId: karim.id, revokedAt: null },
+      }),
+    ).toBe(0);
+    const parkGate = await prisma.property.findFirstOrThrow({ where: { building: "Park Gate" } });
+    expect(parkGate.ownerContactId).toBe(karim.id);
+  });
+
   it("the MANAGING_AGENT delegate is scoped through live PropertyAssignment rows", async () => {
     await runSeed({ adminEmail: "pilot@example.com" });
     const delegate = await prisma.user.findUniqueOrThrow({ where: { email: "managing-agent@example.com" } });

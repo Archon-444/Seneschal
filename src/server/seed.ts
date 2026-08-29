@@ -324,6 +324,25 @@ export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResul
       }),
   );
 
+  // Private Client A's owner — recorded as an OWNER contact with no member seat, so the
+  // members screen can invite them as Owner (LANDLORD + subjectContactId). Yusuf Haddad
+  // already holds the self-managing LANDLORD seat on Al Noor.
+  const privateOwner = await findOrCreate(
+    () => prisma.contact.findFirst({ where: { workspaceId: workspace.id, name: "Karim Mansour" } }),
+    () =>
+      prisma.contact.create({
+        data: {
+          workspaceId: workspace.id,
+          kind: "OWNER",
+          name: "Karim Mansour",
+          email: "karim.mansour@example.com",
+        },
+      }),
+  );
+  if (jvc.ownerContactId !== privateOwner.id) {
+    await prisma.property.update({ where: { id: jvc.id }, data: { ownerContactId: privateOwner.id } });
+  }
+
   // ── Tenancies + payment schedules
   const marinaTenancy = await findOrCreate(
     () => prisma.tenancy.findFirst({ where: { propertyId: marina.id, ejariNo: "2025/118402" } }),

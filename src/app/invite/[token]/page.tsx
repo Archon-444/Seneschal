@@ -3,7 +3,7 @@ import { Logo } from "@/components/Logo";
 import { AcceptForm } from "./AcceptForm";
 import type { Role } from "@prisma/client";
 
-function inviteBlurb(role: Role | null): string {
+function inviteBlurb(role: Role | null, ownerContactName: string | null): string {
   switch (role) {
     case "ORG_ADMIN":
       return "You've been invited as an office admin. Confirm your details and choose a password to join this workspace.";
@@ -11,6 +11,10 @@ function inviteBlurb(role: Role | null): string {
       return "You've been invited as staff. Confirm your details and choose a password to join this workspace.";
     case "MANAGING_AGENT":
       return "You've been invited as an agent. Confirm your details and choose a password. Your office assigns the properties you work on.";
+    case "LANDLORD":
+      return ownerContactName
+        ? `You've been invited as an owner (${ownerContactName}). Confirm your details and choose a password. You'll see the properties recorded against your name.`
+        : "You've been invited as an owner. Confirm your details and choose a password. You'll see the properties recorded against your name.";
     case "WORKSPACE_ADMIN":
       return "You've been invited to administer this workspace. Confirm your details and choose a password.";
     default:
@@ -39,7 +43,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           ) : (
             <>
               <h1 className="font-display text-xl text-navy-900">Join {invite.workspaceName}</h1>
-              <p className="mb-4 mt-1 text-sm text-muted">{inviteBlurb(invite.intendedRole)}</p>
+              <p className="mb-4 mt-1 text-sm text-muted">{inviteBlurb(invite.intendedRole, invite.ownerContactName)}</p>
               <AcceptForm token={token} email={invite.email} />
             </>
           )}

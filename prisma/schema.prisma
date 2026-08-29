@@ -138,21 +138,23 @@ enum Bundle {
 // F-Admin §3.4 / §4.1: seat-zero (platform-issued) and in-org member invites. Token-hash
 // discipline reused from SecureLink — only the hash is stored, the raw token is returned once.
 model WorkspaceInvite {
-  id              String    @id @default(uuid())
-  workspaceId     String
-  email           String
-  intendedBundles Bundle[]  @default([])
-  intendedRole    Role?                    // in-org seat (ORG_ADMIN / MANAGER / MANAGING_AGENT); WORKSPACE_ADMIN for platform seat-zero
-  tokenHash       String    @unique
-  invitedById     String?               // null when platform-issued seat-zero
-  platformIssued  Boolean   @default(false)
-  expiresAt       DateTime
-  acceptedAt      DateTime?
-  acceptedUserId  String?
-  revokedAt       DateTime?
-  createdAt       DateTime  @default(now())
+  id               String    @id @default(uuid())
+  workspaceId      String
+  email            String
+  intendedBundles  Bundle[]  @default([])
+  intendedRole     Role?                    // in-org seat (ORG_ADMIN / MANAGER / MANAGING_AGENT / LANDLORD); WORKSPACE_ADMIN for platform seat-zero
+  subjectContactId String?                  // LANDLORD only: the OWNER contact the invitee will act as
+  tokenHash        String    @unique
+  invitedById      String?               // null when platform-issued seat-zero
+  platformIssued   Boolean   @default(false)
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedUserId   String?
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
   @@index([workspaceId])
   @@index([email])
+  @@index([subjectContactId])
 }
 // Platform admin is NOT a membership role: the Seneschal operator plane runs under PlatformAdminContext
 // (User.isPlatformAdmin), reaches lifecycle/billing/aggregate stats only, and holds zero Membership rows (F-Admin §3.1).
