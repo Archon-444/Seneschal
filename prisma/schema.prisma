@@ -2,7 +2,7 @@
 // Derived from spec v2 (§6) + v2.1 patch (P2,P3,P5,P6,P8,P9,P10) + v2.2 decisions (D12,D13,D15)
 // Conventions: UUID PKs, workspaceId on every scoped table, archive (not delete),
 // EvidenceEvent / AuditEvent / DocumentAccessLog / NotificationMessage are INSERT-ONLY (enforced in app layer + DB grants).
-// Stage tags: [1A] build now · [1B] schema now, UI later · [S2] deferred, do not migrate yet (commented at end).
+// Stage tags: [1A] live · [1B] schema now, UI later (maintenance) · [S2] renewal engine — shipped.
 
 generator client {
   provider = "prisma-client-js"
@@ -1482,21 +1482,21 @@ enum RenewalStatus {
 // tables use were reserved up front, shipping Stage 2 needed no enum churn.
 
 // ───────────────────────────── Auth [1A — ADDITION to schema v1.0]
-// Reason: handoff allows "Supabase Auth (or clean auth abstraction)". We implement the
-// abstraction with email OTP (backlog T1.1) which needs OTP + session persistence.
-// These tables are auth-infrastructure only; swapping to Supabase removes them without
-// touching any scoped business table.
+// Auth infrastructure. Login is email + password (scrypt hash on User, hashed
+// Session cookie, PasswordReset for invite-accept / forgot-password). AuthOtp is
+// leftover from the removed OTP door — unused, do not wire. Swapping to OIDC later
+// mints the same hashed session cookie; authorization stays membership + role.
 
 model AuthOtp {
   id        String   @id @default(uuid())
   email     String
-  codeHash  String                    // never store the raw code
+  codeHash  String                    // leftover OTP table; login no longer writes it
   expiresAt DateTime
   usedAt    DateTime?
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
   @@index([email, expiresAt])
-  @@index([email, createdAt]) // leftover OTP table; login no longer writes it
+  @@index([email, createdAt])
 }
 
 // One-shot password set/reset. Same token-hash discipline as WorkspaceInvite / SecureLink.
