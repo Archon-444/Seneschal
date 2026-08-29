@@ -18,7 +18,7 @@ export function AcceptForm({ token, email }: { token: string; email: string }) {
           name="confirmEmail"
           type="email"
           className={inputClass}
-          placeholder={email}
+          defaultValue={email}
           required
           autoComplete="username"
         />
