@@ -101,7 +101,12 @@ workspace and three further per-type shells (`OWNER` / `OPERATOR` / `INTERNAL`):
 
 The CLI (`prisma/seed.ts`) prints three blocks — workspaces, member logins (with
 their landing route), and link-party URLs. Dev password is `seneschal-dev` unless
-`SEED_DEMO_PASSWORD` is set.
+`SEED_DEMO_PASSWORD` is set. `SEED_ADMIN_EMAIL` (or `operator@example.com` in
+dev) is the gallery's `WORKSPACE_ADMIN`, not a FIDUCIARY seat.
+
+In-org surfaces: `/members` (invite by seat) and `/members/assignments` (one
+responsible `MANAGING_AGENT` per property). Workspace admin is not invited
+from here.
 
 ## 4. Gaps closed alongside this note
 

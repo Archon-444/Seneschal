@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeAdminEmail } from "@/server/seed";
 
 // Codex P2 on PR #6: a blank adminEmail must never become a login-capable
-// FIDUCIARY user with an empty email address.
+// WORKSPACE_ADMIN user with an empty email address.
 
 describe("normalizeAdminEmail", () => {
   it("normalizes case and whitespace", () => {

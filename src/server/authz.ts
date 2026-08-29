@@ -3,8 +3,9 @@ import { prisma } from "./db";
 import { bundleHas, GRANT_HONORED_BUNDLES, roleHas, type Capability } from "./capabilities";
 
 // Single authorization helper (T1.2 — release blocking).
-// Every service function takes an AuthzContext; no Prisma call exists outside
-// the service layer. CLIENT_VIEWER is scoped to exactly one ClientPrincipal.
+// Every service function takes an AuthzContext. No Prisma from src/app; writers
+// live under src/server (services, auth, audit, evidence, outbox, notify, admin).
+// CLIENT_VIEWER is scoped to exactly one ClientPrincipal.
 
 export interface AuthzContext {
   userId: string;

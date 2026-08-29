@@ -19,10 +19,13 @@ cannot be hard-deleted (`ON DELETE RESTRICT`); archive them instead.
 | `Property.clientPrincipalId` | `ClientPrincipal` | #58 |
 | `Property.ownerContactId` | `Contact` | #58; LANDLORD persona scope |
 | `Property.assignedAgentId` | `Contact` | #58; schema comment is Contact, not User |
+| `PropertyAssignment.membershipId` | `Membership` | agent book; one live row per property |
+| `PropertyAssignment.propertyId` | `Property` | same; empty book is a valid login |
 
 `Property.assignedAgentId` is a Contact of kind `AGENT`, not a `User`. The #58
 issue listed “if always a User”; the as-built column is a contact, and the FK
-follows that.
+follows that. The **responsible member** for a unit is `PropertyAssignment`
+(a `MANAGING_AGENT` membership), not `assignedAgentId`.
 
 ## Intentionally polymorphic (strings)
 

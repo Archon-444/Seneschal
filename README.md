@@ -11,10 +11,11 @@ AI never writes trusted records; every extracted field passes human review.
 
 ## Stack
 
-Next.js (App Router) · TypeScript · Tailwind · Prisma + PostgreSQL · email +
-password auth · private object storage with signed expiring URLs · Resend email gateway
-(WhatsApp Meta Cloud API adapter built, off by default) · Outbox + in-process
-job runner · Vitest.
+Next.js 15 (App Router) · TypeScript · Tailwind v4 · Prisma 6 + PostgreSQL ·
+email + password auth (scrypt; hashed `Session` cookie) · private object storage
+with signed expiring URLs · Resend email gateway (WhatsApp Meta Cloud API
+adapter built, off by default) · Outbox + in-process job runner · Vitest +
+Playwright.
 
 ## Setup
 
@@ -29,35 +30,95 @@ pnpm dev                        # app on :3000
 pnpm worker                     # outbox runner + daily jobs (separate shell)
 ```
 
-Sign in as `operator@example.com` / `seneschal-dev` (or `SEED_DEMO_PASSWORD` if
-you set one). Forgot-password mails go to Mailpit when `SMTP_URL` is set, or
-the terminal when `EMAIL_PROVIDER=console`. Production seed does not apply a
-shared password unless `SEED_DEMO_PASSWORD` is set — first login is via reset.
+Sign in at `/login` as `operator@example.com` / `seneschal-dev` (or
+`SEED_DEMO_PASSWORD` if you set one). The seed also seats `farina@example.com`
+(FIDUCIARY), `owner@example.com` (`/portal`), `managing-agent@example.com`
+(delegate), `absentee-owner@example.com` (CLIENT_VIEWER), and
+`staff@seneschal.example` (platform console at `/admin` — data-blind). Forgot-
+password and invite mails log to the terminal when `EMAIL_PROVIDER=console`
+(the default); set `EMAIL_PROVIDER=resend` plus `RESEND_API_KEY` to send for
+real. There is no SMTP/Mailpit adapter.
 
-`pnpm db:seed` prints a **live external proof-upload link** (`/link/<token>`);
-open it in a private window or on a phone — no login involved.
+Production seed does not apply a shared password unless `SEED_DEMO_PASSWORD`
+is set — first login is via the forgot-password reset mail.
+
+`pnpm db:seed` prints three blocks: workspaces, **member logins with their
+landing route**, and **link-party URLs** (tenant offer, tenant ID proof, absentee
+owner `APPROVAL` sign-off, agent proof-upload). Open a `/link/<token>` URL in a
+private window — no login involved. The tenant is a link-party, not a member.
+
+## Auth
+
+Users sign in with email + password. Policy is ≥10 characters (`MIN_PASSWORD_LENGTH`).
+Five failed guesses lock the account for 15 minutes — even the correct password
+is refused until then, and unknown emails / wrong passwords / lockouts share one
+message. Invite-accept (`/invite/[token]`) and forgot-password
+(`/login/forgot` → `/login/reset/[token]`) are the only writers of `passwordHash`.
+Tenants and one-shot counterparties stay on SecureLink — they never get a
+password. Never log passwords or raw reset tokens.
+
+`AuthOtp` remains in the catalog unused (OTP login was removed). `Session` and
+`PasswordReset` are live. `generateOtp()` in `src/server/crypto.ts` is leftover
+and must not be wired back up.
+
+## Access (as built)
+
+Two provisionable licences (`src/lib/licences.ts`): **Landlord** (`OWNER`) and
+**Fiduciary** (`FIDUCIARY`). `OPERATOR` / `INTERNAL` are demo shells in the seed;
+`provisionWorkspace` refuses them. Workspace type is a licence, not a UI
+layout — navigation is role-driven via `homePathFor`. The platform admin is
+data-blind (no membership). Detail: `docs/architect-vs-workspace-admin.md`.
+
+**Invite by seat**, never by Role enum or capability bundle (`src/lib/seats.ts`,
+`/members`):
+
+| Seat (UI) | Role stored | Notes |
+| --- | --- | --- |
+| Office admin | `ORG_ADMIN` | People/config only; cannot open a tenancy |
+| Staff | `MANAGER` | Day-to-day portfolio work. `FIDUCIARY` is not a second invite seat |
+| Agent | `MANAGING_AGENT` | Empty book signs in to empty lists |
+| Owner | `LANDLORD` + OWNER contact | Fiduciary workspaces only |
+
+Workspace admin is seat-zero (provisioning), not invited from `/members`. Additive
+grants honor **only** `ORG_ADMIN` (`GRANT_HONORED_BUNDLES`) — data shapes come from
+the base role, because a grant carries no scope.
+
+**Agent book:** one responsible `MANAGING_AGENT` per property via
+`PropertyAssignment` (`/members/assignments`). Vacant sibling units stay invisible
+until assigned. An empty book is a valid login.
 
 ## Tests
 
 ```bash
-pnpm test              # everything (needs seneschal_test db)
-pnpm test:unit         # calculators, capability matrix, crypto
-pnpm test:integration  # scoping ⛔, imports ⛔, proofs, payments, documents, extraction ⛔
+pnpm test              # Vitest unit + integration (needs seneschal_test db)
+pnpm test:unit         # calculators, capability matrix, crypto, seats, licences
+pnpm test:integration  # scoping, imports, proofs, payments, documents, extraction,
+                       # auth, members, assignments, renewals, platform plane
+pnpm test:e2e          # Playwright: renewal walkthrough, secure links, a11y,
+                       # role routes, action visibility, visual contracts
 ```
 
-Several hundred tests. The cross-workspace suite (T1.4), import machinery (T6.1), secure
-links (T7.2), upload pipeline (T5.1/2) and the extraction harness vs
-`fixtures/ground-truth.json` (T6.3/4) are release gates and run in CI.
+CI (`.github/workflows/ci.yml`) runs lint, `scope-audit`, typecheck, migrate,
+fixtures, `pnpm test`, `pnpm build`, then Playwright Chromium including visual
+baselines. Local tests: `service postgresql start`, then
+`DATABASE_URL=postgresql://seneschal:seneschal@localhost:5432/seneschal_test`.
+
+The cross-workspace suite (T1.4), import machinery (T6.1), secure links (T7.2),
+upload pipeline (T5.1/2) and the extraction harness vs `fixtures/ground-truth.json`
+(T6.3/4) are release gates and run in CI.
 
 ## Architecture notes
 
-- **Authorization**: every service function takes an `AuthzContext` produced by
-  the single `authz()` helper (`src/server/authz.ts`). No Prisma outside
-  `src/server` — an ESLint rule fails the build if `src/app` imports the db.
-  CLIENT_VIEWER contexts are pinned to one ClientPrincipal.
-- **Calculators decide** (`src/server/calculators/dates.ts`): pure, versioned;
-  every Deadline row stores `{rule, version, inputs}`. Computed for the
-  Asia/Dubai calendar, stored UTC.
+- **Authorization**: every service function takes an `AuthzContext` from
+  `authz()` (`src/server/authz.ts`). No Prisma from `src/app` — an ESLint rule
+  fails the build if a route imports `@/server/db` or `@prisma/client`. Writers
+  live under `src/server` (services, auth, audit, evidence, outbox, notify,
+  admin, seed). CLIENT_VIEWER contexts are pinned to one ClientPrincipal; persona
+  roles pin `subjectContactId`; `MANAGING_AGENT` is confined to
+  `delegatePropertyIds`. Capability matrix: `src/server/capabilities.ts`.
+- **Calculators decide** (`src/server/calculators/dates.ts`, `rent.ts`): pure,
+  versioned; every Deadline row stores `{rule, version, inputs}`. Computed for
+  the Asia/Dubai calendar, stored UTC.
 - **Append-only evidence**: `EvidenceEvent`, `AuditEvent`, `DocumentAccessLog`
   are insert-only — enforced in the app layer *and* by DB triggers
   (migration `insert_only_guards`). All writes go through `recordEvidence()` /
@@ -69,20 +130,36 @@ links (T7.2), upload pipeline (T5.1/2) and the extraction harness vs
   URLs — only HMAC-signed expiring links served by `/api/v1/files/[id]`, every
   access logged.
 - **Secure links**: raw token shown once; only the hash is stored; expiry,
-  maxUses and audited revocation.
+  maxUses and audited revocation. Purposes in the live product include
+  `PROOF_UPLOAD`, `TENANT_OFFER`, and `APPROVAL`.
 - **Intake**: OCR (`ExtractionJob` → review screen → confirm) and Excel/CSV both
   commit through the same `ImportBatch` machinery. Conflicts block the row, not
   the batch; commit is atomic; rollback archives via `createdRecordRefs`.
-- **Risk rules** (deterministic 1A set): MISSING_EJARI, MISSING_END_DATE,
-  CHEQUE_TOTAL_MISMATCH, NOTICE_GATE_WITHIN_30D, PROOF_OVERDUE, PAYMENT_LATE,
-  TENANCY_OVERLAP. One open flag per code per scope; raise/clear write evidence.
-- **Schema**: `prisma/schema.prisma` is the provided v1.0 schema with two
-  declared adjustments — enums expanded to Prisma's multi-line syntax, and
-  `Session` / `PasswordReset` tables appended for the password door (`AuthOtp`
-  remains in the catalog unused). Non-polymorphic
-  trust refs (`Tenancy` parties, `Property` client/owner/agent) are real FKs
-  (`docs/trust-references.md`). The Stage 2 renewal loop is mapped in
-  `docs/renewal-loop.md`.
+- **Risk rules**: one open flag per code per scope; raise/clear write evidence.
+  **Evaluated** by `src/server/services/risk.ts`: `MISSING_EJARI`,
+  `MISSING_END_DATE`, `CHEQUE_TOTAL_MISMATCH`, `NOTICE_GATE_WITHIN_30D`,
+  `PROOF_OVERDUE`, `PAYMENT_LATE`, `TENANCY_OVERLAP`, plus Stage 2
+  `PROPOSED_INCREASE_ABOVE_INDEX_BAND` and `RENEWAL_NOTICE_WINDOW_MISSED`.
+  **Reserved** (reason strings only; no raise path yet — maintenance UI is
+  schema-only): `AGENT_UNRESPONSIVE`, `INVOICE_WITHOUT_QUOTE`,
+  `MAINTENANCE_DONE_WITHOUT_TENANT_CONFIRMATION`, `DOCUMENT_EXPIRED`,
+  `APPROVAL_PENDING_TOO_LONG`.
+- **Schema**: `prisma/schema.prisma` is the v1.0 schema with Prisma multi-line
+  enums, password-auth tables (`Session` / `PasswordReset`; leftover `AuthOtp`
+  unused), and Stage 2 renewal models (shipped — not deferred). Non-polymorphic
+  trust refs (`Tenancy` parties, `Property` client/owner/agent, plus
+  `PropertyAssignment`) are real FKs (`docs/trust-references.md`). The renewal
+  loop is mapped in `docs/renewal-loop.md`.
+
+## Operator surfaces
+
+Capability-filtered nav (`src/components/shell/nav.ts`): Overview, Renewals,
+Properties, Clients, Payments, Evidence; under More — Calendar, Risk, Proofs,
+Vault, Contacts, Reports, Import & extract; Manage — Members & access
+(`/members`, assignments at `/members/assignments`). Creates live in the header
+“+ New” menu (onboard tenancy, property). Settings and notifications are on the
+user menu (`/settings`, `/notifications`). Marketplace routes (`/enquiries`,
+`/viewings`, portal passport/listings) are quarantined — see `QUARANTINE.md`.
 
 ## Stage 1A acceptance walkthrough (T11.2)
 
@@ -118,13 +195,14 @@ and `pnpm worker` running:
 7. **Document access logged** — `/vault` → any document → access log shows
    UPLOADED/VIEWED/DOWNLOADED rows; downloads only via the signed 5-minute URL.
 8. **Email alerts recorded** — the worker's daily pass runs the notice-gate and
-   cheque ladders; `/admin` (staff) → notification log shows REMINDER_SENT
-   rows; each send is also a REMINDER_SENT evidence event.
+   cheque ladders; `/notifications` shows the in-app feed, and `/evidence` shows
+   REMINDER_SENT events. (Platform `/admin` is data-blind scalars only — it is
+   not a notification log.)
 9. **Monthly report** — Clients → Generate for Al Noor Family Office →
    printable report (browser print → PDF) + CSV export; REPORT_GENERATED /
    REPORT_EXPORTED evidence written.
 10. **Security suite green** — `pnpm test:integration` (T1.4 cross-workspace
-    suite + the rest) and `pnpm test` all green; CI runs the same.
+    suite + the rest) and `pnpm test` all green; CI runs the same plus Playwright.
 
 ## Stage 2 renewal acceptance walkthrough
 
@@ -180,22 +258,26 @@ The repo is serverless-ready: `vercel-build` runs `prisma migrate deploy` before
 `next build`, `vercel.json` schedules the daily job pass at 03:00 UTC (07:00
 Dubai) against `/api/v1/jobs/run`, and user-facing sends (reset, invite, proof links) flush
 the outbox inline with the cron as retry backstop. `pnpm worker` remains the
-local-dev runner.
+local-dev runner. Production boots fail closed if required env is missing
+(`src/server/config/env.ts`, `scripts/check-deploy-env.mjs`).
 
 | Env var | Value |
 | --- | --- |
 | `DATABASE_URL` | from the Neon (Vercel marketplace) integration |
-| `APP_SECRET` | `openssl rand -hex 32` |
+| `APP_SECRET` | `openssl rand -hex 32` (≥32 chars in production) |
 | `APP_BASE_URL` | `https://<your-domain>` (used in emails + secure links) |
 | `EMAIL_PROVIDER` / `RESEND_API_KEY` / `EMAIL_FROM` | `resend` + your key + verified sender |
 | `STORAGE_DRIVER` / `BLOB_READ_WRITE_TOKEN` | `blob` + token from the attached Blob store |
 | `CRON_SECRET` | `openssl rand -hex 32` (auth for the cron route) |
 | `SEED_API_ENABLED` | leave unset. Only set to `true` while bootstrapping via `POST /api/v1/jobs/seed`, then unset — the route is default-deny on this flag *and* `CRON_SECRET` |
+| `SEED_ON_DEPLOY` / `SEED_ADMIN_EMAIL` | optional bootstrap; the email is seated as **workspace admin**, not FIDUCIARY |
+| `SEED_DEMO_PASSWORD` | optional; production seed does not set a shared password unless this is set |
 | `EXTRACTION_PROVIDER` | `mock`, or `gemini` + `GEMINI_API_KEY`, or `anthropic` + `ANTHROPIC_API_KEY` |
+| `WHATSAPP_PROVIDER` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_VERIFY_TOKEN` / `WHATSAPP_APP_SECRET` | optional. Unset = console no-op. All five required to go live (`docs/whatsapp-readiness.md`) |
 
 After the first deploy, seed once from any machine:
 `DATABASE_URL=<neon-url> APP_BASE_URL=<https-url> pnpm db:seed` — idempotent, and
-it prints the live external proof-upload link.
+it prints the live member logins and link-party URLs.
 
 Two alternatives to running it from your own machine, both default-deny:
 
@@ -228,11 +310,12 @@ walkthrough above.)
 
 ## Stage 1B hooks &amp; terminology
 
-`TODO` markers only: maintenance UI (schema live). WhatsApp is no longer a
-hook — the Meta Cloud API adapter and signature-verifying webhook
-(`src/app/api/v1/webhooks/whatsapp/route.ts`) are implemented and tested; going
-live is an ops/approval step, not a code swap. The **Stage 2 renewal engine is
-built and migrated** — RenewalCase,
+`TODO` markers only: maintenance UI (schema live — `MaintenanceCase` / `Quote` /
+`Invoice`; no `/maintenance` routes; reserved risk codes above have no raise
+path). WhatsApp is no longer a hook — the Meta Cloud API adapter and
+signature-verifying webhook (`src/app/api/v1/webhooks/whatsapp/route.ts`) are
+implemented and tested; going live is an ops/approval step, not a code swap. The
+**Stage 2 renewal engine is built and migrated** — RenewalCase,
 RentIndexCapture, Offer and Notice ship across the renewal migrations, with the
 full service layer in `src/server/services/renewals.ts` and the loop proven by
 the integration suite (`tests/integration/renewal*.test.ts`).
@@ -240,3 +323,14 @@ the integration suite (`tests/integration/renewal*.test.ts`).
 **Terminology:** "Stage 2 / S2" is the renewal engine (shipped). **"Phase 2" is
 reserved for the future payments/DDS rail** (still a non-goal — Seneschal never
 holds funds) and must not be read as the Stage-2 renewal work.
+
+## Documentation map
+
+| Note | What it is |
+| --- | --- |
+| `docs/architect-vs-workspace-admin.md` | Member vs link-party, licences, seats, data-blind platform admin |
+| `docs/renewal-loop.md` | Stage 2 renewal implementation map |
+| `docs/trust-references.md` | Relational FKs vs polymorphic `scopeId` strings |
+| `docs/whatsapp-readiness.md` | WhatsApp adapter status + ops checklist |
+| `QUARANTINE.md` | Passport + listings fail-closed (out of product scope) |
+| `CLAUDE.md` | Agent working notes (design language, non-negotiables) |

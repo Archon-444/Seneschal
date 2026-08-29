@@ -7,7 +7,8 @@ Files here are served from the site root (e.g. `public/x.png` → `/x.png`).
 The login screen and the app sidebar render the brand mark from
 **`public/seneschal-logo.png`** via `src/components/Logo.tsx`.
 
-Drop the logo in as `seneschal-logo.png`. Recommended:
+The PNG is **not committed** — drop it in locally as `seneschal-logo.png`.
+Recommended:
 
 - **Square** (e.g. 512×512 or 1024×1024) — `Logo` renders it square, so a square
   source avoids distortion.

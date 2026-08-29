@@ -13,6 +13,21 @@ Going live is therefore **an ops/approval step, not a code change.** The
 remaining work is the Meta Business approvals, template catalogue, sender number
 and opt-in flow tracked below.
 
+## Env (all five required to leave the no-op)
+
+Listed in `.env.example`. Outbound stays a console no-op unless
+`WHATSAPP_PROVIDER=meta` plus phone-number id and access token
+(`whatsappConfigured()`). The webhook is 404 unless `WHATSAPP_PROVIDER=meta`.
+Going live (outbound + verified webhook) needs all five.
+
+| Var | Role |
+| --- | --- |
+| `WHATSAPP_PROVIDER` | `meta` to enable; anything else is a no-op |
+| `WHATSAPP_PHONE_NUMBER_ID` | Graph API sender |
+| `WHATSAPP_ACCESS_TOKEN` | Graph API bearer |
+| `WHATSAPP_VERIFY_TOKEN` | webhook `GET` handshake |
+| `WHATSAPP_APP_SECRET` | HMAC for `x-hub-signature-256`; fail-closed if unset while provider is `meta` |
+
 ## Ops checklist (no code involved — gates going live)
 
 | Item | Owner | Status |

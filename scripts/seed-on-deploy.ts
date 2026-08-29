@@ -1,8 +1,9 @@
 // Optional build-time bootstrap for serverless deployments: when
 // SEED_ON_DEPLOY=true, run the idempotent seed during `vercel-build`
-// (DATABASE_URL is already required at that point). SEED_ADMIN_EMAIL attaches
-// a real operator inbox as FIDUCIARY so they can set a password via reset if seed
-// did not apply SEED_DEMO_PASSWORD.
+// (DATABASE_URL is already required at that point). SEED_ADMIN_EMAIL seats
+// a real operator inbox as WORKSPACE_ADMIN (seat-zero) so they can set a
+// password via reset if seed did not apply SEED_DEMO_PASSWORD. Farina stays
+// the separate FIDUCIARY orchestrator.
 //
 // Build logs are project-private but they are a passive record read by anyone
 // with project access, and a proof-upload link is a live bearer credential

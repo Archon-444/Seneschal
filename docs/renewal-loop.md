@@ -72,3 +72,4 @@ below rather than encoded here.
 - UI: `src/app/(app)/renewals/`, `src/app/link/[token]/`
 - Calculators: `src/server/calculators/rent.ts` (`decree_43_v1`)
 - Authority primitives: `src/server/authz.ts`, `landlords.ts`, `delegateScope.ts`
+- Agent book: `src/server/services/assignments.ts`, UI `/members/assignments`

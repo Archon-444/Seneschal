@@ -26,7 +26,7 @@ async function findOrCreate<T>(find: () => Promise<T | null>, create: () => Prom
 
 /**
  * Normalize and validate an operator email before it becomes a login-capable
- * FIDUCIARY user. A blank or malformed value would create an account that can
+ * WORKSPACE_ADMIN user. A blank or malformed value would create an account that can
  * never receive a password-reset mail, so reject it loudly instead.
  */
 export function normalizeAdminEmail(raw: string): string {
