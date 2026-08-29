@@ -16,9 +16,11 @@ export type InviteState = { ok: true; url: string } | { ok: false; error: string
 export async function inviteAction(_prev: InviteState, formData: FormData): Promise<InviteState> {
   const ctx = await requireCtx();
   try {
+    const subject = String(formData.get("subjectContactId") ?? "").trim();
     const result = await inviteMember(ctx, {
       email: String(formData.get("email") ?? ""),
       role: String(formData.get("role") ?? "") as Role,
+      ...(subject ? { subjectContactId: subject } : {}),
     });
     revalidatePath("/members");
     return { ok: true, url: result.url };

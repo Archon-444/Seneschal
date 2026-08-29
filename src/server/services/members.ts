@@ -1,10 +1,18 @@
 import type { Bundle, Role } from "@prisma/client";
 import { prisma } from "../db";
-import { type AuthzContext, AuthzError, pickMembership, require_ } from "../authz";
+import { type AuthzContext, AuthzError, hasCapability, pickMembership, require_ } from "../authz";
 import { GRANT_HONORED_BUNDLES } from "../capabilities";
 import { recordAudit } from "../audit";
 import { generateToken, hashPassword, hashToken, PasswordPolicyError } from "../crypto";
-import { isInviteableSeat, memberSeatLabel, ROLE_SEAT_LABEL, type InviteableSeat } from "@/lib/seats";
+import {
+  inviteableSeatsFor,
+  inviteSeatCopyFor,
+  isInviteableSeat,
+  memberSeatLabel,
+  ROLE_SEAT_LABEL,
+  type InviteableSeat,
+  type OwnerInviteContact,
+} from "@/lib/seats";
 
 // In-org member management (F-Admin §4.1). The people view behind members.read|invite|manage:
 // invite by hashed-token, overlay/revoke the ORG_ADMIN people-power bundle, remove. Every act is
@@ -49,6 +57,11 @@ export async function listMembers(ctx: AuthzContext) {
       orderBy: { createdAt: "desc" },
     }),
   ]);
+  const workspace = await prisma.workspace.findUniqueOrThrow({
+    where: { id: ctx.workspaceId },
+    select: { type: true },
+  });
+  const ownerContacts = await listOwnerContactsForInvite(ctx, workspace.type);
   return {
     members: memberships.map((m) => {
       const bundles = m.grants.map((g) => g.bundle);
@@ -68,14 +81,70 @@ export async function listMembers(ctx: AuthzContext) {
       seatLabel: inv.intendedRole ? ROLE_SEAT_LABEL[inv.intendedRole] : "Invite",
       expiresAt: inv.expiresAt,
     })),
+    workspaceType: workspace.type,
+    seats: inviteSeatCopyFor(workspace.type),
+    ownerContacts,
+    canRecordContacts: hasCapability(ctx, "contacts.write"),
   };
+}
+
+/** OWNER contacts an agency office may bind an owner seat to. Gated by members.read
+ *  (office admin has no contacts.read). Taken = live LANDLORD membership or outstanding invite. */
+async function listOwnerContactsForInvite(
+  ctx: AuthzContext,
+  workspaceType: "OWNER" | "FIDUCIARY" | "OPERATOR" | "INTERNAL",
+): Promise<OwnerInviteContact[]> {
+  if (workspaceType !== "FIDUCIARY") return [];
+  const [contacts, seated, pending] = await Promise.all([
+    prisma.contact.findMany({
+      where: { workspaceId: ctx.workspaceId, kind: "OWNER", archivedAt: null },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.membership.findMany({
+      where: { workspaceId: ctx.workspaceId, role: "LANDLORD", revokedAt: null, subjectContactId: { not: null } },
+      select: { subjectContactId: true },
+    }),
+    prisma.workspaceInvite.findMany({
+      where: {
+        workspaceId: ctx.workspaceId,
+        intendedRole: "LANDLORD",
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+        subjectContactId: { not: null },
+      },
+      select: { subjectContactId: true },
+    }),
+  ]);
+  const taken = new Set(
+    [...seated.map((s) => s.subjectContactId), ...pending.map((p) => p.subjectContactId)].filter(
+      (id): id is string => Boolean(id),
+    ),
+  );
+  return contacts.map((c) => ({ ...c, taken: taken.has(c.id) }));
+}
+
+/** Fail-closed: the contact must be a live OWNER in this workspace, with no live LANDLORD seat. */
+async function assertOwnerInviteContact(workspaceId: string, contactId: string): Promise<void> {
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, workspaceId, kind: "OWNER", archivedAt: null },
+    select: { id: true },
+  });
+  if (!contact) throw new AuthzError("Not found", 404);
+  const seated = await prisma.membership.findFirst({
+    where: { workspaceId, role: "LANDLORD", subjectContactId: contactId, revokedAt: null },
+    select: { id: true },
+  });
+  if (seated) throw new AuthzError("That owner already has a member seat.", 409);
 }
 
 function intendedBundlesForSeat(role: InviteableSeat): Bundle[] {
   return role === "ORG_ADMIN" ? ["ORG_ADMIN"] : [];
 }
 
-/** Invite a member by seat. Only the token hash is stored. One live invite per workspace+email. */
+/** Invite a member by seat. Only the token hash is stored. One live invite per workspace+email.
+ *  Owner (LANDLORD) is fiduciary-only and must name a live OWNER contact. */
 export async function inviteMember(
   ctx: AuthzContext,
   args: { email: string; role: Role; subjectContactId?: string },
@@ -86,8 +155,33 @@ export async function inviteMember(
   if (!isInviteableSeat(args.role)) {
     throw new AuthzError("That seat is not invited from here.", 422);
   }
-  if (args.subjectContactId) {
-    throw new AuthzError("Owner invites are not issued from this flow yet.", 422);
+
+  const workspace = await prisma.workspace.findUniqueOrThrow({
+    where: { id: ctx.workspaceId },
+    select: { type: true },
+  });
+  if (!inviteableSeatsFor(workspace.type).includes(args.role)) {
+    throw new AuthzError("Owner seats are invited from an agency workspace.", 422);
+  }
+
+  const subjectContactId = args.subjectContactId?.trim() || undefined;
+  if (args.role === "LANDLORD") {
+    if (!subjectContactId) throw new AuthzError("Pick the owner contact they act as.", 422);
+    await assertOwnerInviteContact(ctx.workspaceId, subjectContactId);
+    const pendingForContact = await prisma.workspaceInvite.findFirst({
+      where: {
+        workspaceId: ctx.workspaceId,
+        intendedRole: "LANDLORD",
+        subjectContactId,
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+    if (pendingForContact) throw new AuthzError("An invitation is already outstanding for that owner.", 409);
+  } else if (subjectContactId) {
+    throw new AuthzError("That seat is not bound to a contact.", 422);
   }
 
   const live = await prisma.workspaceInvite.findFirst({
@@ -118,6 +212,7 @@ export async function inviteMember(
       email: normalized,
       intendedRole: args.role,
       intendedBundles: intendedBundlesForSeat(args.role),
+      subjectContactId: args.role === "LANDLORD" ? subjectContactId! : null,
       tokenHash,
       invitedById: ctx.userId,
       platformIssued: false,
@@ -222,8 +317,17 @@ export async function acceptInvite(
       if (existing.length > 0) {
         throw new AuthzError("That person is already a member of this workspace.", 409);
       }
+      if (seat === "LANDLORD") {
+        if (!invite.subjectContactId) throw new AuthzError("Owner invite is missing its contact.", 422);
+        await assertOwnerInviteContact(invite.workspaceId, invite.subjectContactId);
+      }
       await prisma.membership.create({
-        data: { workspaceId: invite.workspaceId, userId: user.id, role: seat },
+        data: {
+          workspaceId: invite.workspaceId,
+          userId: user.id,
+          role: seat,
+          subjectContactId: seat === "LANDLORD" ? invite.subjectContactId : null,
+        },
       });
     }
   }
@@ -252,7 +356,13 @@ export async function acceptInvite(
 /** Public, read-only invite preview for the accept screen (the token is the secret that authorises it). */
 export async function peekInvite(
   token: string,
-): Promise<{ email: string; workspaceName: string; valid: boolean; intendedRole: Role | null } | null> {
+): Promise<{
+  email: string;
+  workspaceName: string;
+  valid: boolean;
+  intendedRole: Role | null;
+  ownerContactName: string | null;
+} | null> {
   const invite = await prisma.workspaceInvite.findUnique({
     where: { tokenHash: hashToken(token) },
     select: {
@@ -263,14 +373,26 @@ export async function peekInvite(
       workspaceId: true,
       intendedRole: true,
       intendedBundles: true,
+      subjectContactId: true,
     },
   });
   if (!invite) return null;
-  const ws = await prisma.workspace.findUnique({ where: { id: invite.workspaceId }, select: { name: true } });
+  const [ws, owner] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: invite.workspaceId }, select: { name: true } }),
+    invite.subjectContactId
+      ? prisma.contact.findUnique({ where: { id: invite.subjectContactId }, select: { name: true } })
+      : Promise.resolve(null),
+  ]);
   const valid = !invite.acceptedAt && !invite.revokedAt && invite.expiresAt.getTime() > Date.now();
   const intendedRole =
     invite.intendedRole ?? (invite.intendedBundles.includes("ORG_ADMIN") ? "ORG_ADMIN" : null);
-  return { email: invite.email, workspaceName: ws?.name ?? "", valid, intendedRole };
+  return {
+    email: invite.email,
+    workspaceName: ws?.name ?? "",
+    valid,
+    intendedRole,
+    ownerContactName: owner?.name ?? null,
+  };
 }
 
 /** Overlay the ORG_ADMIN people-power bundle on an existing member (e.g. a delegate who also runs onboarding). */

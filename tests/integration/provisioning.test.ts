@@ -101,6 +101,26 @@ describe("seat-zero provisioning", () => {
     expect(await prisma.workspaceInvite.count({ where: { email: "o@orphan.example" } })).toBe(0);
     expect(await prisma.user.findUnique({ where: { email: "o@orphan.example" } })).toBeNull();
   });
+
+  it("refuses Operator and Internal — those are not sold licences", async () => {
+    await expect(
+      provisionWorkspace(ctx, {
+        name: "Ops",
+        type: "OPERATOR",
+        customerEmail: "ops@x.example",
+        customerName: "Ops",
+      }),
+    ).rejects.toThrow(/Landlord or Fiduciary/);
+    await expect(
+      provisionWorkspace(ctx, {
+        name: "Int",
+        type: "INTERNAL",
+        customerEmail: "int@x.example",
+        customerName: "Int",
+      }),
+    ).rejects.toThrow(/Landlord or Fiduciary/);
+    expect(await prisma.workspace.count({ where: { type: { in: ["OPERATOR", "INTERNAL"] } } })).toBe(0);
+  });
 });
 
 describe("workspace lifecycle", () => {

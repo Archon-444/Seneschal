@@ -24,7 +24,11 @@ export default async function MembersPage() {
     <>
       <PageHeader
         title="Members & access"
-        subtitle="Who can act in this workspace. Invite by seat — they choose a password when they accept. Workspace admin is seated when the workspace is provisioned, not from here."
+        subtitle={
+          data.workspaceType === "FIDUCIARY"
+            ? "Who can act in this workspace. Invite by seat — they choose a password when they accept. An owner seat is bound to an OWNER contact. Workspace admin is seated when the workspace is provisioned, not from here."
+            : "Who can act in this workspace. Invite by seat — they choose a password when they accept. Workspace admin is seated when the workspace is provisioned, not from here."
+        }
         actions={
           <LinkButton href="/members/assignments" variant="secondary">
             Assignments
@@ -33,7 +37,11 @@ export default async function MembersPage() {
       />
 
       <FormSection title="Invite someone" className="mb-6">
-        <InviteForm />
+        <InviteForm
+          seats={data.seats}
+          ownerContacts={data.ownerContacts}
+          canRecordContacts={data.canRecordContacts}
+        />
       </FormSection>
 
       <Table stack headers={["Name", "Email", "Seat", ""]}>

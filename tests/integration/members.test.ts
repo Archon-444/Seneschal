@@ -9,10 +9,13 @@ import {
   inviteMember,
   inviteOrgAdmin,
   listMembers,
+  peekInvite,
   removeMember,
   revokeBundle,
   revokeInvite,
 } from "@/server/services/members";
+import * as contacts from "@/server/services/contacts";
+import { homePathFor } from "@/server/auth/request";
 
 // F-Admin Phase 3 — in-org member management. ⛔ tests 6, 8, 12.
 
@@ -191,7 +194,9 @@ describe("invite by seat", () => {
       /not invited/,
     );
     await expect(inviteMember(admin.ctx, { email: "x@x.example", role: "FIDUCIARY" })).rejects.toThrow(/not invited/);
-    await expect(inviteMember(admin.ctx, { email: "x@x.example", role: "LANDLORD" })).rejects.toThrow(/not invited/);
+    await expect(inviteMember(admin.ctx, { email: "x@x.example", role: "LANDLORD" })).rejects.toThrow(
+      /owner contact/,
+    );
   });
 
   it("allows only one live invite per workspace+email", async () => {
@@ -233,5 +238,108 @@ describe("invite by seat", () => {
     const existing = await addMember(W.workspaceId, "MANAGER");
     const email = (await prisma.user.findUniqueOrThrow({ where: { id: existing.userId } })).email;
     await expect(inviteMember(admin.ctx, { email, role: "MANAGER" })).rejects.toThrow(/already a member/);
+  });
+});
+
+describe("owner invite (agency only)", () => {
+  async function ownerContact() {
+    return contacts.createContact(W.ctx, {
+      kind: "OWNER",
+      name: "Karim Mansour",
+      email: "karim.mansour@test.example",
+    });
+  }
+
+  it("lists OWNER contacts for the invite form, marking seated ones taken", async () => {
+    const free = await ownerContact();
+    const seatedContact = await contacts.createContact(W.ctx, { kind: "OWNER", name: "Already Seated" });
+    await addMember(W.workspaceId, "LANDLORD", undefined, seatedContact.id);
+
+    const listed = await listMembers(admin.ctx);
+    expect(listed.workspaceType).toBe("FIDUCIARY");
+    expect(listed.seats.some((s) => s.role === "LANDLORD")).toBe(true);
+    expect(listed.canRecordContacts).toBe(false); // office admin: people-power, no contacts.write
+    const byId = Object.fromEntries(listed.ownerContacts.map((c) => [c.id, c]));
+    expect(byId[free.id]?.taken).toBe(false);
+    expect(byId[seatedContact.id]?.taken).toBe(true);
+  });
+
+  it("seats LANDLORD bound to the OWNER contact; accept builds a portal context", async () => {
+    const contact = await ownerContact();
+    const { token, inviteId } = await inviteMember(admin.ctx, {
+      email: "karim.owner@test.example",
+      role: "LANDLORD",
+      subjectContactId: contact.id,
+    });
+    const invite = await prisma.workspaceInvite.findUniqueOrThrow({ where: { id: inviteId } });
+    expect(invite.intendedRole).toBe("LANDLORD");
+    expect(invite.subjectContactId).toBe(contact.id);
+    expect(invite.intendedBundles).toEqual([]);
+
+    const preview = await peekInvite(token);
+    expect(preview?.ownerContactName).toBe("Karim Mansour");
+    expect(preview?.intendedRole).toBe("LANDLORD");
+
+    const { userId } = await acceptInvite(token, { name: "Karim Mansour", password: ACCEPT_PASSWORD });
+    const membership = await prisma.membership.findFirstOrThrow({
+      where: { workspaceId: W.workspaceId, userId, revokedAt: null },
+    });
+    expect(membership.role).toBe("LANDLORD");
+    expect(membership.subjectContactId).toBe(contact.id);
+
+    const ctx = await authz(userId, W.workspaceId);
+    expect(ctx.role).toBe("LANDLORD");
+    expect(ctx.subjectContactId).toBe(contact.id);
+    expect(homePathFor(ctx.role)).toBe("/portal");
+    expect(hasCapability(ctx, "properties.read")).toBe(true);
+    expect(hasCapability(ctx, "members.invite")).toBe(false);
+  });
+
+  it("refuses a landlord-licence workspace, a missing/forged contact, and a second seat on the same owner", async () => {
+    const contact = await ownerContact();
+    const landlordWs = await makeWorkspace("Landlord licence", { type: "OWNER", role: "WORKSPACE_ADMIN" });
+    const landlordAdmin = await addMember(landlordWs.workspaceId, "ORG_ADMIN");
+    const landlordContact = await contacts.createContact(landlordWs.ctx, { kind: "OWNER", name: "Self" });
+    await expect(
+      inviteMember(landlordAdmin.ctx, {
+        email: "owner.seat@test.example",
+        role: "LANDLORD",
+        subjectContactId: landlordContact.id,
+      }),
+    ).rejects.toThrow(/agency workspace/);
+
+    const listed = await listMembers(landlordAdmin.ctx);
+    expect(listed.seats.some((s) => s.role === "LANDLORD")).toBe(false);
+    expect(listed.ownerContacts).toEqual([]);
+
+    await expect(
+      inviteMember(admin.ctx, { email: "x@x.example", role: "MANAGER", subjectContactId: contact.id }),
+    ).rejects.toThrow(/not bound to a contact/);
+
+    await expect(
+      inviteMember(admin.ctx, { email: "forged@x.example", role: "LANDLORD", subjectContactId: landlordContact.id }),
+    ).rejects.toThrow(/Not found/);
+
+    const tenant = await contacts.createContact(W.ctx, { kind: "TENANT", name: "A Tenant" });
+    await expect(
+      inviteMember(admin.ctx, { email: "tenant-as-owner@x.example", role: "LANDLORD", subjectContactId: tenant.id }),
+    ).rejects.toThrow(/Not found/);
+
+    await inviteMember(admin.ctx, {
+      email: "first@x.example",
+      role: "LANDLORD",
+      subjectContactId: contact.id,
+    });
+    await expect(
+      inviteMember(admin.ctx, { email: "second@x.example", role: "LANDLORD", subjectContactId: contact.id }),
+    ).rejects.toThrow(/already outstanding for that owner/);
+  });
+
+  it("refuses a second live LANDLORD membership on the same contact", async () => {
+    const contact = await ownerContact();
+    await addMember(W.workspaceId, "LANDLORD", undefined, contact.id);
+    await expect(
+      inviteMember(admin.ctx, { email: "dup@x.example", role: "LANDLORD", subjectContactId: contact.id }),
+    ).rejects.toThrow(/already has a member seat/);
   });
 });

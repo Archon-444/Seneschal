@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { AuthzError, type PlatformAdminContext } from "../authz";
 import { recordAudit } from "../audit";
 import { generateToken } from "../crypto";
+import { isProvisionableLicence } from "@/lib/licences";
 
 // Platform provisioning (F-Admin §3.4). The operator creates the customer org and seats the
 // FIRST principal, then steps out — they set NO credential, and the workspace is empty (zero
@@ -45,6 +46,9 @@ export async function provisionWorkspace(
   // strand an orphaned workspace/invite (a retry would then duplicate them).
   const plan = input.planCode ? await prisma.plan.findUnique({ where: { code: input.planCode } }) : null;
   if (input.planCode && !plan) throw new AuthzError(`Unknown plan ${input.planCode}`, 404);
+  if (!isProvisionableLicence(input.type)) {
+    throw new AuthzError("Seneschal licences are Landlord or Fiduciary.", 422);
+  }
 
   const { token, tokenHash } = generateToken();
 

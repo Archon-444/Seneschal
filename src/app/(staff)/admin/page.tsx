@@ -3,6 +3,8 @@ import { requirePlatformAdmin } from "@/server/auth/request";
 import { platformStats } from "@/server/admin/platformStats";
 import { Badge, DubaiDate, EmptyState, KpiCard, LinkButton, PageHeader, Table, Td } from "@/components/ui";
 import { archiveAction, suspendAction, unarchiveAction, unsuspendAction } from "./actions";
+import { LICENCE_LABEL } from "@/lib/licences";
+import type { WorkspaceType } from "@prisma/client";
 
 // Platform console (F-Admin §3, §7). Unreachable without isPlatformAdmin. Shows
 // lifecycle/billing/aggregate HEALTH only — counts, statuses, timestamps. No customer
@@ -81,7 +83,7 @@ export default async function AdminPage() {
                 {!s.archived && s.suspended && <span className="ml-2 text-xs text-amber-700">(suspended)</span>}
               </Td>
               <Td label="Type">
-                <Badge value={s.type} />
+                <Badge value={s.type} label={LICENCE_LABEL[s.type as WorkspaceType] ?? s.type} />
               </Td>
               <Td label="Seats" className="figure">{s.seatsUsed}</Td>
               <Td label="Properties" className="figure">{s.properties}</Td>
