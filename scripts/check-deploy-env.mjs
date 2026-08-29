@@ -15,6 +15,15 @@
 // NODE_ENV so a non-Vercel production build is still gated, while a local
 // `pnpm vercel-build` (neither set) keeps the prod checks as warnings.
 
+function present(value) {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+// Keep in sync with blobStorageAuthenticated() in src/server/config/env.ts.
+function blobStorageAuthenticated(env) {
+  return present(env.BLOB_READ_WRITE_TOKEN) || present(env.BLOB_STORE_ID);
+}
+
 const MIN_SECRET_LEN = 32;
 const env = process.env;
 const isProd = env.VERCEL_ENV ? env.VERCEL_ENV === "production" : env.NODE_ENV === "production";
@@ -50,8 +59,12 @@ if (env.EMAIL_PROVIDER !== "resend") {
 }
 if (env.STORAGE_DRIVER !== "blob") {
   prodProblems.push('STORAGE_DRIVER must be "blob" in production (local disk is not persistent on Vercel)');
-} else if (!env.BLOB_READ_WRITE_TOKEN) {
-  prodProblems.push("BLOB_READ_WRITE_TOKEN missing");
+} else if (!blobStorageAuthenticated(env)) {
+  // Keep in sync with blobStorageAuthenticated / BLOB_AUTH_MISSING in src/server/config/env.ts.
+  // OIDC stores inject BLOB_STORE_ID at build; VERCEL_OIDC_TOKEN only at runtime.
+  prodProblems.push(
+    "Vercel Blob is not authenticated. Create a private Blob store (Project → Storage → Create Database → Blob) and connect it to Production. Connected stores inject BLOB_STORE_ID (OIDC; VERCEL_OIDC_TOKEN is runtime-only) and/or BLOB_READ_WRITE_TOKEN. STORAGE_DRIVER=blob is set but neither credential is present.",
+  );
 }
 if (!env.CRON_SECRET) prodProblems.push("CRON_SECRET missing (auth for the cron route)");
 

@@ -16,6 +16,27 @@ export type EnvCheck = { ok: true } | { ok: false; problems: string[] };
 
 const MIN_SECRET_LEN = 32;
 
+function present(value: string | undefined): boolean {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+/**
+ * Vercel Blob auth as of @vercel/blob 2.x: either a long-lived
+ * `BLOB_READ_WRITE_TOKEN` or a connected store (`BLOB_STORE_ID`) that the SDK
+ * authenticates with `VERCEL_OIDC_TOKEN` at runtime. OIDC tokens are not present
+ * during `vercel-build`, so the deploy preflight (`scripts/check-deploy-env.mjs`)
+ * and this runtime gate must both treat store-id as sufficient — requiring the
+ * static token false-fails an OIDC-connected production deploy.
+ *
+ * Keep this condition in sync with `scripts/check-deploy-env.mjs`.
+ */
+export function blobStorageAuthenticated(env: NodeJS.ProcessEnv = process.env): boolean {
+  return present(env.BLOB_READ_WRITE_TOKEN) || present(env.BLOB_STORE_ID);
+}
+
+export const BLOB_AUTH_MISSING =
+  "Vercel Blob is not authenticated. Create a private Blob store (Project → Storage → Create Database → Blob) and connect it to Production. Connected stores inject BLOB_STORE_ID (OIDC; VERCEL_OIDC_TOKEN is runtime-only) and/or BLOB_READ_WRITE_TOKEN. STORAGE_DRIVER=blob is set but neither credential is present.";
+
 export function checkProductionEnv(env: NodeJS.ProcessEnv = process.env): EnvCheck {
   if (env.NODE_ENV !== "production") return { ok: true };
 
@@ -40,8 +61,8 @@ export function checkProductionEnv(env: NodeJS.ProcessEnv = process.env): EnvChe
 
   if (env.STORAGE_DRIVER !== "blob") {
     problems.push('STORAGE_DRIVER must be "blob" in production (local disk is not persistent on Vercel)');
-  } else if (!env.BLOB_READ_WRITE_TOKEN) {
-    problems.push("BLOB_READ_WRITE_TOKEN missing");
+  } else if (!blobStorageAuthenticated(env)) {
+    problems.push(BLOB_AUTH_MISSING);
   }
 
   if (!env.CRON_SECRET) problems.push("CRON_SECRET missing");
