@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   // optional body: { "adminEmail": "you@yourdomain" } — added as FIDUCIARY in
-  // the seed workspace so a real inbox can receive the sign-in OTP
+  // the seed workspace so a real inbox can sign in (demo password or reset)
   let adminEmail: string | undefined;
   try {
     const body = (await req.json()) as { adminEmail?: string };

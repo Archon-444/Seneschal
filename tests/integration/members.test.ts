@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { addMember, makeWorkspace, prisma, resetDb, type TestActor } from "../helpers";
 import { authz, hasCapability } from "@/server/authz";
 import { hashToken } from "@/server/crypto";
+import { loginWithPassword } from "@/server/auth";
 import {
   acceptInvite,
   grantBundle,
@@ -13,6 +14,8 @@ import {
 } from "@/server/services/members";
 
 // F-Admin Phase 3 — in-org member management. ⛔ tests 6, 8, 12.
+
+const ACCEPT_PASSWORD = "test-passphrase";
 
 let W: TestActor; // FIDUCIARY owner (data-only)
 let admin: TestActor; // ORG_ADMIN (people-power)
@@ -48,7 +51,7 @@ describe("people-power, decorrelated", () => {
 
   it("invite → accept seats an ORG_ADMIN whose context resolves with people-power, no data", async () => {
     const { token } = await inviteOrgAdmin(admin.ctx, "office@x.example");
-    const { userId } = await acceptInvite(token, { name: "Office Manager" });
+    const { userId } = await acceptInvite(token, { name: "Office Manager", password: ACCEPT_PASSWORD });
 
     const ctx = await authz(userId, W.workspaceId);
     expect(ctx.role).toBe("ORG_ADMIN");
@@ -74,7 +77,7 @@ describe("people-power, decorrelated", () => {
     const email = (await prisma.user.findUniqueOrThrow({ where: { id: existing.userId } })).email;
 
     const inv = await inviteOrgAdmin(admin.ctx, email);
-    await acceptInvite(inv.token);
+    await acceptInvite(inv.token, { password: ACCEPT_PASSWORD });
 
     // No second (masking) membership was minted…
     const roles = (
@@ -92,7 +95,7 @@ describe("people-power, decorrelated", () => {
 
   it("accepting an org-admin invite for a NEW email creates a fresh ORG_ADMIN membership", async () => {
     const inv = await inviteOrgAdmin(admin.ctx, "brand-new@x.example");
-    const { userId } = await acceptInvite(inv.token);
+    const { userId } = await acceptInvite(inv.token, { password: ACCEPT_PASSWORD });
     const ctx = await authz(userId, W.workspaceId);
     expect(ctx.role).toBe("ORG_ADMIN");
     expect(ctx.grantedBundles).toEqual([]);
@@ -118,6 +121,21 @@ describe("separation of duties", () => {
 });
 
 describe("invite token discipline", () => {
+  it("accept requires a password and stores only the hash", async () => {
+    const { token } = await inviteOrgAdmin(admin.ctx, "pwd@x.example");
+    await expect(acceptInvite(token, { name: "Hashed" })).rejects.toThrow(/Set a password/);
+    await expect(acceptInvite(token, { name: "Hashed", password: "short" })).rejects.toThrow(/at least 10/i);
+
+    const { userId } = await acceptInvite(token, { name: "Hashed", password: ACCEPT_PASSWORD });
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(user.passwordHash).toBeTruthy();
+    expect(user.passwordHash).not.toContain(ACCEPT_PASSWORD);
+    expect(user.passwordSetAt).not.toBeNull();
+
+    const signedIn = await loginWithPassword("pwd@x.example", ACCEPT_PASSWORD);
+    expect("sessionToken" in signedIn).toBe(true);
+  });
+
   it("stores only the hash; the raw token verifies against it", async () => {
     const { inviteId, token } = await inviteOrgAdmin(admin.ctx, "h@x.example");
     const invite = await prisma.workspaceInvite.findUniqueOrThrow({ where: { id: inviteId } });
@@ -138,7 +156,7 @@ describe("invite token discipline", () => {
 
     // already used
     const used = await inviteOrgAdmin(admin.ctx, "used@x.example");
-    await acceptInvite(used.token);
+    await acceptInvite(used.token, { password: ACCEPT_PASSWORD });
     await expect(acceptInvite(used.token)).rejects.toThrow(/already used/);
 
     // email mismatch
@@ -150,7 +168,7 @@ describe("invite token discipline", () => {
 describe("governance audit", () => {
   it("invite/accept/grant/revoke/remove each write an AuditEvent", async () => {
     const { token, inviteId } = await inviteOrgAdmin(admin.ctx, "audit@x.example");
-    await acceptInvite(token);
+    await acceptInvite(token, { password: ACCEPT_PASSWORD });
     void inviteId;
 
     const member = await addMember(W.workspaceId, "MANAGER");

@@ -1,99 +1,199 @@
 import { prisma } from "../db";
-import { generateOtp, generateToken, hashToken, sha256Hex } from "../crypto";
+import {
+  assertPasswordPolicy,
+  generateToken,
+  hashPassword,
+  hashToken,
+  PasswordPolicyError,
+  verifyPassword,
+} from "../crypto";
 import { notify } from "../notify";
 import { recordAudit } from "../audit";
 
-// Email OTP auth (T1.1) behind a clean abstraction — swapping to a hosted
-// provider replaces this module and the AuthOtp/Session tables only.
+// Email + password behind the same Session table the OTP door used.
+// Swapping to OIDC later mints the same hashed session cookie; authorization
+// stays membership + role. Tenants and one-shot sign-off stay on SecureLink.
 
-const OTP_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const MAX_OTP_ATTEMPTS = 5;
-const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const MAX_LOGIN_FAILURES = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+const RESET_TTL_MS = 60 * 60 * 1000;
+const RESET_COOLDOWN_MS = 60 * 1000;
 
-export async function requestOtp(email: string): Promise<void> {
+export const LOGIN_FAILED_MESSAGE = "Invalid email or password.";
+
+let dummyHashPromise: Promise<string> | null = null;
+function dummyPasswordHash(): Promise<string> {
+  dummyHashPromise ??= hashPassword(`dummy-not-a-password:${process.env.APP_SECRET ?? "dev"}`);
+  return dummyHashPromise;
+}
+
+async function spendOnPassword(plain: string, stored: string | null): Promise<boolean> {
+  if (stored) return verifyPassword(plain, stored);
+  await verifyPassword(plain, await dummyPasswordHash());
+  return false;
+}
+
+export async function createSession(
+  userId: string,
+  isPlatformAdmin: boolean,
+  meta?: { ip?: string; device?: string },
+): Promise<string> {
+  const { token, tokenHash } = generateToken();
+  await prisma.session.create({
+    data: {
+      userId,
+      tokenHash,
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+      ip: meta?.ip ?? null,
+      device: meta?.device ?? null,
+    },
+  });
+  await recordAudit({
+    actorType: isPlatformAdmin ? "STAFF" : "USER",
+    actorId: userId,
+    verb: "session.create",
+    objectType: "Session",
+    ip: meta?.ip ?? null,
+  });
+  return token;
+}
+
+export async function setUserPassword(userId: string, plain: string): Promise<void> {
+  assertPasswordPolicy(plain);
+  const passwordHash = await hashPassword(plain);
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      passwordHash,
+      passwordSetAt: new Date(),
+      failedLoginCount: 0,
+      loginLockedUntil: null,
+    },
+  });
+}
+
+/**
+ * Sign in. Unknown emails, missing passwords, wrong passwords, and lockouts
+ * all return the same message. A lockout after MAX_LOGIN_FAILURES refuses even
+ * the correct password until loginLockedUntil.
+ */
+export async function loginWithPassword(
+  email: string,
+  password: string,
+  meta?: { ip?: string; device?: string },
+): Promise<{ sessionToken: string } | { error: string }> {
   const normalized = email.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { email: normalized } });
-  // Always behave identically whether or not the account exists.
+  const locked = user?.loginLockedUntil != null && user.loginLockedUntil.getTime() > Date.now();
+  const matches = await spendOnPassword(password, user?.passwordHash ?? null);
+  if (!user || locked || !matches) {
+    if (user && !locked) {
+      const nextCount = user.failedLoginCount + 1;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginCount: nextCount,
+          loginLockedUntil: nextCount >= MAX_LOGIN_FAILURES ? new Date(Date.now() + LOGIN_LOCK_MS) : user.loginLockedUntil,
+        },
+      });
+    }
+    return { error: LOGIN_FAILED_MESSAGE };
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { failedLoginCount: 0, loginLockedUntil: null },
+  });
+  const sessionToken = await createSession(user.id, user.isPlatformAdmin, meta);
+  return { sessionToken };
+}
+
+/**
+ * Always succeeds from the caller's point of view. If the email has a user,
+ * a reset token is minted (prior live tokens expired) and mailed. The raw
+ * token is never stored. Cooldown is silent so a victim inbox cannot be flooded.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const normalized = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalized } });
   if (!user) return;
 
-  // H8: per-email cooldown. Silently ignore a resend inside the window so a
-  // victim's inbox can't be flooded. Silent (not an error) on purpose — a louder
-  // response only for accounts that exist would leak existence, breaking the
-  // account-oblivious behaviour above. The earlier code stays valid.
-  const recent = await prisma.authOtp.findFirst({
-    where: { email: normalized, createdAt: { gt: new Date(Date.now() - OTP_RESEND_COOLDOWN_MS) } },
+  const recent = await prisma.passwordReset.findFirst({
+    where: { userId: user.id, createdAt: { gt: new Date(Date.now() - RESET_COOLDOWN_MS) } },
     orderBy: { createdAt: "desc" },
   });
   if (recent) return;
 
-  // H8: invalidate any prior unused, still-valid codes before issuing a new one,
-  // so a reissue leaves exactly one live code (no stockpile of valid OTPs).
-  await prisma.authOtp.updateMany({
-    where: { email: normalized, usedAt: null, expiresAt: { gt: new Date() } },
+  await prisma.passwordReset.updateMany({
+    where: { userId: user.id, usedAt: null, expiresAt: { gt: new Date() } },
     data: { expiresAt: new Date() },
   });
 
-  const { code, codeHash } = generateOtp();
-  await prisma.authOtp.create({
-    data: { email: normalized, codeHash, expiresAt: new Date(Date.now() + OTP_TTL_MS) },
+  const { token, tokenHash } = generateToken();
+  await prisma.passwordReset.create({
+    data: {
+      userId: user.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + RESET_TTL_MS),
+    },
   });
 
   const membership = await prisma.membership.findFirst({
     where: { userId: user.id, revokedAt: null },
   });
+  const base = process.env.APP_BASE_URL ?? "http://localhost:3000";
+  const url = `${base}/login/reset/${token}`;
   await notify({
     workspaceId: membership?.workspaceId ?? "system",
     channel: "EMAIL",
-    templateCode: "auth_otp_v1",
-    subject: "Your Seneschal sign-in code",
-    body: `Your sign-in code is ${code}. It expires in 10 minutes.`,
+    templateCode: "auth_reset_v1",
+    subject: "Reset your Seneschal password",
+    body: `Reset your password using this one-time link (expires in 1 hour):\n${url}`,
     toUserId: user.id,
     toAddress: normalized,
   });
 }
 
-export async function verifyOtp(
-  email: string,
-  code: string,
+export async function resetPassword(
+  token: string,
+  plain: string,
   meta?: { ip?: string; device?: string },
-): Promise<{ sessionToken: string } | null> {
-  const normalized = email.trim().toLowerCase();
-  const otp = await prisma.authOtp.findFirst({
-    where: { email: normalized, usedAt: null, expiresAt: { gt: new Date() } },
-    orderBy: { createdAt: "desc" },
-  });
-  if (!otp || otp.attempts >= MAX_OTP_ATTEMPTS) return null;
-
-  if (otp.codeHash !== sha256Hex(code.trim())) {
-    await prisma.authOtp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
-    return null;
+): Promise<{ sessionToken: string } | { error: string }> {
+  try {
+    assertPasswordPolicy(plain);
+  } catch (e) {
+    if (e instanceof PasswordPolicyError) return { error: e.message };
+    throw e;
   }
 
-  const user = await prisma.user.findUnique({ where: { email: normalized } });
-  if (!user) return null;
+  const row = await prisma.passwordReset.findUnique({ where: { tokenHash: hashToken(token) } });
+  if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) {
+    return { error: "This reset link is no longer valid." };
+  }
 
-  const { token, tokenHash } = generateToken();
+  const user = await prisma.user.findUnique({ where: { id: row.userId } });
+  if (!user) return { error: "This reset link is no longer valid." };
+
+  const passwordHash = await hashPassword(plain);
   await prisma.$transaction([
-    prisma.authOtp.update({ where: { id: otp.id }, data: { usedAt: new Date() } }),
-    prisma.session.create({
+    prisma.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+    prisma.passwordReset.updateMany({
+      where: { userId: user.id, usedAt: null, id: { not: row.id } },
+      data: { expiresAt: new Date() },
+    }),
+    prisma.user.update({
+      where: { id: user.id },
       data: {
-        userId: user.id,
-        tokenHash,
-        expiresAt: new Date(Date.now() + SESSION_TTL_MS),
-        ip: meta?.ip ?? null,
-        device: meta?.device ?? null,
+        passwordHash,
+        passwordSetAt: new Date(),
+        failedLoginCount: 0,
+        loginLockedUntil: null,
       },
     }),
   ]);
-  await recordAudit({
-    actorType: user.isPlatformAdmin ? "STAFF" : "USER",
-    actorId: user.id,
-    verb: "session.create",
-    objectType: "Session",
-    ip: meta?.ip ?? null,
-  });
-  return { sessionToken: token };
+  const sessionToken = await createSession(user.id, user.isPlatformAdmin, meta);
+  return { sessionToken };
 }
 
 export async function sessionUser(sessionToken: string | undefined) {
@@ -111,3 +211,5 @@ export async function revokeSession(sessionToken: string): Promise<void> {
     data: { revokedAt: new Date() },
   });
 }
+
+export { MAX_LOGIN_FAILURES, PasswordPolicyError };

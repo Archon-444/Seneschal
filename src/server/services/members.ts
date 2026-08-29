@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { type AuthzContext, AuthzError, pickMembership, require_ } from "../authz";
 import { GRANT_HONORED_BUNDLES } from "../capabilities";
 import { recordAudit } from "../audit";
-import { generateToken, hashToken } from "../crypto";
+import { generateToken, hashPassword, hashToken, PasswordPolicyError } from "../crypto";
 
 // In-org member management (F-Admin §4.1). The people view behind members.read|invite|manage:
 // invite by hashed-token, overlay/revoke the ORG_ADMIN people-power bundle, remove. Every act is
@@ -98,12 +98,12 @@ export async function revokeInvite(ctx: AuthzContext, inviteId: string): Promise
 /**
  * Public accept (no AuthzContext — the invitee is not yet signed in). Validates the token,
  * creates the membership for in-org invites (seat-zero memberships already exist), and marks the
- * invite used. The invitee sets their own auth (email OTP) on first login — no secret is set here.
+ * invite used. The invitee sets a password here — the operator never set a credential.
  */
 export async function acceptInvite(
   token: string,
-  opts?: { name?: string; confirmEmail?: string },
-): Promise<{ workspaceId: string; userId: string }> {
+  opts?: { name?: string; confirmEmail?: string; password?: string },
+): Promise<{ workspaceId: string; userId: string; isPlatformAdmin: boolean }> {
   const invite = await prisma.workspaceInvite.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!invite) throw new AuthzError("Invalid invite", 404);
   if (invite.revokedAt) throw new AuthzError("This invite was revoked", 410);
@@ -119,6 +119,22 @@ export async function acceptInvite(
     update: opts?.name ? { name: opts.name } : {},
     create: { email: invite.email, name: opts?.name ?? invite.email },
   });
+
+  if (!user.passwordHash && !opts?.password) {
+    throw new AuthzError("Set a password to accept this invitation.", 422);
+  }
+  if (opts?.password) {
+    try {
+      const passwordHash = await hashPassword(opts.password);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash, passwordSetAt: new Date(), failedLoginCount: 0, loginLockedUntil: null },
+      });
+    } catch (e) {
+      if (e instanceof PasswordPolicyError) throw new AuthzError(e.message, 422);
+      throw e;
+    }
+  }
 
   if (!invite.platformIssued) {
     if (!invite.intendedBundles.includes("ORG_ADMIN")) {
@@ -162,7 +178,7 @@ export async function acceptInvite(
     objectType: "WorkspaceInvite",
     objectId: invite.id,
   });
-  return { workspaceId: invite.workspaceId, userId: user.id };
+  return { workspaceId: invite.workspaceId, userId: user.id, isPlatformAdmin: user.isPlatformAdmin };
 }
 
 /** Public, read-only invite preview for the accept screen (the token is the secret that authorises it). */

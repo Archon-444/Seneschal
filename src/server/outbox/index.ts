@@ -46,7 +46,7 @@ const LEASE_MS = 60_000; // a worker has one minute to finish a row or the lease
 
 // Keys removed from a retained Outbox.payload once the row reaches a terminal state
 // (dispatched, or failed after MAX_ATTEMPTS). `body` carries a sensitive notification body —
-// an OTP code that notify() deliberately keeps off the message row — so it must not persist at
+// a reset URL that notify() deliberately keeps off the message row — so it must not persist at
 // rest after the send is done or permanently dead. Stripped ONLY at terminal: a retry (status
 // back to pending) still needs the body. A no-op for payloads that have no such key.
 const TERMINAL_PAYLOAD_STRIP_KEYS = ["body"] as const;

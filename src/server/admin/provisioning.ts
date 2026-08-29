@@ -34,7 +34,7 @@ export interface ProvisionResult {
 /**
  * Seat-zero: create the customer org, seat their first user as PRINCIPAL (the
  * WORKSPACE_ADMIN base shape, the sole in-org authority root — never a bare org-admin), and
- * issue a hashed-token invite. The user sets their own passkey/OTP on accept; the operator
+ * issue a hashed-token invite. The user chooses a password on accept; the operator
  * sets no secret.
  */
 export async function provisionWorkspace(

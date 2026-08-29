@@ -13,7 +13,7 @@ export function ProvisionForm() {
       <div className="space-y-4">
         <p className="text-sm text-verde-700">
           Workspace provisioned. Send the principal this one-time invite link — it is shown once and
-          never stored. They set their own credentials on first login.
+          never stored. They choose a password when they accept the invite.
         </p>
         <code className="block break-all rounded-lg border border-line bg-ivory-100 p-3 text-xs text-navy-900">
           {state.inviteUrl}
