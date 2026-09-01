@@ -81,18 +81,25 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-// WhatsApp is genuinely optional — unset means a safe console no-op (the runtime
-// validator doesn't enforce it either). Set all five to go live via the Meta
-// Cloud API adapter; warn so a partial config is visible.
-const whatsapp = [
-  "WHATSAPP_PROVIDER",
-  "WHATSAPP_PHONE_NUMBER_ID",
-  "WHATSAPP_ACCESS_TOKEN",
-  "WHATSAPP_VERIFY_TOKEN",
-  "WHATSAPP_APP_SECRET",
-];
-for (const key of whatsapp) {
-  if (!env[key]) console.warn(`⚠ ${key} is not set — WhatsApp stays a console no-op. See README → Deploy (Vercel).`);
+// WhatsApp is optional. Outbound leaves the console no-op when
+// whatsappConfigured() is true (provider=meta + phone id + access token).
+// VERIFY_TOKEN / APP_SECRET only secure the webhook; missing them does not
+// keep outbound as a no-op. Warn so a partial config is visible.
+const outboundWhatsApp = ["WHATSAPP_PROVIDER", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_ACCESS_TOKEN"];
+const webhookWhatsApp = ["WHATSAPP_VERIFY_TOKEN", "WHATSAPP_APP_SECRET"];
+for (const key of outboundWhatsApp) {
+  if (!env[key]) {
+    console.warn(
+      `⚠ ${key} is not set — outbound WhatsApp stays a console no-op (whatsappConfigured). See docs/whatsapp-readiness.md.`,
+    );
+  }
+}
+for (const key of webhookWhatsApp) {
+  if (!env[key]) {
+    console.warn(
+      `⚠ ${key} is not set — the WhatsApp webhook is not fully secured (GET handshake / POST HMAC). Outbound may still send if the three delivery vars are set. See docs/whatsapp-readiness.md.`,
+    );
+  }
 }
 
 console.log("✓ deploy env preflight passed");

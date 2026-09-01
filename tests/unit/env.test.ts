@@ -144,4 +144,25 @@ describe("check-deploy-env.mjs", () => {
     expect(r.status).toBe(0);
     expect(r.stderr + r.stdout).toMatch(/Vercel Blob is not authenticated/);
   });
+
+  it("warns outbound no-op separately from webhook secrets", () => {
+    const outboundLive = runPreflight({
+      ...goodBuild,
+      BLOB_STORE_ID: "store_abc",
+      WHATSAPP_PROVIDER: "meta",
+      WHATSAPP_PHONE_NUMBER_ID: "123",
+      WHATSAPP_ACCESS_TOKEN: "tok",
+    });
+    expect(outboundLive.status).toBe(0);
+    const liveLog = outboundLive.stderr + outboundLive.stdout;
+    expect(liveLog).toMatch(/WHATSAPP_VERIFY_TOKEN is not set — the WhatsApp webhook is not fully secured/);
+    expect(liveLog).not.toMatch(/WHATSAPP_ACCESS_TOKEN is not set — outbound WhatsApp stays a console no-op/);
+
+    const unset = runPreflight({ ...goodBuild, BLOB_STORE_ID: "store_abc" });
+    expect(unset.status).toBe(0);
+    const unsetLog = unset.stderr + unset.stdout;
+    expect(unsetLog).toMatch(/WHATSAPP_PHONE_NUMBER_ID is not set — outbound WhatsApp stays a console no-op/);
+    expect(unsetLog).toMatch(/WHATSAPP_APP_SECRET is not set — the WhatsApp webhook is not fully secured/);
+    expect(unsetLog).not.toMatch(/WHATSAPP_VERIFY_TOKEN is not set — outbound WhatsApp stays a console no-op/);
+  });
 });
