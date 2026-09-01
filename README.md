@@ -267,7 +267,7 @@ local-dev runner. Production boots fail closed if required env is missing
 | `APP_SECRET` | `openssl rand -hex 32` (≥32 chars in production) |
 | `APP_BASE_URL` | `https://<your-domain>` (used in emails + secure links) |
 | `EMAIL_PROVIDER` / `RESEND_API_KEY` / `EMAIL_FROM` | `resend` + your key + verified sender |
-| `STORAGE_DRIVER` / `BLOB_READ_WRITE_TOKEN` | `blob` + token from the attached Blob store |
+| `STORAGE_DRIVER` / blob auth | `blob`. Create a **private** Blob store (Project → Storage) and connect it to Production. Auth is `BLOB_READ_WRITE_TOKEN` (static) and/or `BLOB_STORE_ID` (OIDC; `VERCEL_OIDC_TOKEN` is runtime-only and must not be required at build) |
 | `CRON_SECRET` | `openssl rand -hex 32` (auth for the cron route) |
 | `SEED_API_ENABLED` | leave unset. Only set to `true` while bootstrapping via `POST /api/v1/jobs/seed`, then unset — the route is default-deny on this flag *and* `CRON_SECRET` |
 | `SEED_ON_DEPLOY` / `SEED_ADMIN_EMAIL` | optional bootstrap; the email is seated as **workspace admin**, not FIDUCIARY |
@@ -290,11 +290,13 @@ Two alternatives to running it from your own machine, both default-deny:
   requires `SEED_API_ENABLED=true` **as well as** the secret; unset the flag once
   you are done.
 
-**Storage:** the Vercel Blob store is **private** — bytes are reachable only via the
-SDK with `BLOB_READ_WRITE_TOKEN`, the stored url is not publicly fetchable, and client
-downloads go exclusively through the signed, logged `/api/v1/files` route with the
-SHA-256 re-verified. An S3/Supabase driver remains an optional alternative behind the
-same `StorageDriver` interface.
+**Storage:** the Vercel Blob store is **private**. Create it under Storage, set
+access to Private, and connect Production (and Preview if you use it). The SDK
+authenticates with `BLOB_READ_WRITE_TOKEN` or OIDC (`BLOB_STORE_ID` +
+`VERCEL_OIDC_TOKEN`). The stored url is not publicly fetchable; client downloads go
+exclusively through the signed, logged `/api/v1/files` route with the SHA-256
+re-verified. An S3/Supabase driver remains an optional alternative behind the same
+`StorageDriver` interface.
 
 ## Non-goals (1A)
 

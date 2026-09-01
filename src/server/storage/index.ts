@@ -10,9 +10,10 @@ import { signPayload, verifySignature } from "../crypto";
 // Drivers:
 //  - local (dev/test): writes under .storage/
 //  - blob  (production on Vercel): Vercel Blob, configured as a PRIVATE store.
-//    Bytes are reachable only via the SDK with BLOB_READ_WRITE_TOKEN — the
-//    stored url is not publicly fetchable. Clients still download solely through
-//    the signed, access-logged /api/v1/files route with SHA-256 re-verified.
+//    The SDK authenticates with BLOB_READ_WRITE_TOKEN or, on a connected store,
+//    BLOB_STORE_ID + VERCEL_OIDC_TOKEN (OIDC is runtime-only). The stored url is
+//    not publicly fetchable. Clients still download solely through the signed,
+//    access-logged /api/v1/files route with SHA-256 re-verified.
 
 export interface StorageDriver {
   /** Store bytes; returns the canonical storage key to persist on the Document row. */
