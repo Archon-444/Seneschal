@@ -4,29 +4,42 @@
 (`src/server/notify/whatsapp.ts`) and the signature-verifying webhook
 (`src/app/api/v1/webhooks/whatsapp/route.ts`) are implemented and covered by the
 integration suite (`tests/integration/whatsapp.test.ts`). They sit behind the
-same `notify()` gateway as email and stay a **safe console no-op** until
-`WHATSAPP_PROVIDER=meta` plus credentials are set — nothing leaves the system
-without configuration, and the webhook returns 404 (and fails closed without
-`WHATSAPP_APP_SECRET`) while the provider is unset.
+same `notify()` gateway as email. Outbound stays a **safe console no-op** until
+`whatsappConfigured()` (`WHATSAPP_PROVIDER=meta` plus phone-number id and access
+token). The webhook is 404 while the provider is unset, and fails closed without
+`WHATSAPP_APP_SECRET` once the provider is `meta`. Missing webhook secrets do
+**not** keep outbound as a no-op.
 
 Going live is therefore **an ops/approval step, not a code change.** The
 remaining work is the Meta Business approvals, template catalogue, sender number
 and opt-in flow tracked below.
 
-## Env (all five required to leave the no-op)
+## Env
 
-Listed in `.env.example`. Outbound stays a console no-op unless
-`WHATSAPP_PROVIDER=meta` plus phone-number id and access token
-(`whatsappConfigured()`). The webhook is 404 unless `WHATSAPP_PROVIDER=meta`.
-Going live (outbound + verified webhook) needs all five.
+Listed in `.env.example`. Two thresholds — do not conflate them.
+
+### Outbound (leaves the console no-op)
+
+`whatsappConfigured()` is true when all three are set. `notify()` may then send
+real Meta Cloud API messages **even if the webhook secrets below are missing**.
 
 | Var | Role |
 | --- | --- |
-| `WHATSAPP_PROVIDER` | `meta` to enable; anything else is a no-op |
+| `WHATSAPP_PROVIDER` | `meta` to enable the adapter; anything else is a no-op |
 | `WHATSAPP_PHONE_NUMBER_ID` | Graph API sender |
 | `WHATSAPP_ACCESS_TOKEN` | Graph API bearer |
+
+### Webhook (delivery-status callbacks)
+
+The route is 404 unless `WHATSAPP_PROVIDER=meta`. These two do **not** gate
+outbound send:
+
+| Var | Role |
+| --- | --- |
 | `WHATSAPP_VERIFY_TOKEN` | webhook `GET` handshake |
 | `WHATSAPP_APP_SECRET` | HMAC for `x-hub-signature-256`; fail-closed if unset while provider is `meta` |
+
+A complete live channel (outbound **and** a verified webhook) needs all five.
 
 ## Ops checklist (no code involved — gates going live)
 

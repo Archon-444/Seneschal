@@ -33,8 +33,9 @@ pnpm worker                     # outbox runner + daily jobs (separate shell)
 Sign in at `/login` as `operator@example.com` / `seneschal-dev` (or
 `SEED_DEMO_PASSWORD` if you set one). The seed also seats `farina@example.com`
 (FIDUCIARY), `owner@example.com` (`/portal`), `managing-agent@example.com`
-(delegate), `absentee-owner@example.com` (CLIENT_VIEWER), and
-`staff@seneschal.example` (platform console at `/admin` — data-blind). Forgot-
+(delegate), and `absentee-owner@example.com` (CLIENT_VIEWER). Separately it
+creates `staff@seneschal.example` as an **unseated** platform admin
+(`isPlatformAdmin`, no `Membership`) so `/admin` stays data-blind. Forgot-
 password and invite mails log to the terminal when `EMAIL_PROVIDER=console`
 (the default); set `EMAIL_PROVIDER=resend` plus `RESEND_API_KEY` to send for
 real. There is no SMTP/Mailpit adapter.
@@ -273,7 +274,8 @@ local-dev runner. Production boots fail closed if required env is missing
 | `SEED_ON_DEPLOY` / `SEED_ADMIN_EMAIL` | optional bootstrap; the email is seated as **workspace admin**, not FIDUCIARY |
 | `SEED_DEMO_PASSWORD` | optional; production seed does not set a shared password unless this is set |
 | `EXTRACTION_PROVIDER` | `mock`, or `gemini` + `GEMINI_API_KEY`, or `anthropic` + `ANTHROPIC_API_KEY` |
-| `WHATSAPP_PROVIDER` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_VERIFY_TOKEN` / `WHATSAPP_APP_SECRET` | optional. Unset = console no-op. All five required to go live (`docs/whatsapp-readiness.md`) |
+| `WHATSAPP_PROVIDER` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_ACCESS_TOKEN` | optional outbound. All three leave the console no-op (`whatsappConfigured()`). Real Meta sends may go out even if the webhook secrets are unset |
+| `WHATSAPP_VERIFY_TOKEN` / `WHATSAPP_APP_SECRET` | optional webhook (GET handshake / POST HMAC). Do not gate outbound. Full channel = all five (`docs/whatsapp-readiness.md`) |
 
 After the first deploy, seed once from any machine:
 `DATABASE_URL=<neon-url> APP_BASE_URL=<https-url> pnpm db:seed` — idempotent, and
@@ -304,9 +306,10 @@ No marketplace/listings/brokerage flows, no payment processing or custody (the
 payments/DDS rail is the future **Phase 2** — Seneschal stays record-keeping
 only), no legal advice, no contractor dispatch, no anomaly AI. WhatsApp delivery
 is wired but **off by default** — the Meta Cloud API adapter ships behind the
-`notify()` gateway and stays a console no-op until `WHATSAPP_PROVIDER=meta` plus
-credentials are set; the remaining work is ops/approvals, not code (see
-`docs/whatsapp-readiness.md`). (The **Stage 2 renewal engine** is
+`notify()` gateway and stays a console no-op until `whatsappConfigured()`
+(`WHATSAPP_PROVIDER=meta` plus phone-number id and access token); webhook
+secrets are separate and do not keep outbound as a no-op. The remaining work is
+ops/approvals, not code (see `docs/whatsapp-readiness.md`). (The **Stage 2 renewal engine** is
 built and migrated — it is no longer a non-goal; see the renewal acceptance
 walkthrough above.)
 
