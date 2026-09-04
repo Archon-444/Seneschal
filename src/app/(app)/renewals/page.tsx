@@ -175,7 +175,7 @@ export default async function RenewalsPage({
       ) : (
         <Table
           stack
-          headers={["Unit", "Owner", "Next action", "Urgency", "Notice gate", "Days", "Renewal", "Stage", "Index position", "Est. uplift / yr"]}
+          headers={["Unit", "Owner", "Next action", "Urgency", "Notice gate", "Days", "Renewal", "Index position", "Est. uplift / yr"]}
         >
           {rows.map((row) => (
             <tr key={row.tenancyId}>
@@ -200,9 +200,6 @@ export default async function RenewalsPage({
                 )}
               </Td>
               <Td label="Renewal" className="whitespace-nowrap"><DubaiDate value={row.renewalDate} /></Td>
-              <Td label="Stage" className="whitespace-nowrap text-muted">
-                {row.stage ? row.stage.charAt(0) + row.stage.slice(1).toLowerCase().replace(/_/g, " ") : "—"}
-              </Td>
               <Td label="Index position" className="whitespace-nowrap">
                 {row.gapPct != null ? (
                   <>{Math.round(row.gapPct * 100)}% below{row.isBenchmark && <span className="text-muted"> (benchmark)</span>}</>

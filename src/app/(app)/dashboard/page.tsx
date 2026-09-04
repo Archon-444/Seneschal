@@ -135,7 +135,7 @@ export default async function DashboardPage() {
             <Table bare stack headers={["Action", "Unit", "Owner", "Notice gate", "Days", "Urgency", "Responsible"]}>
               {renewalActions.map((row) => (
                 <tr key={row.tenancyId}>
-                  <Td label="Action">
+                  <Td label="Action" className="whitespace-nowrap">
                     <Link
                       href={row.nextAction.href}
                       title={row.nextAction.reason}
@@ -149,7 +149,7 @@ export default async function DashboardPage() {
                   <Td label="Notice gate" className="figure whitespace-nowrap">{formatDubaiDate(row.noticeGateAt)}</Td>
                   <Td label="Days" className="text-right">{daysCell(row.daysToGate, row.gatePassed)}</Td>
                   <Td label="Urgency"><Badge value={row.nextAction.urgency} /></Td>
-                  <Td label="Responsible" className="whitespace-nowrap text-muted">{row.nextAction.responsibleLayer ?? "—"}</Td>
+                  <Td label="Responsible" className="text-muted"><span className="block max-w-[14rem] truncate" title={row.nextAction.responsibleLayer ?? undefined}>{row.nextAction.responsibleLayer ?? "—"}</span></Td>
                 </tr>
               ))}
             </Table>
@@ -186,7 +186,7 @@ export default async function DashboardPage() {
                     return (
                       <tr key={d.id}>
                         <Td label="Due" className="figure whitespace-nowrap">{formatDubaiDate(d.dueAt)}</Td>
-                        <Td label="Item">
+                        <Td label="Item" className="whitespace-nowrap">
                           <Link href={href} title={reason} className="font-medium text-navy-900 hover:underline">
                             {label}
                           </Link>

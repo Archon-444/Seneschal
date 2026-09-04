@@ -40,7 +40,7 @@
 
   /* semantic helpers */
   --color-line: #dcdad4;
-  --color-muted: #6b7385;      /* secondary text on light surfaces · WCAG AA */
+  --color-muted: #5f687b;      /* secondary text on light surfaces · WCAG AA (≥4.5:1 on ivory-50) */
 
   --radius: 4px;
   --radius-sm: 3px;
