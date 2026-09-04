@@ -36,10 +36,10 @@ export default async function RiskPage({
               key={item.value}
               href={item.value === "open" ? "/risk" : `/risk?view=${item.value}`}
               aria-current={active ? "page" : undefined}
-              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 ${
+              className={`rounded border px-2.5 py-1 text-[12.5px] font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 ${
                 active
                   ? "border-navy-900 bg-navy-900 text-white"
-                  : "border-line bg-white text-navy-700 hover:border-gold-500"
+                  : "border-line bg-white text-navy-700 hover:bg-ivory-100"
               }`}
             >
               {item.label}

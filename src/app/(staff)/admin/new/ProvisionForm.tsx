@@ -24,7 +24,7 @@ export function ProvisionForm() {
           invite link — it is shown once and never stored. They choose a password when they
           accept. The workspace is empty until they populate it.
         </p>
-        <code className="block break-all rounded-lg border border-line bg-ivory-100 p-3 text-xs text-navy-900">
+        <code className="block break-all rounded border border-line bg-ivory-100 p-3 text-xs text-navy-900">
           {state.inviteUrl}
         </code>
         <LinkButton href="/admin" variant="primary">
@@ -42,7 +42,7 @@ export function ProvisionForm() {
       <fieldset>
         <legend className="t-label mb-2 block text-muted">
           Licence
-          <span className="ml-0.5 text-gold-700" aria-hidden="true">
+          <span className="ml-0.5 text-claret-500" aria-hidden="true">
             *
           </span>
         </legend>
@@ -53,10 +53,10 @@ export function ProvisionForm() {
             return (
               <label
                 key={code}
-                className={`cursor-pointer rounded-xl border p-3 transition ${
+                className={`cursor-pointer rounded border p-3 transition ${
                   selected
-                    ? "border-gold-500 bg-gold-100/60 shadow-sm"
-                    : "border-line bg-white hover:border-gold-500/50"
+                    ? "border-navy-900 bg-navy-50/60"
+                    : "border-line bg-white hover:bg-ivory-100"
                 }`}
               >
                 <input
@@ -67,8 +67,8 @@ export function ProvisionForm() {
                   onChange={() => setLicence(code)}
                   className="sr-only"
                 />
-                <span className="block font-display text-base text-navy-900">{item.label}</span>
-                <span className="mt-0.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-gold-700">
+                <span className="block font-semibold text-base text-navy-900">{item.label}</span>
+                <span className="mt-0.5 block text-[12px] font-medium text-muted">
                   {item.kicker}
                 </span>
                 <span className="mt-2 block text-xs text-muted">{item.body}</span>

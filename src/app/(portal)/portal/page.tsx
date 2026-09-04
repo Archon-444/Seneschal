@@ -53,7 +53,7 @@ async function TenantHome({ ctx }: { ctx: AuthzContext }) {
             const next = items.find((i) => i.status === "SCHEDULED" || i.status === "REQUESTED");
             return (
               <section key={tenancy.id}>
-                <h2 className="mb-3 font-display text-xl text-navy-900">
+                <h2 className="mb-3 text-base font-semibold text-navy-900">
                   <Link href={`/portal/tenancies/${tenancy.id}`} className="hover:underline">{propertyLabel(tenancy.property)}</Link>
                 </h2>
                 <div className="mb-5 grid gap-4 sm:grid-cols-3">
@@ -86,7 +86,7 @@ async function TenantHome({ ctx }: { ctx: AuthzContext }) {
           })}
 
           <section>
-            <h2 className="mb-3 font-display text-xl text-navy-900">Coming up</h2>
+            <h2 className="mb-3 text-base font-semibold text-navy-900">Coming up</h2>
             {deadlines.length === 0 ? (
               <EmptyState message="No upcoming deadlines." />
             ) : (
@@ -148,7 +148,7 @@ async function LandlordHome({ ctx }: { ctx: AuthzContext }) {
       )}
 
       <section className="mt-8">
-        <h2 className="mb-3 font-display text-xl text-navy-900">Coming up</h2>
+        <h2 className="mb-3 text-base font-semibold text-navy-900">Coming up</h2>
         {deadlines.length === 0 ? (
           <EmptyState message="No upcoming deadlines." />
         ) : (

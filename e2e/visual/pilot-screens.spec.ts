@@ -32,8 +32,8 @@ test.describe("operator visual contract", () => {
   test.use({ storageState: authState.workspaceAdmin, viewport: { width: 1440, height: 1000 } });
 
   for (const [name, href, marker] of [
-    ["dashboard", "/dashboard", "Know what is due"],
-    ["renewal-pipeline", "/renewals", "A task-led queue"],
+    ["dashboard", "/dashboard", "Seneschal keeps the record"],
+    ["renewal-pipeline", "/renewals", "Index-based position"],
     ["evidence-record", "/evidence", "Fiduciary record"],
     ["proof-requests-writer", "/proofs", "Proof requests"],
   ] as const) {
@@ -103,7 +103,7 @@ test("mobile drawer visual", async ({ browser, baseURL }) => {
   });
   const page = await context.newPage();
   await page.goto("/dashboard");
-  await settled(page, "Know what is due");
+  await settled(page, "Seneschal keeps the record");
   await page.getByRole("button", { name: "Open navigation menu" }).click();
   await expect(page.getByRole("dialog", { name: "Navigation menu" })).toBeVisible();
   await expect(page).toHaveScreenshot("mobile-navigation-open.png", { mask: dynamicDateMasks(page) });

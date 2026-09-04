@@ -30,12 +30,12 @@ export function Sidebar({
   const link = (item: { href: string; label: string; icon: IconKey }, accent = false) => {
     const active = isActive(pathname, item.href);
     const Glyph = NAV_ICONS[item.icon];
-    const base = `flex items-center rounded px-3 text-sm transition-colors ${mobile ? "min-h-11 py-2" : "py-1.5"}`;
+    const base = `flex items-center rounded px-2.5 text-[13px] transition-colors ${mobile ? "min-h-11 py-2" : "h-[30px]"}`;
     const tone = active
-      ? "bg-navy-800 text-ivory-50"
+      ? "bg-navy-800 font-medium text-white"
       : accent
         ? "text-gold-300 hover:bg-navy-800"
-        : "text-ivory-200 hover:bg-navy-800 hover:text-ivory-50";
+        : "text-navy-100 hover:bg-navy-800 hover:text-white";
     return (
       <Link
         key={item.href}
@@ -45,7 +45,7 @@ export function Sidebar({
         aria-current={active ? "page" : undefined}
         title={collapsed ? item.label : undefined}
         aria-label={collapsed ? item.label : undefined}
-        className={`${base} ${tone} ${collapsed ? "justify-center" : "gap-3"}`}
+        className={`${base} ${tone} ${collapsed ? "justify-center" : "gap-2.5"}`}
       >
         <Glyph className="shrink-0" />
         {!collapsed && item.label}
@@ -58,16 +58,16 @@ export function Sidebar({
   const consoleBlock = isStaff && (
     // The platform console is a context-switch OUT of the workspace, not a feature: a divider
     // above it and gold accent mark it as leaving the workspace plane.
-    <div className="mt-auto border-t border-navy-800 px-3 pt-3 pb-1">
-      {!collapsed && <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-300">Platform</div>}
+    <div className="mt-auto border-t border-navy-800 px-2 pt-2 pb-1">
+      {!collapsed && <div className="px-2.5 pb-1 pt-1 text-[11px] font-medium text-navy-300">Platform</div>}
       {link({ href: "/admin", label: "Platform console", icon: "staff" }, true)}
     </div>
   );
 
   if (!zoned) {
     return (
-      <nav className="flex flex-1 flex-col px-3 py-4">
-        <div className="space-y-0.5">{nav.map((item) => link(item))}</div>
+      <nav className="flex flex-1 flex-col px-2 py-3">
+        <div className="space-y-px">{nav.map((item) => link(item))}</div>
         {consoleBlock}
       </nav>
     );
@@ -84,12 +84,12 @@ export function Sidebar({
     collapsed ? (
       <div className="mx-1 my-2 border-t border-navy-800" />
     ) : (
-      <div className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-300">{label}</div>
+      <div className="px-2.5 pt-3.5 pb-1 text-[11px] font-medium text-navy-300">{label}</div>
     );
 
   return (
-    <nav className="flex flex-1 flex-col px-3 py-4">
-      <div className="space-y-0.5">
+    <nav className="flex flex-1 flex-col px-2 py-2">
+      <div className="space-y-px">
         {primary.length > 0 && header("Work")}
         {primary.map((item) => link(item))}
 
@@ -103,8 +103,8 @@ export function Sidebar({
                 type="button"
                 onClick={() => setMoreOpen((v) => !v)}
                 aria-expanded={showSecondary}
-                className={`flex w-full items-center gap-3 rounded px-3 text-sm text-ivory-200 transition-colors hover:bg-navy-800 hover:text-ivory-50 ${
-                  mobile ? "min-h-11 py-2" : "py-1.5"
+                className={`flex w-full items-center gap-2.5 rounded px-2.5 text-[13px] text-navy-100 transition-colors hover:bg-navy-800 hover:text-white ${
+                  mobile ? "min-h-11 py-2" : "h-[30px]"
                 }`}
               >
                 <ChevronDownIcon className={`shrink-0 transition-transform ${showSecondary ? "" : "-rotate-90"}`} />

@@ -11,7 +11,7 @@ export function EnquiryForm({ token }: { token: string }) {
 
   if (state.status === "done") {
     return (
-      <p className="rounded-md bg-verde-100 px-4 py-3 text-sm text-verde-700">
+      <p className="rounded bg-verde-100 px-4 py-3 text-sm text-verde-700">
         Thanks — your enquiry has been sent to the managing office.
       </p>
     );
@@ -36,7 +36,7 @@ export function EnquiryForm({ token }: { token: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-navy-900 px-4 py-2 text-sm font-medium text-ivory-50 disabled:opacity-60"
+        className="rounded bg-navy-900 px-4 py-2 text-sm font-medium text-ivory-50 disabled:opacity-60"
       >
         {pending ? "Sending…" : "Register interest"}
       </button>

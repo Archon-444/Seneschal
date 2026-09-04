@@ -109,7 +109,7 @@ export default async function AdminPage() {
                     // Archive is recoverable — an archived workspace offers only Unarchive.
                     <form action={unarchiveAction}>
                       <input type="hidden" name="workspaceId" value={s.workspaceId} />
-                      <button className="rounded-md border border-line px-2 py-1 text-verde-700 hover:bg-verde-100">
+                      <button className="rounded border border-line px-2 py-1 text-verde-700 hover:bg-verde-100">
                         Unarchive
                       </button>
                     </form>
@@ -117,13 +117,13 @@ export default async function AdminPage() {
                     <>
                       <form action={s.suspended ? unsuspendAction : suspendAction}>
                         <input type="hidden" name="workspaceId" value={s.workspaceId} />
-                        <button className="rounded-md border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
+                        <button className="rounded border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
                           {s.suspended ? "Unsuspend" : "Suspend"}
                         </button>
                       </form>
                       <form action={archiveAction}>
                         <input type="hidden" name="workspaceId" value={s.workspaceId} />
-                        <button className="rounded-md border border-line px-2 py-1 text-claret-700 hover:bg-claret-100">
+                        <button className="rounded border border-line px-2 py-1 text-claret-700 hover:bg-claret-100">
                           Archive
                         </button>
                       </form>

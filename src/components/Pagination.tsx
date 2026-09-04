@@ -29,7 +29,7 @@ export function Pagination({
   // Disabled state has no equivalent in the shared kit (LinkButton always
   // renders a real, navigable <Link>), so it stays a look-alike span here.
   const disabledClass =
-    "cursor-default rounded-lg border border-dashed border-line bg-ivory-100 px-3 py-1.5 text-sm font-bold text-muted";
+    "cursor-default rounded border border-dashed border-line bg-ivory-100 px-3 py-1.5 text-sm font-semibold text-muted";
   return (
     <nav aria-label="Pagination" className="mt-4 flex items-center justify-between gap-3">
       {page > 1 ? (

@@ -98,7 +98,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         </Card>
       )}
 
-      <h2 className="font-display mb-3 text-xl text-navy-900">Contracts</h2>
+      <h2 className="mb-3 text-base font-semibold text-navy-900">Contracts</h2>
       {tenancies.length === 0 ? (
         <EmptyState title="No contracts" message="This contact is not a party to any tenancy yet." />
       ) : (
@@ -123,7 +123,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
       {proofRequests.length > 0 && (
         <>
-          <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Assigned proof requests</h2>
+          <h2 className="font-semibold mt-8 mb-3 text-xl text-navy-900">Assigned proof requests</h2>
           <Table stack headers={["Request", "Due", "Status"]}>
             {proofRequests.map((r) => (
               <tr key={r.id}>
@@ -144,7 +144,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-[12px] text-muted">{label}</div>
       <div className="mt-0.5 text-navy-900">{children}</div>
     </div>
   );

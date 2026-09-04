@@ -22,7 +22,7 @@ export default async function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <Logo priority className="mx-auto mb-4 h-20 w-20" />
-          <h1 className="font-display text-4xl text-navy-900">Seneschal</h1>
+          <h1 className="text-3xl font-semibold text-navy-900">Seneschal</h1>
           <p className="mt-2 text-sm text-navy-500">
             Know what is due. Know who owns it. Keep the proof.
           </p>

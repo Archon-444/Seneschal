@@ -112,12 +112,12 @@ export default async function RenewalWorkspacePage({
         }
       />
 
-      <Card className="z-10 mb-5 border-navy-900/20 bg-navy-900 text-ivory-50 shadow-lg lg:sticky lg:top-3">
+      <Card className="z-10 mb-4 lg:sticky lg:top-3">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto] lg:items-center">
           <div>
-            <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-gold-300">Next action</div>
-            <h2 className="font-display text-xl">{risk.nextAction.label}</h2>
-            <p className="mt-1 text-sm text-ivory-100">{risk.nextAction.reason}</p>
+            <div className="mb-1 text-[12px] font-medium text-muted">Next action</div>
+            <h2 className="text-base font-semibold">{risk.nextAction.label}</h2>
+            <p className="mt-1 text-[13px] text-muted">{risk.nextAction.reason}</p>
           </div>
           <SummaryFact
             label="Notice gate"
@@ -143,11 +143,11 @@ export default async function RenewalWorkspacePage({
           <div className="flex flex-wrap gap-2 lg:flex-col">
             <Link
               href={`/renewals/${tenancyId}?view=${actionView}${actionView === "case" ? "#active-task" : ""}`}
-              className="rounded-lg bg-gold-300 px-4 py-2 text-center text-sm font-bold text-navy-900 hover:bg-gold-100"
+              className="inline-flex h-8 items-center justify-center rounded border border-navy-900 bg-navy-900 px-3 text-[13px] font-medium text-white hover:bg-navy-800"
             >
               Go to current task
             </Link>
-            <Link href={`/renewals/${tenancyId}?view=evidence`} className="text-center text-xs text-ivory-100 hover:underline">
+            <Link href={`/renewals/${tenancyId}?view=evidence`} className="text-center text-xs text-navy-700 hover:underline">
               View case evidence
             </Link>
           </div>
@@ -162,8 +162,8 @@ export default async function RenewalWorkspacePage({
               key={candidate.value}
               href={`/renewals/${tenancyId}?view=${candidate.value}`}
               aria-current={active ? "page" : undefined}
-              className={`rounded-full border px-4 py-2 text-sm font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 ${
-                active ? "border-navy-900 bg-navy-900 text-white" : "border-line bg-white text-navy-700 hover:border-gold-500"
+              className={`rounded border px-3 py-1.5 text-[13px] font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 ${
+                active ? "border-navy-900 bg-navy-900 text-white" : "border-line bg-white text-navy-700 hover:bg-ivory-100"
               }`}
             >
               {candidate.label}
@@ -179,8 +179,8 @@ export default async function RenewalWorkspacePage({
           <Card>
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-gold-700">Current task</div>
-                <h2 className="font-display text-xl text-navy-900">{risk.nextAction.label}</h2>
+                <div className="mb-1 text-[12px] font-medium text-muted">Current task</div>
+                <h2 className="text-base font-semibold text-navy-900">{risk.nextAction.label}</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted">{risk.nextAction.reason}</p>
               </div>
               {risk.nextAction.urgency !== "NONE" && <Badge value={risk.nextAction.urgency} />}
@@ -227,10 +227,10 @@ export default async function RenewalWorkspacePage({
 
 function SummaryFact({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="border-l border-white/20 pl-3">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-gold-300">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold text-white">{value}</div>
-      <div className="mt-0.5 text-[11px] text-ivory-100">{note}</div>
+    <div className="border-l border-line pl-3">
+      <div className="text-[12px] text-muted">{label}</div>
+      <div className="mt-0.5 text-[13px] font-semibold text-navy-900">{value}</div>
+      <div className="mt-0.5 text-[11.5px] text-muted">{note}</div>
     </div>
   );
 }
@@ -355,7 +355,7 @@ function TermsView({
       <Card>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="font-display text-xl text-navy-900">Versioned terms history</h2>
+            <h2 className="text-base font-semibold text-navy-900">Versioned terms history</h2>
             <p className="mt-1 text-sm text-muted">
               Current rent, frozen source ceiling estimate, proposed rent, and accepted rent remain separate records.
             </p>
@@ -369,16 +369,16 @@ function TermsView({
             {risk.offers.map((offer) => {
               const current = latestOffer?.id === offer.id;
               return (
-                <tr key={offer.id} className={offer.status === "ACCEPTED" ? "bg-verde-100/40" : current ? "bg-gold-100/30" : ""}>
+                <tr key={offer.id} className={offer.status === "ACCEPTED" ? "bg-verde-100/40" : current ? "bg-navy-50/60" : ""}>
                   <Td label="Version" className="figure">
                     v{offer.version}
-                    {current && <div className="text-[10px] font-bold text-gold-700">current version</div>}
+                    {current && <div className="text-[11px] font-medium text-muted">current version</div>}
                   </Td>
                   <Td label="Party"><Badge value={offer.party} /></Td>
                   <Td label="Annual rent">
                     <Money amount={offer.annualRent} />
                     <div className="text-[11px] text-muted">{deltaOnCurrent(offer.annualRent, Number(t.annualRent))}</div>
-                    {offer.status === "ACCEPTED" && <div className="text-[11px] font-bold text-verde-700">accepted rent</div>}
+                    {offer.status === "ACCEPTED" && <div className="text-[11px] font-semibold text-verde-700">accepted rent</div>}
                   </Td>
                   <Td label="Delivery / status">
                     <Badge value={offer.status} />
@@ -436,7 +436,7 @@ function TermsView({
 
       {canPropose ? (
         <Card>
-          <h2 className="font-display text-lg text-navy-900">
+          <h2 className="text-[15px] font-semibold text-navy-900">
             {risk.nextAction.code === "REVIEW_COUNTER" ? "Respond to tenant counter" : "Prepare renewal terms"}
           </h2>
           <p className="mb-4 mt-1 text-xs text-muted">Adding terms creates a new immutable version and supersedes the prior open version.</p>
@@ -461,7 +461,7 @@ function TermsView({
 
       {risk.nextAction.code === "AWAIT_TENANT" && (
         <Card className="border-amber-500/40 bg-amber-100/30">
-          <h2 className="font-display text-lg text-navy-900">Awaiting tenant response</h2>
+          <h2 className="text-[15px] font-semibold text-navy-900">Awaiting tenant response</h2>
           <p className="mt-1 text-sm text-muted">The current proposal was delivered. This is a waiting state, not an operator mutation.</p>
         </Card>
       )}
@@ -485,7 +485,7 @@ function CompleteRenewalForm({ risk, tenancyId, acceptedOffer }: { risk: Renewal
   const chequeCount = match && Number(match[0]) <= 12 ? match[0] : "";
   return (
     <Card>
-      <h2 className="font-display text-lg text-navy-900">Complete renewal</h2>
+      <h2 className="text-[15px] font-semibold text-navy-900">Complete renewal</h2>
       <p className="mb-4 mt-1 text-xs text-muted">
         Accepted rent <Money amount={acceptedOffer.annualRent} /> is a persisted agreement, separate from the calculated ceiling estimate.
       </p>
@@ -526,7 +526,7 @@ function EvidenceView({
         <Card className="border-verde-100 bg-verde-100/30">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="font-display text-lg text-navy-900">Renewal complete</h2>
+              <h2 className="text-[15px] font-semibold text-navy-900">Renewal complete</h2>
               <p className="mt-1 text-sm text-muted">
                 Successor term {formatDubaiDate(successor.startDate)} → {formatDubaiDate(successor.endDate)} · <Money amount={successor.annualRent} />/yr
               </p>
@@ -538,7 +538,7 @@ function EvidenceView({
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="font-display text-xl text-navy-900">Case evidence receipts</h2>
+            <h2 className="text-base font-semibold text-navy-900">Case evidence receipts</h2>
             <p className="mt-1 text-sm text-muted">Append-only events created by the existing renewal services. This view writes nothing.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -581,7 +581,7 @@ function DetailsView({
       </div>
 
       <Card>
-        <h2 className="font-display mb-4 text-lg text-navy-900">Contract timeline</h2>
+        <h2 className="mb-4 text-[15px] font-semibold text-navy-900">Contract timeline</h2>
         <div className="relative h-3 rounded-full bg-verde-100">
           <div className="absolute inset-y-0 right-0 rounded-r-full bg-claret-100" style={{ width: `${100 - gateLeft}%` }} />
           <div className="absolute -top-1 bottom-[-4px] w-0.5 bg-navy-900" style={{ left: `${gateLeft}%` }} />
@@ -593,13 +593,13 @@ function DetailsView({
         </div>
       </Card>
 
-      <Card className="border-gold-300 bg-gold-100/40">
+      <Card className="border-line bg-ivory-100">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-display text-xl text-navy-900">Index-based position · Decree 43</h2>
+          <h2 className="text-base font-semibold text-navy-900">Index-based position · Decree 43</h2>
           {risk.latestIndex && (
             <span className="figure text-xs text-muted">
               {risk.latestIndex.source} · captured {formatDubaiDate(risk.latestIndex.capturedAt)}
-              {risk.latestIndex.provisional && <span className="ml-2 font-bold text-amber-700">awaiting verification</span>}
+              {risk.latestIndex.provisional && <span className="ml-2 font-semibold text-amber-700">awaiting verification</span>}
             </span>
           )}
         </div>
@@ -617,7 +617,7 @@ function DetailsView({
               <Fact label="Calculated ceiling estimate" value={<Money amount={position.ceiling} />} info="A rule-based upper-bound estimate, not an entitlement or proposed rent." />
               <Fact label="Estimated uplift / yr" value={<Money amount={position.valueAtRisk} />} info="The difference between current rent and the calculated estimate." />
             </div>
-            <p className="mt-4 rounded-lg bg-white/70 p-3 text-sm text-navy-700">
+            <p className="mt-4 rounded bg-white/70 p-3 text-sm text-navy-700">
               The calculation produces an estimated band of <b>{position.bandPct}%</b>. Proposed and accepted rents are separate human decisions retained under Terms.
             </p>
           </>
@@ -627,7 +627,7 @@ function DetailsView({
       </Card>
 
       <Card>
-        <h2 className="font-display text-lg text-navy-900">Responsibility boundary</h2>
+        <h2 className="text-[15px] font-semibold text-navy-900">Responsibility boundary</h2>
         <p className="mb-4 mt-1 text-xs text-muted">Seneschal owns the software, workflow, and record. Regulated execution remains with an appropriately authorized party.</p>
         <Table headers={["Layer", "Responsible"]}>
           <WhoRow layer="Source capture and rule-based estimate" owner="Authorized renewal operator" />
@@ -639,7 +639,7 @@ function DetailsView({
 
       {successor && (
         <Card className="border-verde-100 bg-verde-100/30">
-          <h2 className="font-display text-lg text-navy-900">Successor tenancy</h2>
+          <h2 className="text-[15px] font-semibold text-navy-900">Successor tenancy</h2>
           <p className="mt-1 text-sm text-muted">{formatDubaiDate(successor.startDate)} → {formatDubaiDate(successor.endDate)} · <Money amount={successor.annualRent} />/yr</p>
           <div className="mt-3"><LinkButton href={successor.href}>Open successor tenancy</LinkButton></div>
         </Card>
@@ -672,12 +672,12 @@ function NoticeServiceCard({
         A notice is recorded as served only with a delivery reference, service document, or signed attestation.
       </p>
       {served ? (
-        <div className="rounded-lg border border-verde-100 bg-verde-100/40 p-3 text-sm text-verde-700">
+        <div className="rounded border border-verde-100 bg-verde-100/40 p-3 text-sm text-verde-700">
           Notice served{notice.serviceMethod ? ` via ${label(notice.serviceMethod)}` : ""}, with evidence on file.
         </div>
       ) : canDecide ? (
         <>
-          {pending && <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-100/50 p-3 text-sm text-amber-700">Service is recorded but remains awaiting proof. The case has not advanced to served.</div>}
+          {pending && <div className="mb-3 rounded border border-amber-500/40 bg-amber-100/50 p-3 text-sm text-amber-700">Service is recorded but remains awaiting proof. The case has not advanced to served.</div>}
           <form action={pending ? confirmNoticeServiceAction : serveNoticeAction} className="space-y-3">
             <input type="hidden" name="renewalCaseId" value={renewalCaseId} />
             <input type="hidden" name="tenancyId" value={tenancyId} />
@@ -687,7 +687,7 @@ function NoticeServiceCard({
                 {SERVICE_METHODS.map((method) => <option key={method} value={method}>{label(method)}</option>)}
               </select>
             </Field>
-            <fieldset className="space-y-3 rounded-lg border border-line bg-ivory-100/60 p-3">
+            <fieldset className="space-y-3 rounded border border-line bg-ivory-100/60 p-3">
               <legend className="t-label px-1 text-muted">Proof of service — provide at least one</legend>
               <Field label="Delivery reference" hint="Courier tracking no., registered-post ref, or inbox reference.">
                 <input name="serviceRef" className={inputClass} placeholder="courier / inbox ref" />
@@ -712,7 +712,7 @@ function NoticeServiceCard({
 }
 
 function ReadOnlyNote({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg border border-line bg-ivory-100 p-3 text-sm text-muted">{children}</p>;
+  return <p className="rounded border border-line bg-ivory-100 p-3 text-sm text-muted">{children}</p>;
 }
 
 function WhoRow({ layer, owner }: { layer: string; owner: string }) {
@@ -721,8 +721,8 @@ function WhoRow({ layer, owner }: { layer: string; owner: string }) {
 
 function KeyDate({ label, value, note, hot = false }: { label: string; value: string; note: string; hot?: boolean }) {
   return (
-    <div className={`rounded-lg border p-3 ${hot ? "border-claret-100 bg-claret-100/40" : "border-line bg-ivory-100"}`}>
-      <div className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</div>
+    <div className={`rounded border p-3 ${hot ? "border-claret-100 bg-claret-100/40" : "border-line bg-ivory-100"}`}>
+      <div className="text-[12px] text-muted">{label}</div>
       <div className={`figure mt-1 text-lg font-semibold ${hot ? "text-claret-700" : "text-navy-900"}`}>{value}</div>
       <div className="text-[11px] text-muted">{note}</div>
     </div>
@@ -732,7 +732,7 @@ function KeyDate({ label, value, note, hot = false }: { label: string; value: st
 function Fact({ label, value, info }: { label: string; value: React.ReactNode; info?: string }) {
   return (
     <div>
-      <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted">{label}{info && <InfoTooltip text={info} />}</div>
+      <div className="flex items-center gap-1 text-[12px] text-muted">{label}{info && <InfoTooltip text={info} />}</div>
       <div className="figure mt-0.5 text-lg text-navy-900">{value}</div>
     </div>
   );
@@ -756,18 +756,18 @@ function CeilingScale({
   markers: { label: string; value: number; party: "LANDLORD" | "TENANT" }[];
 }) {
   if (bandPct === 0 || ceiling <= current) {
-    return <div className="rounded-lg border border-line bg-white/60 p-4 text-sm text-navy-700">The rule-based calculation produces no estimated permissible increase. Review the captured source before action.</div>;
+    return <div className="rounded border border-line bg-white/60 p-4 text-sm text-navy-700">The rule-based calculation produces no estimated permissible increase. Review the captured source before action.</div>;
   }
   const span = ceiling - current;
   const at = (value: number) => Math.min(100, Math.max(0, ((value - current) / span) * 100));
   return (
     <div className="px-1 pb-1 pt-8">
-      <div className="relative h-2 rounded-full bg-gradient-to-r from-verde-100 to-gold-100">
+      <div className="relative h-2 rounded-full bg-gradient-to-r from-verde-100 to-amber-100">
         <div className="absolute -top-1.5 right-0 h-5 w-0.5 bg-claret-500" />
         {markers.map((marker, index) => (
           <div key={`${marker.label}-${index}`} className="absolute top-1/2" style={{ left: `${at(marker.value)}%` }}>
-            <span className={`figure absolute -top-7 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold ${marker.party === "TENANT" ? "text-gold-700" : "text-navy-900"}`}>{marker.label}</span>
-            <span className={`absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white ${marker.party === "TENANT" ? "bg-gold-500" : "bg-navy-900"}`} />
+            <span className={`figure absolute -top-7 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold ${marker.party === "TENANT" ? "text-amber-700" : "text-navy-900"}`}>{marker.label}</span>
+            <span className={`absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white ${marker.party === "TENANT" ? "bg-amber-500" : "bg-navy-900"}`} />
           </div>
         ))}
       </div>

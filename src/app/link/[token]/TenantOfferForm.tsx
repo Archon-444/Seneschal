@@ -15,7 +15,7 @@ export function TenantOfferForm({ token }: { token: string }) {
     // Echo the response back as a receipt — the tenant should see exactly
     // what was recorded, not just that "something" was.
     return (
-      <div className="space-y-2 rounded-md bg-verde-100 p-4 text-sm text-verde-700">
+      <div className="space-y-2 rounded bg-verde-100 p-4 text-sm text-verde-700">
         <p className="font-semibold">
           {state.action === "ACCEPT"
             ? "Thank you — your acceptance has been recorded."
@@ -46,7 +46,7 @@ export function TenantOfferForm({ token }: { token: string }) {
       <input type="hidden" name="token" value={token} />
 
       {mode === "counter" && (
-        <div className="space-y-3 rounded-md border border-ivory-300 bg-ivory-100 p-4">
+        <div className="space-y-3 rounded border border-ivory-300 bg-ivory-100 p-4">
           <Field label="Your proposed annual rent (AED)" required>
             <input name="annualRent" type="number" min="1" step="1" required className={inputClass} />
           </Field>
@@ -72,26 +72,26 @@ export function TenantOfferForm({ token }: { token: string }) {
       {mode === "choose" ? (
         <div className="grid grid-cols-3 gap-2">
           <button type="submit" name="action" value="ACCEPT" disabled={pending}
-            className="rounded-md bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50">
+            className="rounded bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50">
             Accept
           </button>
           <button type="button" onClick={() => setMode("counter")}
-            className="rounded-md bg-gold-100 py-3 text-sm font-medium text-gold-700 hover:brightness-95">
+            className="rounded border border-line bg-white py-3 text-sm font-medium text-navy-900 hover:bg-ivory-100">
             Counter
           </button>
           <button type="button" onClick={() => setMode("ask")}
-            className="rounded-md border border-ivory-300 py-3 text-sm font-medium text-navy-700 hover:bg-ivory-100">
+            className="rounded border border-ivory-300 py-3 text-sm font-medium text-navy-700 hover:bg-ivory-100">
             Ask
           </button>
         </div>
       ) : (
         <div className="flex gap-2">
           <button type="submit" name="action" value={mode === "counter" ? "COUNTER" : "ASK"} disabled={pending}
-            className="flex-1 rounded-md bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50">
+            className="flex-1 rounded bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50">
             {pending ? "Sending…" : mode === "counter" ? "Send counter" : "Send question"}
           </button>
           <button type="button" onClick={() => setMode("choose")}
-            className="rounded-md border border-ivory-300 px-4 py-3 text-sm text-navy-500 hover:bg-ivory-100">
+            className="rounded border border-ivory-300 px-4 py-3 text-sm text-navy-500 hover:bg-ivory-100">
             Back
           </button>
         </div>

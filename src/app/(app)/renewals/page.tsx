@@ -13,11 +13,14 @@ import {
   DubaiDate,
   EmptyState,
   Field,
+  Footnote,
   inputClass,
-  KpiCard,
   LinkButton,
   Money,
   PageHeader,
+  Segmented,
+  Stat,
+  StatStrip,
   Table,
   Td,
 } from "@/components/ui";
@@ -77,7 +80,7 @@ export default async function RenewalsPage({
           actions={<LinkButton href="/renewals">Back to renewals</LinkButton>}
         />
         <Card>
-          <p className="mb-4 text-sm text-muted">
+          <p className="mb-3 text-[13px] text-muted">
             Building-specific figures take precedence over community-wide figures. Record the official source and
             review it before relying on an estimated position.
           </p>
@@ -133,46 +136,31 @@ export default async function RenewalsPage({
     <>
       <PageHeader
         title="Renewals"
-        subtitle="A task-led queue showing the next safe action, its reason, and the recorded notice gate."
+        subtitle={`${rows.length} in this view · ${gatesClosing} gate${gatesClosing === 1 ? "" : "s"} closing within 30 days`}
         actions={canWrite ? <LinkButton href="/renewals?view=benchmarks">Community benchmarks</LinkButton> : undefined}
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Renewals in this view" value={rows.length} />
-        <KpiCard label="Gates closing ≤30 days" value={gatesClosing} variant="risk" />
-        <KpiCard label="Est. permissible uplift" value={<Money amount={upliftInPipeline} />} tone="good" />
-        <KpiCard label="Open renewal cases" value={openCases} />
-      </div>
+      <StatStrip className="mb-4">
+        <Stat label="Renewals in this view" value={rows.length} />
+        <Stat label="Gates closing ≤ 30 days" value={gatesClosing} tone={gatesClosing > 0 ? "danger" : "default"} />
+        <Stat label="Est. permissible uplift" value={<Money amount={upliftInPipeline} />} sub="estimate only" />
+        <Stat label="Open renewal cases" value={openCases} />
+      </StatStrip>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <nav aria-label="Renewal views" className="flex flex-wrap gap-2">
-          {VIEWS.map((item) => {
-            const active = item.value === view;
-            return (
-              <Link
-                key={item.value}
-                href={renewalHref(item.value, sort)}
-                aria-current={active ? "page" : undefined}
-                className={`rounded-full border px-3 py-1.5 text-xs font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 ${
-                  active
-                    ? "border-navy-900 bg-navy-900 text-white"
-                    : "border-line bg-white text-navy-700 hover:border-gold-500"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <form method="get" className="flex items-end gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <Segmented
+          ariaLabel="Renewal views"
+          items={VIEWS.map((item) => ({ href: renewalHref(item.value, sort), label: item.label, active: item.value === view }))}
+        />
+        <form method="get" className="flex items-center gap-2">
           {view !== "all" && <input type="hidden" name="view" value={view} />}
-          <label className="text-xs font-semibold text-navy-700">
+          <label className="flex items-center gap-2 text-[12.5px] text-navy-700">
             Sort
-            <select name="sort" defaultValue={sort} className={`${inputClass} ml-2 w-auto py-1.5`}>
+            <select name="sort" defaultValue={sort} className={`${inputClass} h-7 w-auto py-0 pr-7`}>
               {SORTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
-          <button className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-bold text-navy-700 hover:bg-ivory-100">
+          <button className="h-7 rounded border border-line bg-white px-2.5 text-[12.5px] font-medium text-navy-900 hover:bg-ivory-100">
             Apply
           </button>
         </form>
@@ -185,53 +173,53 @@ export default async function RenewalsPage({
           action={view === "all" ? undefined : <LinkButton href="/renewals">Reset view</LinkButton>}
         />
       ) : (
-        <Table stack headers={["Unit · owner", "Next action", "Notice gate", "Renewal", "Index position", "Est. uplift / yr"]}>
+        <Table
+          stack
+          headers={["Unit", "Owner", "Next action", "Urgency", "Notice gate", "Days", "Renewal", "Stage", "Index position", "Est. uplift / yr"]}
+        >
           {rows.map((row) => (
             <tr key={row.tenancyId}>
-              <Td label="Unit · owner">
+              <Td label="Unit" className="whitespace-nowrap">
                 <Link href={`/renewals/${row.tenancyId}`} className="font-medium text-navy-900 hover:underline">
                   {row.unit || "Unit"}
                 </Link>
-                {row.ownerName && <div className="text-xs text-muted">{row.ownerName}</div>}
               </Td>
-              <Td label="Next action">
-                <Link href={row.nextAction.href} className="font-semibold text-navy-900 hover:underline">
+              <Td label="Owner" className="whitespace-nowrap text-navy-700">{row.ownerName ?? "—"}</Td>
+              <Td label="Next action" className="whitespace-nowrap">
+                <Link href={row.nextAction.href} title={row.nextAction.reason} className="text-navy-900 hover:underline">
                   {row.nextAction.label}
                 </Link>
-                <div className="mt-0.5 max-w-xs text-xs text-muted">{row.nextAction.reason}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  {row.nextAction.urgency !== "NONE" && <Badge value={row.nextAction.urgency} />}
-                  {row.stage && <span className="text-[11px] text-muted">Stage: {row.stage.replace(/_/g, " ").toLowerCase()}</span>}
-                </div>
               </Td>
-              <Td label="Notice gate" className="whitespace-nowrap">
-                <DubaiDate value={row.noticeGateAt} />
+              <Td label="Urgency">{row.nextAction.urgency !== "NONE" ? <Badge value={row.nextAction.urgency} /> : <span className="text-muted">—</span>}</Td>
+              <Td label="Notice gate" className="whitespace-nowrap"><DubaiDate value={row.noticeGateAt} /></Td>
+              <Td label="Days" className="text-right">
                 {row.gatePassed ? (
-                  <span className="ml-2 rounded bg-claret-100 px-1.5 py-0.5 text-[10px] font-bold text-claret-700">gate passed</span>
+                  <span className="figure text-claret-500" title="Notice gate passed">−{Math.abs(row.daysToGate)}</span>
                 ) : (
-                  <span className={`ml-2 text-xs ${row.daysToGate <= 30 ? "text-claret-700" : "text-muted"}`}>{row.daysToGate}d</span>
+                  <span className={`figure ${row.daysToGate <= 30 ? "text-navy-900" : "text-muted"}`}>{row.daysToGate}</span>
                 )}
               </Td>
               <Td label="Renewal" className="whitespace-nowrap"><DubaiDate value={row.renewalDate} /></Td>
-              <Td label="Index position">
+              <Td label="Stage" className="whitespace-nowrap text-muted">
+                {row.stage ? row.stage.charAt(0) + row.stage.slice(1).toLowerCase().replace(/_/g, " ") : "—"}
+              </Td>
+              <Td label="Index position" className="whitespace-nowrap">
                 {row.gapPct != null ? (
                   <>{Math.round(row.gapPct * 100)}% below{row.isBenchmark && <span className="text-muted"> (benchmark)</span>}</>
                 ) : (
                   <span className="text-muted">no source yet</span>
                 )}
               </Td>
-              <Td label="Est. uplift / yr">{row.valueAtRisk != null ? <Money amount={row.valueAtRisk} /> : "—"}</Td>
+              <Td label="Est. uplift / yr" className="whitespace-nowrap text-right">{row.valueAtRisk != null ? <Money amount={row.valueAtRisk} /> : <span className="text-muted">—</span>}</Td>
             </tr>
           ))}
         </Table>
       )}
 
-      <Card className="mt-6 border-gold-300 bg-gold-100/40">
-        <p className="text-xs text-muted">
-          Index-based position is an estimate from a recorded DLD Smart Rental Index figure under Decree No. (43) of
-          2013. Seneschal is not a broker or legal adviser — review official sources before serving a notice or agreeing terms.
-        </p>
-      </Card>
+      <Footnote>
+        Index-based position is an estimate from a recorded DLD Smart Rental Index figure under Decree No. (43) of
+        2013. Seneschal is not a broker or legal adviser. Review official sources before serving a notice or agreeing terms.
+      </Footnote>
     </>
   );
 }

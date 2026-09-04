@@ -21,7 +21,7 @@ export default async function ForgotPasswordPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <Logo priority className="mx-auto mb-4 h-20 w-20" />
-          <h1 className="font-display text-4xl text-navy-900">Reset password</h1>
+          <h1 className="text-3xl font-semibold text-navy-900">Reset password</h1>
           <p className="mt-2 text-sm text-navy-500">Staff sign-in for your workspace.</p>
         </div>
         <ForgotForm />

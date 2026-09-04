@@ -58,7 +58,7 @@ export function InviteForm({
         <button
           type="submit"
           disabled={pending || ownerBlocked}
-          className="h-[42px] rounded-lg bg-navy-900 px-4 text-sm font-medium text-ivory-50 hover:brightness-110 disabled:opacity-50"
+          className="h-[42px] rounded bg-navy-900 px-4 text-sm font-medium text-ivory-50 hover:brightness-110 disabled:opacity-50"
         >
           {pending ? "Sending…" : "Send invite"}
         </button>
@@ -111,7 +111,7 @@ export function InviteForm({
       {state?.ok && (
         <div className="text-sm">
           <p className="text-verde-700">Invite created. Share this one-time link — it is shown once:</p>
-          <code className="mt-1 block break-all rounded-lg border border-line bg-ivory-100 p-2 text-xs text-navy-900">
+          <code className="mt-1 block break-all rounded border border-line bg-ivory-100 p-2 text-xs text-navy-900">
             {state.url}
           </code>
         </div>

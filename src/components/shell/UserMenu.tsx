@@ -37,30 +37,29 @@ export function UserMenu({
   signOut: () => Promise<void>;
 }) {
   const itemClass =
-    "flex items-center gap-2 px-3 py-2 text-sm text-navy-700 hover:bg-ivory-100 focus:bg-ivory-100 focus:outline-none";
+    "flex items-center gap-2 px-3 py-1.5 text-[13px] text-navy-700 hover:bg-ivory-100 focus:bg-ivory-100 focus:outline-none";
   return (
     <Dropdown
       label="Account menu"
       align="right"
-      buttonClassName="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-navy-800"
-      panelClassName="w-60 overflow-hidden rounded-lg border border-line bg-white py-1 shadow-lg"
+      buttonClassName="flex h-8 items-center gap-2 rounded px-1.5 text-left hover:bg-ivory-100"
+      panelClassName="w-60 overflow-hidden rounded border border-line bg-white py-1 shadow-md"
       button={
         <>
-          <span className="figure grid h-8 w-8 place-items-center rounded-full bg-gold-100 text-xs font-semibold text-gold-700">
+          <span className="figure grid h-6 w-6 place-items-center rounded-full bg-navy-900 text-[10px] font-semibold text-white">
             {initials(name, email)}
           </span>
           <span className="hidden min-w-0 sm:block">
-            <span className="block truncate text-sm text-ivory-50">{name || email}</span>
-            <span className="block truncate text-xs text-navy-300">{ROLE_LABEL[role] ?? role}</span>
+            <span className="block max-w-48 truncate text-[12.5px] text-navy-900">{name || email}</span>
           </span>
-          <ChevronDownIcon className="hidden text-navy-300 sm:block" />
+          <ChevronDownIcon className="hidden text-muted sm:block" />
         </>
       }
     >
       {(close) => (
         <>
           <div className="border-b border-line px-3 py-2">
-            <div className="truncate text-sm font-medium text-navy-900">{name || email}</div>
+            <div className="truncate text-[13px] font-medium text-navy-900">{name || email}</div>
             <div className="truncate text-xs text-muted">{email}</div>
             <div className="mt-1 truncate text-xs text-muted">
               {workspaceName ? `${workspaceName} · ` : ""}{ROLE_LABEL[role] ?? role}

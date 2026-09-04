@@ -3,18 +3,27 @@
 Dubai real-estate portfolio-oversight & tenancy-evidence platform.
 Next.js 15 (App Router, server components) · TypeScript · Prisma 6 · PostgreSQL · Tailwind v4 · deployed on Vercel.
 
-## Design language (stay on-brand — don't ship a generic dashboard)
+## Design language (modern ERP register — not a marketing site, not a generic dashboard)
 
-Calm, trustworthy, document-grade. **Not** a marketplace/SaaS look; no shadcn-gray defaults.
-Use the **`frontend-design`** skill (`.claude/skills/frontend-design`) when building or reshaping UI.
+Calm, dense, document-grade. Think NetSuite / Odoo 17 / Fiori Horizon, not a SaaS landing page.
+Use the **`frontend-design`** skill (`.claude/skills/frontend-design`) when building or reshaping UI, and
+check the result against the rules below before shipping.
 
-- **Fonts** (`next/font`, self-hosted): Fraunces = display (`.font-display`), Public Sans = body, IBM Plex Mono = money & dates (`.figure`). Money and dates are **always** mono.
+- **Fonts** (`next/font`, self-hosted): one sans, Public Sans, for everything; IBM Plex Mono for money & dates
+  (`.figure`). There is no display serif. Money and dates are **always** mono.
 - **Palette** (Tailwind `@theme` tokens in `src/app/globals.css`):
-  - Surfaces: `ivory-50` (app bg) · `ivory-100` (panels/hover) · `white` (cards) · `line` (#e4decf hairlines)
-  - Ink: `navy-900` (primary) · `navy-500` (secondary) · `muted` (#6b7385)
-  - Accent: `gold-500` (accent) / `gold-700` (text on tint) / `gold-100` (tint)
+  - Surfaces: `ivory-50` (app bg, near-neutral) · `ivory-100` (table heads, hover, inputs) · `white` (panels) · `line` (hairlines)
+  - Ink: `navy-900` (primary, sidebar, primary button) · `navy-700` / `navy-500` (secondary) · `muted` (labels, captions)
   - Semantic: `verde` = good · `amber` = in-progress/warn · `claret` = risk/danger
-- **Reuse the kit** in `src/components/ui.tsx` (`PageHeader`, `Card`, `KpiCard`, `Badge`, `Table`/`Td`, `Money`, `Field`, `inputClass`, `SearchForm`…) and `formatDubaiDate` / `todayInDubai` from `src/server/calculators/dates.ts`. Don't hand-roll a second money or date formatter.
+  - `gold` is the brand mark and the keyboard focus ring **only**. Never a text colour, tint, or panel accent.
+- **Shape**: 1px borders, 4px radii (`rounded`), **no shadows** except floating layers (menus, dialogs, toasts).
+  No eyebrows, no letter-spaced uppercase labels, no pills — status is a small square chip (`Badge`), filters are a
+  `Segmented` control, figures sit in a `StatStrip`, tables are 34px single-line rows inside a `Panel`.
+- **Copy**: page subtitles are facts (a count, a date range, a reference), never taglines. Legal or scope notes go
+  in a `Footnote`, not a card.
+- **Reuse the kit** in `src/components/ui.tsx` (`PageHeader`, `Panel`, `StatStrip`/`Stat`, `Segmented`, `Card`,
+  `Badge`, `Table`/`Td`, `Money`, `Field`, `inputClass`, `SearchForm`, `Footnote`…) and `formatDubaiDate` /
+  `todayInDubai` from `src/server/calculators/dates.ts`. Don't hand-roll a second money or date formatter.
 
 ## Engineering non-negotiables (the parts that actually have to be right)
 

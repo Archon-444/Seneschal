@@ -22,7 +22,7 @@ export function RenewalTaskPath({
   return (
     <Card>
       <div className="mb-4">
-        <h2 className="font-display text-xl text-navy-900">Renewal task path</h2>
+        <h2 className="text-base font-semibold text-navy-900">Renewal task path</h2>
         <p className="mt-1 text-sm text-muted">
           Completed steps read as receipts. The current or awaiting step is expanded; future controls remain unavailable.
         </p>
@@ -35,9 +35,9 @@ export function RenewalTaskPath({
             <li key={task.code}>
               <details
                 open={expanded}
-                className={`group rounded-xl border ${
+                className={`group rounded border ${
                   task.state === "CURRENT"
-                    ? "border-gold-500 bg-gold-100/30"
+                    ? "border-navy-900 bg-navy-50/60"
                     : task.state === "BLOCKED"
                       ? "border-amber-500/50 bg-amber-100/30"
                       : completed
@@ -47,7 +47,7 @@ export function RenewalTaskPath({
               >
                 <summary className="flex cursor-pointer list-none items-start gap-3 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 [&::-webkit-details-marker]:hidden">
                   <span
-                    className={`figure flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    className={`figure flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                       completed
                         ? "bg-verde-700 text-white"
                         : task.state === "CURRENT"

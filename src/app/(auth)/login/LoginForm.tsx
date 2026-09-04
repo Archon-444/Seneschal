@@ -9,8 +9,8 @@ export function LoginForm() {
   const [state, formAction, pending] = useActionState<LoginState, FormData>(loginAction, null);
 
   return (
-    <form action={formAction} className="rounded-lg border border-ivory-300 bg-white p-6 shadow-sm">
-      <label htmlFor="login-email" className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
+    <form action={formAction} className="rounded border border-ivory-300 bg-white p-6">
+      <label htmlFor="login-email" className="mb-1 block text-[12px] font-medium text-navy-700">
         Email address
       </label>
       <input
@@ -23,7 +23,7 @@ export function LoginForm() {
         placeholder="you@example.com"
         className={inputClass}
       />
-      <label htmlFor="login-password" className="mb-1 mt-4 block text-xs font-medium uppercase tracking-wide text-navy-500">
+      <label htmlFor="login-password" className="mb-1 mt-4 block text-[12px] font-medium text-navy-700">
         Password
       </label>
       <input
@@ -44,7 +44,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="mt-4 w-full rounded-md bg-navy-800 py-2 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50"
+        className="mt-4 w-full rounded bg-navy-800 py-2 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50"
       >
         {pending ? "…" : "Sign in"}
       </button>

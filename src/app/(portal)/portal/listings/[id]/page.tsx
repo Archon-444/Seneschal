@@ -62,7 +62,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
         {/* Readiness + lifecycle */}
         <Card>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-display text-lg text-navy-900">Readiness</h2>
+            <h2 className="text-[15px] font-semibold text-navy-900">Readiness</h2>
             <Badge value={listing.status} />
           </div>
           <div className="figure mb-4 text-3xl text-navy-900">{readiness.score}/100</div>
@@ -108,7 +108,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
         {/* Edit */}
         <div className="lg:col-span-2">
           <Card>
-            <h2 className="font-display mb-3 text-lg text-navy-900">Listing details</h2>
+            <h2 className="mb-3 text-[15px] font-semibold text-navy-900">Listing details</h2>
             <form action={updateListingAction} className="grid gap-3 sm:grid-cols-2">
               <input type="hidden" name="id" value={listing.id} />
               <div className="sm:col-span-2">
@@ -153,7 +153,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           </Card>
 
           <Card className="mt-6">
-            <h2 className="font-display mb-3 text-lg text-navy-900">Offers</h2>
+            <h2 className="mb-3 text-[15px] font-semibold text-navy-900">Offers</h2>
             {offers.length === 0 ? (
               <EmptyState title="No offers yet" message="Record a prospect's offer or propose your terms." />
             ) : (
@@ -206,16 +206,16 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
           {decided && (
             <Card className="mt-6">
-              <h2 className="font-display mb-3 text-lg text-navy-900">Contract pack</h2>
+              <h2 className="mb-3 text-[15px] font-semibold text-navy-900">Contract pack</h2>
               {packLinks.length === 0 ? (
                 <p className="text-sm text-muted">An offer is accepted. Generate the summary pack of agreed terms for signature.</p>
               ) : (
                 <div className="mb-3 space-y-3">
                   {packLinks.map(({ pack, url }) => (
-                    <div key={pack.id} className="rounded-md border border-line p-3 text-sm">
+                    <div key={pack.id} className="rounded border border-line p-3 text-sm">
                       <div className="flex items-center justify-between">
                         <span>Pack · <DubaiDate value={pack.createdAt} /> · <Badge value={pack.status} /></span>
-                        <a href={url} target="_blank" rel="noreferrer" className="text-gold-700 hover:underline">View PDF</a>
+                        <a href={url} target="_blank" rel="noreferrer" className="text-navy-700 underline underline-offset-2">View PDF</a>
                       </div>
                       {pack.eSignRef ? <div className="mt-1 text-xs text-muted figure">e-sign ref: {pack.eSignRef}</div> : null}
                       {pack.status !== "SIGNED" && (

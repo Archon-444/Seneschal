@@ -72,7 +72,7 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
 
       {ctx.role === "TENANT" && offers.length > 0 && (
         <Card className="mb-6">
-          <h2 className="font-display mb-3 text-lg text-navy-900">Renewal proposal</h2>
+          <h2 className="mb-3 text-[15px] font-semibold text-navy-900">Renewal proposal</h2>
           <Table stack headers={["v", "From", "Annual rent", "Payment", "Status"]}>
             {offers.map((o) => (
               <tr key={o.id}>
@@ -86,14 +86,14 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
           </Table>
           {openOffer && openOffer.party === "LANDLORD" && (
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <form action={respondToOfferAction} className="rounded-md border border-line p-3">
+              <form action={respondToOfferAction} className="rounded border border-line p-3">
                 <input type="hidden" name="tenancyId" value={id} />
                 <input type="hidden" name="offerId" value={openOffer.id} />
                 <input type="hidden" name="action" value="ACCEPT" />
                 <p className="mb-2 text-sm text-navy-700">Accept the proposed terms.</p>
                 <SubmitButton pendingLabel="Accepting…">Accept</SubmitButton>
               </form>
-              <form action={respondToOfferAction} className="rounded-md border border-line p-3">
+              <form action={respondToOfferAction} className="rounded border border-line p-3">
                 <input type="hidden" name="tenancyId" value={id} />
                 <input type="hidden" name="offerId" value={openOffer.id} />
                 <input type="hidden" name="action" value="COUNTER" />
@@ -109,7 +109,7 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
         </Card>
       )}
 
-      <h2 className="mb-3 font-display text-xl text-navy-900">Payment schedule</h2>
+      <h2 className="mb-3 text-base font-semibold text-navy-900">Payment schedule</h2>
       <p className="mb-3 text-xs text-muted">Record-keeping only — Seneschal never holds funds.</p>
       <Table stack headers={["#", "Due", "Amount", "Instrument", "Status", "Receipt"]}>
         {tenancy.paymentItems.map((p) => {
@@ -125,7 +125,7 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
                 {receipt ? (
                   <form action={viewReceiptAction}>
                     <input type="hidden" name="documentId" value={receipt.id} />
-                    <button type="submit" className="text-gold-700 hover:underline">View</button>
+                    <button type="submit" className="text-navy-700 underline underline-offset-2">View</button>
                   </form>
                 ) : (
                   <span className="text-muted">—</span>
@@ -138,7 +138,7 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
         <div>
-          <h2 className="mb-3 font-display text-xl text-navy-900">Documents</h2>
+          <h2 className="mb-3 text-base font-semibold text-navy-900">Documents</h2>
           {docLinks.length === 0 ? (
             <EmptyState message="No documents on this tenancy yet." />
           ) : (
@@ -147,7 +147,7 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
                 {docLinks.map(({ doc, url }) => (
                   <li key={doc.id} className="flex items-center justify-between">
                     <span>{doc.fileName} <span className="text-muted">· {doc.kind.replace(/_/g, " ")}</span></span>
-                    <a href={url} target="_blank" rel="noreferrer" className="text-gold-700 hover:underline">View</a>
+                    <a href={url} target="_blank" rel="noreferrer" className="text-navy-700 underline underline-offset-2">View</a>
                   </li>
                 ))}
               </ul>
@@ -167,7 +167,7 @@ export default async function TenancyDetailPage({ params }: { params: Promise<{ 
           )}
         </div>
         <div>
-          <h2 className="mb-3 font-display text-xl text-navy-900">Coming up</h2>
+          <h2 className="mb-3 text-base font-semibold text-navy-900">Coming up</h2>
           {tenancy.deadlines.length === 0 ? (
             <EmptyState message="No upcoming deadlines." />
           ) : (

@@ -87,8 +87,8 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
 
       {print && (
         <header className="mb-8 border-b border-line pb-5">
-          <div className="text-xs font-bold uppercase tracking-wider text-gold-700">Seneschal · record of activity</div>
-          <h1 className="font-display mt-2 text-3xl text-navy-900">Evidence record</h1>
+          <div className="text-[12px] font-medium text-muted">Seneschal · record of activity</div>
+          <h1 className="font-semibold mt-2 text-3xl text-navy-900">Evidence record</h1>
           <p className="mt-2 text-sm text-muted">
             Generated {formatDubaiDateTime(new Date())} Dubai · {timeline.total} matching append-only events.
             This is a record of activity and provenance, not a legal conclusion.
@@ -106,7 +106,7 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
             <Link
               href={queryHref(params, { category: undefined, type: undefined })}
               aria-current={!params.category && !params.type ? "page" : undefined}
-              className={`rounded-full border px-3 py-1.5 text-xs font-bold ${!params.category && !params.type ? "border-navy-900 bg-navy-900 text-white" : "border-line bg-white text-navy-700 hover:border-gold-500"}`}
+              className={`rounded border px-2.5 py-1 text-[12.5px] font-medium ${!params.category && !params.type ? "border-navy-900 bg-navy-900 text-white" : "border-line bg-white text-navy-700 hover:bg-ivory-100"}`}
             >
               All records
             </Link>
@@ -117,7 +117,7 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
                   key={category.value}
                   href={queryHref(params, { category: category.value, type: undefined })}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-bold ${active ? "border-navy-900 bg-navy-900 text-white" : "border-line bg-white text-navy-700 hover:border-gold-500"}`}
+                  className={`rounded border px-2.5 py-1 text-[12.5px] font-medium ${active ? "border-navy-900 bg-navy-900 text-white" : "border-line bg-white text-navy-700 hover:bg-ivory-100"}`}
                 >
                   {category.label}
                 </Link>
@@ -125,8 +125,8 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
             })}
           </nav>
 
-          <details open={activeFilters > 0} className="mb-6 rounded-xl border border-line bg-white shadow-sm">
-            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-bold text-navy-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 [&::-webkit-details-marker]:hidden">
+          <details open={activeFilters > 0} className="mb-6 rounded border border-line bg-white">
+            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-navy-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 [&::-webkit-details-marker]:hidden">
               Filters{activeFilters > 0 ? ` · ${activeFilters} active` : ""} <span aria-hidden className="ml-1 text-muted">⌄</span>
             </summary>
             <form method="get" className="grid gap-4 border-t border-line p-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -179,7 +179,7 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
                 </select>
               </Filter>
               <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
-                <button className="rounded-lg bg-navy-900 px-4 py-2.5 text-sm font-bold text-white hover:brightness-110">Apply filters</button>
+                <button className="rounded bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110">Apply filters</button>
                 {activeFilters > 0 && <LinkButton href="/evidence">Reset</LinkButton>}
               </div>
             </form>

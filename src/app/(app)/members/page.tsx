@@ -61,7 +61,7 @@ export default async function MembersPage() {
                   {m.role !== "ORG_ADMIN" && !m.officeAdminOverlay && (
                     <form action={grantOrgAdminAction}>
                       <input type="hidden" name="membershipId" value={m.membershipId} />
-                      <button className="rounded-md border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
+                      <button className="rounded border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
                         + Office admin
                       </button>
                     </form>
@@ -69,14 +69,14 @@ export default async function MembersPage() {
                   {m.officeAdminOverlay && (
                     <form action={revokeOrgAdminAction}>
                       <input type="hidden" name="membershipId" value={m.membershipId} />
-                      <button className="rounded-md border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
+                      <button className="rounded border border-line px-2 py-1 text-navy-700 hover:bg-ivory-100">
                         − Office admin
                       </button>
                     </form>
                   )}
                   <form action={removeMemberAction}>
                     <input type="hidden" name="membershipId" value={m.membershipId} />
-                    <button className="rounded-md border border-line px-2 py-1 text-claret-700 hover:bg-claret-100">
+                    <button className="rounded border border-line px-2 py-1 text-claret-700 hover:bg-claret-100">
                       Remove
                     </button>
                   </form>
@@ -89,7 +89,7 @@ export default async function MembersPage() {
 
       {data.invites.length > 0 && (
         <>
-          <h2 className="font-display mt-8 mb-3 text-lg text-navy-900">Pending invites</h2>
+          <h2 className="font-semibold mt-8 mb-3 text-lg text-navy-900">Pending invites</h2>
           <Table stack headers={["Email", "Seat", "Expires", ""]}>
             {data.invites.map((inv) => (
               <tr key={inv.id}>
@@ -103,7 +103,7 @@ export default async function MembersPage() {
                 <Td>
                   <form action={revokeInviteAction}>
                     <input type="hidden" name="inviteId" value={inv.id} />
-                    <button className="rounded-md border border-line px-2 py-1 text-xs text-claret-700 hover:bg-claret-100">
+                    <button className="rounded border border-line px-2 py-1 text-xs text-claret-700 hover:bg-claret-100">
                       Revoke
                     </button>
                   </form>

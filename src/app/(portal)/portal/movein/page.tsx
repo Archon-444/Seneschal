@@ -49,7 +49,7 @@ export default async function MoveInPage() {
             return (
               <Card key={m.id}>
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="font-display text-lg text-navy-900">{propLabel(m.property)}</h2>
+                  <h2 className="text-[15px] font-semibold text-navy-900">{propLabel(m.property)}</h2>
                   <Badge value={m.status} />
                 </div>
                 {m.notes ? <p className="mb-3 text-sm text-navy-700">{m.notes}</p> : null}
@@ -80,7 +80,7 @@ export default async function MoveInPage() {
                           href={l.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sm text-gold-700 hover:underline"
+                          className="text-sm text-navy-700 underline underline-offset-2"
                         >
                           {l.name}
                         </a>

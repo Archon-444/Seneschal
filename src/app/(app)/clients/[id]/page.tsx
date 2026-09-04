@@ -52,7 +52,7 @@ export default async function ClientDashboardPage({ params }: { params: Promise<
         />
       </div>
 
-      <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Properties</h2>
+      <h2 className="font-semibold mt-8 mb-3 text-xl text-navy-900">Properties</h2>
       {properties.length === 0 ? (
         <EmptyState message="No properties for this client." />
       ) : (
@@ -76,7 +76,7 @@ export default async function ClientDashboardPage({ params }: { params: Promise<
 
       {renewalRows.length > 0 && (
         <>
-          <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Renewals outlook</h2>
+          <h2 className="font-semibold mt-8 mb-3 text-xl text-navy-900">Renewals outlook</h2>
           <Table headers={["Unit", "Notice gate", "Est. permissible uplift", "Stage"]}>
             {renewalRows.map((r) => (
               <tr key={r.tenancyId}>
@@ -96,7 +96,7 @@ export default async function ClientDashboardPage({ params }: { params: Promise<
         </>
       )}
 
-      <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Cheques</h2>
+      <h2 className="font-semibold mt-8 mb-3 text-xl text-navy-900">Cheques</h2>
       {clientPayments.length === 0 ? (
         <EmptyState message="No payment items." />
       ) : (
