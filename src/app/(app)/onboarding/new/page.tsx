@@ -30,7 +30,7 @@ export default async function OnboardingPage() {
       />
       <p className="mb-6 max-w-3xl text-sm text-muted">
         Have the contract as a PDF or photo?{" "}
-        <Link href="/imports" className="text-gold-700 underline-offset-2 hover:underline">
+        <Link href="/imports" className="text-navy-700 underline underline-offset-2">
           Scan it and review the proposed fields
         </Link>{" "}
         — same records, with a human confirm before anything is trusted.

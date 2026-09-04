@@ -17,7 +17,7 @@ export default async function ReportsPage() {
         {clients.map((c) => (
           <form key={c.id} action={generateReportAction}>
             <input type="hidden" name="clientPrincipalId" value={c.id} />
-            <button className="rounded-md border border-navy-100 bg-white px-3 py-1.5 text-sm text-navy-700 hover:bg-ivory-100">
+            <button className="rounded border border-navy-100 bg-white px-3 py-1.5 text-sm text-navy-700 hover:bg-ivory-100">
               Generate — {c.displayName}
             </button>
           </form>

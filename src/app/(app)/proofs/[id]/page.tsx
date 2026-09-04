@@ -62,16 +62,16 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
 
       {decidable && canDecide && (
         <Card className="mb-6 max-w-3xl">
-          <h2 className="font-display mb-3 text-lg text-navy-900">Review submission</h2>
+          <h2 className="mb-3 text-[15px] font-semibold text-navy-900">Review submission</h2>
           <form action={decideProofAction} className="flex items-end gap-3">
             <input type="hidden" name="id" value={id} />
             <Field label="Note">
               <input name="note" className={inputClass} />
             </Field>
-            <button name="decision" value="APPROVED" className="rounded-md bg-verde-700 px-4 py-2 text-sm font-medium text-white hover:bg-verde-500">
+            <button name="decision" value="APPROVED" className="rounded bg-verde-700 px-4 py-2 text-sm font-medium text-white hover:bg-verde-500">
               Approve
             </button>
-            <button name="decision" value="REJECTED" className="rounded-md bg-claret-500 px-4 py-2 text-sm font-medium text-white hover:bg-claret-700">
+            <button name="decision" value="REJECTED" className="rounded bg-claret-500 px-4 py-2 text-sm font-medium text-white hover:bg-claret-700">
               Reject & re-open
             </button>
           </form>
@@ -80,7 +80,7 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Submitted documents</h2>
+          <h2 className="mb-3 text-[15px] font-semibold text-navy-900">Submitted documents</h2>
           <Table stack headers={["File", "Uploaded"]}>
             {docs.map((d) => (
               <tr key={d.id}>
@@ -92,7 +92,7 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
             ))}
           </Table>
 
-          <h2 className="font-display mt-6 mb-3 text-lg text-navy-900">Secure links</h2>
+          <h2 className="font-semibold mt-6 mb-3 text-lg text-navy-900">Secure links</h2>
           <Table stack headers={["Created", "Expires", "Uses", "State", ""]}>
             {links.map((l) => (
               <tr key={l.id}>
@@ -118,7 +118,7 @@ export default async function ProofDetailPage({ params }: { params: Promise<{ id
         </div>
         <div>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="font-display text-lg text-navy-900">Evidence trail</h2>
+            <h2 className="text-[15px] font-semibold text-navy-900">Evidence trail</h2>
             {canReadEvidence && <LinkButton href={`/evidence?proof=${id}`}>Open filtered evidence</LinkButton>}
           </div>
           {!canReadEvidence || !evidence ? (

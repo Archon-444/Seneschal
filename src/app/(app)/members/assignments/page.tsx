@@ -31,7 +31,7 @@ export default async function AssignmentsPage() {
       {grid.delegates.length === 0 || grid.properties.length === 0 ? (
         <EmptyState message="Add an agent and at least one property to wire assignments." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+        <div className="overflow-x-auto rounded border border-line bg-white">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line bg-ivory-100 text-left">
@@ -73,10 +73,10 @@ export default async function AssignmentsPage() {
                               type="submit"
                               aria-pressed={isAssigned}
                               aria-label={isAssigned ? "Assigned — revoke" : "Not assigned — assign"}
-                              className={`h-7 w-7 rounded-md border text-xs font-bold ${
+                              className={`h-7 w-7 rounded border text-xs font-semibold ${
                                 isAssigned
                                   ? "border-verde-700 bg-verde-100 text-verde-700"
-                                  : "border-line bg-ivory-100 text-muted hover:border-gold-500"
+                                  : "border-line bg-ivory-100 text-muted hover:bg-ivory-100"
                               }`}
                             >
                               {isAssigned ? "✓" : ""}

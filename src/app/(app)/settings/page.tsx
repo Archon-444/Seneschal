@@ -30,7 +30,7 @@ export default async function SettingsPage() {
       <PageHeader eyebrow="Account" title="Settings" subtitle="Your profile and how Seneschal reaches you." />
 
       <div id="profile" className="mb-8 max-w-2xl scroll-mt-20">
-        <h2 className="font-display mb-3 text-lg text-navy-900">Profile</h2>
+        <h2 className="mb-3 text-[15px] font-semibold text-navy-900">Profile</h2>
         <Card>
           <form action={updateProfileAction} className="space-y-4">
             <Field label="Name">
@@ -48,14 +48,14 @@ export default async function SettingsPage() {
       </div>
 
       <div id="notifications" className="max-w-2xl scroll-mt-20">
-        <h2 className="font-display mb-1 text-lg text-navy-900">Notifications</h2>
+        <h2 className="font-semibold mb-1 text-lg text-navy-900">Notifications</h2>
         <p className="mb-3 text-sm text-muted">
           Choose how each kind of alert reaches your email. The in-app bell always shows everything. Critical events —
           a bounced cheque or the 72-hour notice window — are emailed immediately whatever you pick here.
         </p>
         <Card>
           <form action={updateNotificationPrefsAction}>
-            <div className="flex items-center gap-3 border-b border-line pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gold-700">
+            <div className="flex items-center gap-3 border-b border-line pb-2 text-[12px] font-medium text-muted">
               <div className="flex-1">Alert</div>
               <div className="w-14 text-center">In-app</div>
               <div className="w-44">Email</div>
@@ -69,7 +69,7 @@ export default async function SettingsPage() {
                     name={`inapp_${p.category}`}
                     defaultChecked={p.inAppEnabled}
                     aria-label={`Show ${CATEGORY_LABEL[p.category] ?? p.category} in the bell`}
-                    className="h-4 w-4 accent-gold-500"
+                    className="h-4 w-4 accent-navy-900"
                   />
                 </div>
                 <select name={`cadence_${p.category}`} defaultValue={p.cadence} className={`${inputClass} w-44`}>

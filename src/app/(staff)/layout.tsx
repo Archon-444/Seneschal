@@ -15,12 +15,12 @@ export default async function StaffLayout({ children }: { children: React.ReactN
     <div className="min-h-screen">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-navy-900 focus:shadow-md"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-navy-900 focus:shadow-md"
       >
         Skip to content
       </a>
       <header className="flex items-center justify-between border-b border-gold-500 bg-navy-900 px-8 py-4">
-        <Link href="/admin" className="font-display text-xl text-gold-300">
+        <Link href="/admin" className="text-base font-semibold text-gold-300">
           Seneschal · Platform console
         </Link>
         <div className="flex items-center gap-4 text-xs text-ivory-200">

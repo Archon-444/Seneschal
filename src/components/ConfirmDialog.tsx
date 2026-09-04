@@ -70,9 +70,9 @@ export function ConfirmDialog({
         role="alertdialog"
         aria-labelledby={titleId}
         aria-describedby={messageId}
-        className="seneschal-dialog m-auto w-full max-w-sm rounded-xl border border-line bg-white p-6 shadow-lg"
+        className="seneschal-dialog m-auto w-full max-w-sm rounded border border-line bg-white p-6 shadow-lg"
       >
-        <h2 id={titleId} className="font-display text-lg font-semibold text-navy-900">
+        <h2 id={titleId} className="text-[15px] font-semibold text-navy-900">
           {title}
         </h2>
         <div id={messageId} className="mt-2 text-sm text-muted">

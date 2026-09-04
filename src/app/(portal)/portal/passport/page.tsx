@@ -88,7 +88,7 @@ export default async function PassportPage() {
       </Card>
 
       <section className="mt-8 max-w-3xl">
-        <h2 className="mb-3 font-display text-xl text-navy-900">Supporting documents</h2>
+        <h2 className="mb-3 text-base font-semibold text-navy-900">Supporting documents</h2>
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             {docLinks.length === 0 ? (
@@ -108,7 +108,7 @@ export default async function PassportPage() {
                       <DubaiDate value={doc.createdAt} />
                     </Td>
                     <Td>
-                      <a href={url} target="_blank" rel="noreferrer" className="text-gold-700 hover:underline">
+                      <a href={url} target="_blank" rel="noreferrer" className="text-navy-700 underline underline-offset-2">
                         View
                       </a>
                     </Td>

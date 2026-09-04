@@ -25,7 +25,7 @@ export function RequestOwnerApprovalForm({
         <button
           type="submit"
           disabled={pending}
-          className="text-xs text-navy-500 underline-offset-2 hover:text-gold-700 hover:underline disabled:opacity-50"
+          className="text-xs text-navy-500 underline-offset-2 hover:text-navy-700 underline underline-offset-2 disabled:opacity-50"
         >
           {pending ? "Requesting…" : "Request owner sign-off"}
         </button>
@@ -33,7 +33,7 @@ export function RequestOwnerApprovalForm({
       {state?.ok && (
         <div className="max-w-xs text-xs">
           <p className="text-verde-700">Share this one-time link. It is shown once:</p>
-          <code className="mt-1 block break-all rounded-lg border border-line bg-ivory-100 p-2 text-[11px] text-navy-900">
+          <code className="mt-1 block break-all rounded border border-line bg-ivory-100 p-2 text-[11px] text-navy-900">
             {state.url}
           </code>
         </div>

@@ -24,7 +24,7 @@ import { addCalendarEntryAction, completeDeadlineAction } from "../actions";
 /** Shared tone mapping for a deadline chip — one definition used by both the
  *  mobile per-day list and the desktop grid, at their own densities. */
 function DeadlineChip({ label, manual, dense = false }: { label: string; manual: boolean; dense?: boolean }) {
-  const tone = manual ? "bg-gold-100 text-gold-700" : "bg-navy-50 text-navy-700";
+  const tone = manual ? "bg-amber-100 text-amber-700" : "bg-navy-50 text-navy-700";
   return dense ? (
     <div className={`mt-1 truncate rounded px-1 py-0.5 text-[10px] ${tone}`} title={label}>
       {label}
@@ -101,7 +101,7 @@ export default async function CalendarPage({
   });
 
   const isManual = (d: (typeof all)[number]) => isManualDeadline(d);
-  const navLink = "focus-ring rounded-md border border-line bg-white px-2.5 py-1 text-navy-500 hover:bg-ivory-100 hover:text-navy-900";
+  const navLink = "focus-ring rounded border border-line bg-white px-2.5 py-1 text-navy-500 hover:bg-ivory-100 hover:text-navy-900";
   // Defined once per render (not per grid cell) — every cell's shown/rest
   // items map through this same reference.
   const chip = (d: (typeof all)[number]) => (
@@ -149,7 +149,7 @@ export default async function CalendarPage({
         <Link href={`/calendar?month=${prev}`} aria-label="Previous month" className={navLink}>
           ←
         </Link>
-        <span className="font-display text-xl text-navy-900">{monthLabel}</span>
+        <span className="text-base font-semibold text-navy-900">{monthLabel}</span>
         <Link href={`/calendar?month=${next}`} aria-label="Next month" className={navLink}>
           →
         </Link>
@@ -159,7 +159,7 @@ export default async function CalendarPage({
       </div>
 
       {/* Below sm the 7-column grid is untappable — swap to a per-day list. */}
-      <div className="rounded-lg border border-ivory-300 bg-white p-3 text-sm shadow-sm sm:hidden">
+      <div className="rounded border border-ivory-300 bg-white p-3 text-sm sm:hidden">
         {inMonth.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted">No deadlines this month.</p>
         ) : (
@@ -168,7 +168,7 @@ export default async function CalendarPage({
             .map(([dayKey, dayItems]) => (
               <div key={dayKey} className="border-b border-dashed border-line py-2 last:border-0">
                 <div
-                  className={`figure text-xs font-semibold ${dayKey === isoDate(today) ? "text-gold-700" : "text-navy-500"}`}
+                  className={`figure text-xs font-semibold ${dayKey === isoDate(today) ? "text-navy-900" : "text-navy-500"}`}
                 >
                   <DubaiDate value={dayItems[0].dueAt} />
                   {dayKey === isoDate(today) && " · today"}
@@ -181,11 +181,11 @@ export default async function CalendarPage({
         )}
       </div>
 
-      <div className="hidden grid-cols-7 overflow-hidden rounded-lg border border-ivory-300 bg-white text-sm shadow-sm sm:grid">
+      <div className="hidden grid-cols-7 overflow-hidden rounded border border-ivory-300 bg-white text-sm sm:grid">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div
             key={d}
-            className="border-b border-ivory-200 bg-ivory-100 px-2 py-1.5 text-xs font-semibold uppercase text-navy-500"
+            className="border-b border-ivory-200 bg-ivory-100 px-2 py-1.5 text-[12px] font-medium text-navy-700"
           >
             {d}
           </div>
@@ -201,12 +201,12 @@ export default async function CalendarPage({
           return (
             <div
               key={i}
-              className={`min-h-20 border-b border-r border-ivory-200 p-1.5 ${isToday ? "bg-gold-100/50 ring-1 ring-inset ring-gold-500/40" : ""}`}
+              className={`min-h-20 border-b border-r border-ivory-200 p-1.5 ${isToday ? "bg-navy-50/60 ring-1 ring-inset ring-navy-500/40" : ""}`}
             >
               {day && (
                 <>
                   <span
-                    className={`figure inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs ${isToday ? "bg-gold-500 font-bold text-navy-900" : "text-navy-300"}`}
+                    className={`figure inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs ${isToday ? "bg-navy-900 font-semibold text-white" : "text-navy-300"}`}
                   >
                     {day}
                   </span>
@@ -231,7 +231,7 @@ export default async function CalendarPage({
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <div>
-          <h2 className="font-display mb-3 text-xl text-claret-700">Overdue</h2>
+          <h2 className="mb-3 text-base font-semibold text-claret-700">Overdue</h2>
           {overdue.length === 0 ? (
             <EmptyState message="Nothing overdue." />
           ) : (
@@ -250,7 +250,7 @@ export default async function CalendarPage({
           )}
         </div>
         <div>
-          <h2 className="font-display mb-3 text-xl text-navy-900">Upcoming</h2>
+          <h2 className="mb-3 text-base font-semibold text-navy-900">Upcoming</h2>
           {upcoming.length === 0 ? (
             <EmptyState message="No upcoming deadlines." />
           ) : (

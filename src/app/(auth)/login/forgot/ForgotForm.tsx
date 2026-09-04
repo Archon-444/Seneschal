@@ -9,11 +9,11 @@ export function ForgotForm() {
   const [state, formAction, pending] = useActionState<ResetRequestState, FormData>(requestResetAction, null);
 
   return (
-    <form action={formAction} className="rounded-lg border border-ivory-300 bg-white p-6 shadow-sm">
+    <form action={formAction} className="rounded border border-ivory-300 bg-white p-6">
       <p className="mb-3 text-sm text-navy-700">
         Enter the email on your account. If it matches, we will send a one-time reset link.
       </p>
-      <label htmlFor="reset-email" className="mb-1 block text-xs font-medium uppercase tracking-wide text-navy-500">
+      <label htmlFor="reset-email" className="mb-1 block text-[12px] font-medium text-navy-700">
         Email address
       </label>
       <input
@@ -40,7 +40,7 @@ export function ForgotForm() {
       <button
         type="submit"
         disabled={pending}
-        className="mt-4 w-full rounded-md bg-navy-800 py-2 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50"
+        className="mt-4 w-full rounded bg-navy-800 py-2 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50"
       >
         {pending ? "…" : "Send reset link"}
       </button>

@@ -19,11 +19,11 @@ export default async function ReportViewPage({ params }: { params: Promise<{ id:
     <div className="mx-auto max-w-4xl bg-white p-10 print:p-0">
       <div className="mb-8 flex items-start justify-between border-b-2 border-navy-900 pb-6">
         <div>
-          <div className="font-display text-3xl text-navy-900">Seneschal</div>
+          <div className="font-semibold text-3xl text-navy-900">Seneschal</div>
           <div className="mt-1 text-sm text-navy-500">Monthly portfolio report</div>
         </div>
         <div className="text-right">
-          <div className="font-display text-xl text-navy-900">{data.client.displayName}</div>
+          <div className="text-base font-semibold text-navy-900">{data.client.displayName}</div>
           <div className="figure text-sm text-navy-500">Generated {data.generatedAt}</div>
         </div>
       </div>
@@ -123,7 +123,7 @@ export default async function ReportViewPage({ params }: { params: Promise<{ id:
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mb-8">
-      <h2 className="font-display mb-3 text-xl text-navy-900">{title}</h2>
+      <h2 className="mb-3 text-base font-semibold text-navy-900">{title}</h2>
       {children}
     </section>
   );

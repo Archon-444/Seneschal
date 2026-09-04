@@ -29,11 +29,11 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
         </p>
       )}
       <Card className="mb-6 max-w-2xl">
-        <div className="text-xs font-medium uppercase tracking-wide text-navy-300">SHA-256 at ingest</div>
+        <div className="text-[12px] text-muted">SHA-256 at ingest</div>
         <div className="figure mt-1 break-all text-sm text-navy-700">{doc!.sha256}</div>
       </Card>
 
-      <h2 className="font-display mb-3 text-xl text-navy-900">Access log</h2>
+      <h2 className="mb-3 text-base font-semibold text-navy-900">Access log</h2>
       <Table headers={["When (UTC)", "Action", "Actor", "Via link", "IP"]}>
         {log.map((entry) => (
           <tr key={entry.id}>

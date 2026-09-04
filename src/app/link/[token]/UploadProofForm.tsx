@@ -21,7 +21,7 @@ export function UploadProofForm({ token }: { token: string }) {
   if (state.status === "done") {
     const names = state.fileNames ?? [];
     return (
-      <div className="space-y-2 rounded-md bg-verde-100 p-4 text-sm text-verde-700">
+      <div className="space-y-2 rounded bg-verde-100 p-4 text-sm text-verde-700">
         <p className="font-semibold">
           Thank you — {names.length === 1 ? "your file was" : `your ${names.length} files were`}{" "}
           received and recorded.
@@ -53,7 +53,7 @@ export function UploadProofForm({ token }: { token: string }) {
           required
           accept="image/*,application/pdf"
           onChange={onFilesChange}
-          className="block w-full text-sm text-navy-700 file:mr-3 file:rounded-md file:border-0 file:bg-navy-800 file:px-4 file:py-2 file:text-sm file:text-ivory-50"
+          className="block w-full text-sm text-navy-700 file:mr-3 file:rounded file:border-0 file:bg-navy-800 file:px-4 file:py-2 file:text-sm file:text-ivory-50"
         />
       </Field>
       <Field label="Note (optional)">
@@ -64,7 +64,7 @@ export function UploadProofForm({ token }: { token: string }) {
       <button
         type="submit"
         disabled={pending || !!sizeError}
-        className="w-full rounded-md bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50"
+        className="w-full rounded bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50"
       >
         {pending ? "Uploading…" : "Submit proof"}
       </button>

@@ -6,8 +6,31 @@ import { deadlineNextAction, listDeadlines } from "@/server/services/deadlines";
 import { listRiskFlags } from "@/server/services/risk";
 import { listRenewalPipeline } from "@/server/services/renewals";
 import { formatDubaiDate, todayInDubai } from "@/server/calculators/dates";
-import { Badge, Card, EmptyState, Eyebrow, KpiCard, Money, PageHeader, resolveScopeLink, Table, Td } from "@/components/ui";
+import {
+  Badge,
+  EmptyState,
+  Footnote,
+  LinkButton,
+  Money,
+  PageHeader,
+  Panel,
+  ScopeLink,
+  Stat,
+  StatStrip,
+  Table,
+  Td,
+} from "@/components/ui";
 import { GettingStarted } from "./GettingStarted";
+
+const RENEWAL_DEADLINE_KINDS = ["NOTICE_GATE", "CONTRACT_EXPIRY", "RENEWAL_DATE", "TENANT_RESPONSE_DUE"];
+
+function daysCell(days: number, gatePassed: boolean) {
+  return (
+    <span className={`figure ${gatePassed ? "text-claret-500" : days <= 30 ? "text-navy-900" : "text-muted"}`}>
+      {gatePassed ? `−${Math.abs(days)}` : days}
+    </span>
+  );
+}
 
 export default async function DashboardPage() {
   const ctx = await requireCtx();
@@ -17,6 +40,7 @@ export default async function DashboardPage() {
   const canReadProofs = hasCapability(ctx, "proofs.read");
   const canReadRenewals = hasCapability(ctx, "renewals.read");
   const canReadRisk = hasCapability(ctx, "riskflags.read");
+  const canReport = hasCapability(ctx, "reports.read");
   const [kpis, deadlines, flags, pipeline, activation] = await Promise.all([
     dashboardKpis(ctx),
     canReadDeadlines ? listDeadlines(ctx) : Promise.resolve([]),
@@ -40,9 +64,9 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Workspace overview"
-        title="Dashboard"
-        subtitle="Know what is due. Know who owns it. Keep the proof."
+        title="Overview"
+        subtitle={`${formatDubaiDate(today)} · Asia/Dubai`}
+        actions={canReport ? <LinkButton href="/reports">Generate monthly report</LinkButton> : undefined}
       />
 
       {activation && (
@@ -54,174 +78,161 @@ export default async function DashboardPage() {
         />
       )}
 
-      {/* Tier 1 — what costs money if it's ignored. Loud only when non-zero. */}
-      <section className="mb-8">
-        <Eyebrow>Needs attention</Eyebrow>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {canReadDeadlines && kpis.overdueDeadlines != null && <KpiCard
-            label="Overdue deadlines" value={kpis.overdueDeadlines}
-            variant={kpis.overdueDeadlines > 0 ? "risk" : "default"}
-            tone={kpis.overdueDeadlines > 0 ? "danger" : "good"}
-            sub={kpis.overdueDeadlines > 0 ? "past the gate" : "all clear"} href="/calendar"
-          />}
-          {canReadPayments && kpis.latePayments != null && <KpiCard
-            label="Late / bounced cheques" value={kpis.latePayments}
-            tone={kpis.latePayments > 0 ? "danger" : "good"}
-            sub={kpis.latePayments > 0 ? "needs follow-up" : "all received"} href="/payments?status=problem"
-          />}
-          {canReadRisk && kpis.openFlags != null && <KpiCard
-            label="Open risk flags" value={kpis.openFlags}
-            tone={kpis.openFlags > 0 ? "warn" : "good"}
-            sub={kpis.openFlags > 0 ? "to review" : "none open"} href="/risk"
-          />}
-          {canReadRenewals && <KpiCard
-            label="Est. permissible uplift · 120 days" value={<Money amount={upliftAtRisk} />}
-            tone="good" sub="captured-index renewals · estimate only" href="/renewals"
-          />}
-        </div>
-      </section>
-
-      {/* Tier 2 — standing figures. Quiet by design. */}
-      <section className="mb-8">
-        <Eyebrow>Portfolio</Eyebrow>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KpiCard label="Properties" value={kpis.properties} href="/properties" />
-          <KpiCard label="Active tenancies" value={kpis.tenancies} href="/properties" />
-          {canReadDeadlines && kpis.upcomingDeadlines != null && <KpiCard label="Deadlines · 30 days" value={kpis.upcomingDeadlines} tone={kpis.upcomingDeadlines > 0 ? "warn" : "default"} href="/calendar" />}
-          {canReadProofs && kpis.openProofs != null && <KpiCard label="Open proof requests" value={kpis.openProofs} href="/proofs" />}
-        </div>
-      </section>
-
-      {canReadRenewals && <section className="mb-8">
-        <div className="mb-3 flex items-end justify-between gap-4">
-          <div>
-            <Eyebrow>Renewal queue</Eyebrow>
-            <h2 className="font-display text-xl text-navy-900">Next actions</h2>
-          </div>
-          <Link href="/renewals?sort=urgency" className="text-sm text-navy-500 hover:text-navy-900">
-            Full queue →
-          </Link>
-        </div>
-        {renewalActions.length === 0 ? (
-          <EmptyState message="No renewal action is currently due." />
-        ) : (
-          <Table stack headers={["Action", "Unit", "Notice gate", "Urgency"]}>
-            {renewalActions.map((row) => (
-              <tr key={row.tenancyId}>
-                <Td label="Action">
-                  <Link href={row.nextAction.href} className="font-semibold text-navy-900 hover:underline">
-                    {row.nextAction.label}
-                  </Link>
-                  <div className="mt-0.5 max-w-xl text-xs text-muted">{row.nextAction.reason}</div>
-                </Td>
-                <Td label="Unit" className="text-xs">{row.unit || "Unit"}</Td>
-                <Td label="Notice gate" className="figure whitespace-nowrap text-xs">
-                  {formatDubaiDate(row.noticeGateAt)}
-                </Td>
-                <Td label="Urgency"><Badge value={row.nextAction.urgency} /></Td>
-              </tr>
-            ))}
-          </Table>
+      {/* One strip: the figures that cost money if ignored first, then standing counts. */}
+      <StatStrip className="mb-4">
+        {canReadDeadlines && kpis.overdueDeadlines != null && (
+          <Stat
+            label="Overdue deadlines"
+            value={kpis.overdueDeadlines}
+            tone={kpis.overdueDeadlines > 0 ? "danger" : "default"}
+            href="/calendar"
+          />
         )}
-      </section>}
+        {canReadPayments && kpis.latePayments != null && (
+          <Stat
+            label="Late / bounced cheques"
+            value={kpis.latePayments}
+            tone={kpis.latePayments > 0 ? "danger" : "default"}
+            href="/payments?status=problem"
+          />
+        )}
+        {canReadRisk && kpis.openFlags != null && (
+          <Stat label="Open risk flags" value={kpis.openFlags} tone={kpis.openFlags > 0 ? "warn" : "default"} href="/risk" />
+        )}
+        {canReadDeadlines && kpis.upcomingDeadlines != null && (
+          <Stat label="Deadlines · next 30 days" value={kpis.upcomingDeadlines} href="/calendar" />
+        )}
+        {canReadProofs && kpis.openProofs != null && (
+          <Stat label="Open proof requests" value={kpis.openProofs} href="/proofs" />
+        )}
+        <Stat label="Properties / active tenancies" value={`${kpis.properties} / ${kpis.tenancies}`} href="/properties" />
+        {canReadRenewals && (
+          <Stat
+            label="Est. permissible uplift · 120 days"
+            value={<Money amount={upliftAtRisk} />}
+            sub="captured-index renewals · estimate only"
+            href="/renewals"
+          />
+        )}
+      </StatStrip>
 
-      {(canReadDeadlines || canReadRisk) && <div className="grid gap-6 lg:grid-cols-2">
-        {canReadDeadlines && <div>
-          <h2 className="font-display mb-3 text-xl text-navy-900">Upcoming</h2>
-          {upcoming.length === 0 ? (
-            <EmptyState message="No upcoming deadlines. The calendar is clear." />
+      {canReadRenewals && (
+        <Panel
+          className="mb-4"
+          title="Next actions"
+          meta={renewalActions.length > 0 ? `${renewalActions.length} of ${pipeline.length} renewals need a step` : undefined}
+          actions={
+            <Link href="/renewals?sort=urgency" className="text-[12.5px] font-medium text-navy-700 hover:underline">
+              Full queue
+            </Link>
+          }
+        >
+          {renewalActions.length === 0 ? (
+            <div className="p-3">
+              <EmptyState message="No renewal action is currently due." />
+            </div>
           ) : (
-            <Card>
-              <ol className="relative ml-1 space-y-4 border-l border-line pl-5">
-                {upcoming.map((d) => {
-                  const hot = d.kind === "NOTICE_GATE";
-                  const renewal = d.tenancyId ? pipeline.find((row) => row.tenancyId === d.tenancyId) : null;
-                  const deadlinePresentation = deadlineNextAction(d);
-                  const canonical = renewal && ["NOTICE_GATE", "CONTRACT_EXPIRY", "RENEWAL_DATE", "TENANT_RESPONSE_DUE"].includes(d.kind)
-                    ? renewal.nextAction
-                    : null;
-                  const presentation = canonical
-                    ? {
-                        label: canonical.label,
-                        reason: canonical.reason,
-                        href: canonical.href,
-                        urgency: canonical.urgency,
-                        responsibleLayer: canonical.responsibleLayer,
-                      }
-                    : {
-                        ...deadlinePresentation,
-                        urgency: hot ? "CRITICAL" : "SCHEDULED",
-                        responsibleLayer: undefined,
-                      };
-                  return (
-                    <li key={d.id} className="relative">
-                      <span
-                        className={`absolute -left-[25px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white ${hot ? "bg-claret-500" : "bg-gold-500"}`}
-                      />
-                      <Link
-                        href={presentation.href}
-                        className="group -m-2 block rounded-lg p-2 transition hover:bg-ivory-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="figure text-[11px] uppercase tracking-wide text-navy-300">
-                              {formatDubaiDate(d.dueAt)}
-                            </div>
-                            <div className="text-sm font-semibold text-navy-900 group-hover:underline">{presentation.label}</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge value={presentation.urgency} />
-                            <span aria-hidden className="text-navy-300 transition group-hover:translate-x-0.5">→</span>
-                          </div>
-                        </div>
-                        {d.tenancy?.property && (
-                          <div className="text-xs text-muted">
-                            {d.tenancy.property.community}
-                            {d.tenancy.property.unitNo ? ` · ${d.tenancy.property.unitNo}` : ""}
-                          </div>
-                        )}
-                        <div className="mt-0.5 text-xs text-muted">{presentation.reason}</div>
-                        {presentation.responsibleLayer && (
-                          <div className="mt-1 text-[11px] text-navy-500">Responsible: {presentation.responsibleLayer}</div>
-                        )}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ol>
-            </Card>
-          )}
-        </div>}
-        {canReadRisk && <div>
-          <h2 className="font-display mb-3 text-xl text-navy-900">Open risk flags</h2>
-          {flags.length === 0 ? (
-            <EmptyState message="No open risk flags." />
-          ) : (
-            <Table headers={["Raised", "Code", "Severity"]}>
-              {flags.slice(0, 8).map((f) => {
-                const accent =
-                  f.severity === "CRITICAL" ? "border-claret-500" : f.severity === "WARN" ? "border-amber-500" : "border-line";
-                const href = resolveScopeLink(f.scopeType, f.scopeId);
-                return (
-                  <tr key={f.id}>
-                    <Td className={`figure whitespace-nowrap border-l-2 ${accent}`}>{formatDubaiDate(f.raisedAt)}</Td>
-                    <Td>{href ? <Link href={href}><Badge value={f.code} /></Link> : <Badge value={f.code} />}</Td>
-                    <Td><Badge value={f.severity} /></Td>
-                  </tr>
-                );
-              })}
+            <Table bare stack headers={["Action", "Unit", "Owner", "Notice gate", "Days", "Urgency", "Responsible"]}>
+              {renewalActions.map((row) => (
+                <tr key={row.tenancyId}>
+                  <Td label="Action" className="whitespace-nowrap">
+                    <Link
+                      href={row.nextAction.href}
+                      title={row.nextAction.reason}
+                      className="font-medium text-navy-900 hover:underline"
+                    >
+                      {row.nextAction.label}
+                    </Link>
+                  </Td>
+                  <Td label="Unit" className="whitespace-nowrap">{row.unit || "Unit"}</Td>
+                  <Td label="Owner" className="whitespace-nowrap text-navy-700">{row.ownerName ?? "—"}</Td>
+                  <Td label="Notice gate" className="figure whitespace-nowrap">{formatDubaiDate(row.noticeGateAt)}</Td>
+                  <Td label="Days" className="text-right">{daysCell(row.daysToGate, row.gatePassed)}</Td>
+                  <Td label="Urgency"><Badge value={row.nextAction.urgency} /></Td>
+                  <Td label="Responsible" className="text-muted"><span className="block max-w-[14rem] truncate" title={row.nextAction.responsibleLayer ?? undefined}>{row.nextAction.responsibleLayer ?? "—"}</span></Td>
+                </tr>
+              ))}
             </Table>
           )}
-          <div className="mt-2 text-right">
-            <Link href="/risk" className="text-sm text-navy-500 hover:text-navy-900">All flags →</Link>
-          </div>
-        </div>}
-      </div>}
+        </Panel>
+      )}
 
-      <Card className="mt-8 bg-ivory-100 text-xs text-navy-500">
-        Seneschal keeps the record and the evidence — it doesn’t hold funds, broker deals, or give legal
-        advice. Figures are rule-based; review before acting.
-      </Card>
+      {(canReadDeadlines || canReadRisk) && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {canReadDeadlines && (
+            <Panel
+              title="Upcoming"
+              meta="next 30 days"
+              actions={<Link href="/calendar" className="text-[12.5px] font-medium text-navy-700 hover:underline">Calendar</Link>}
+            >
+              {upcoming.length === 0 ? (
+                <div className="p-3">
+                  <EmptyState message="No upcoming deadlines. The calendar is clear." />
+                </div>
+              ) : (
+                <Table bare stack headers={["Due", "Item", "Unit", "Urgency"]}>
+                  {upcoming.map((d) => {
+                    const hot = d.kind === "NOTICE_GATE";
+                    const renewal = d.tenancyId ? pipeline.find((row) => row.tenancyId === d.tenancyId) : null;
+                    const canonical = renewal && RENEWAL_DEADLINE_KINDS.includes(d.kind) ? renewal.nextAction : null;
+                    const fallback = deadlineNextAction(d);
+                    const label = canonical ? canonical.label : fallback.label;
+                    const reason = canonical ? canonical.reason : fallback.reason;
+                    const href = canonical ? canonical.href : fallback.href;
+                    const urgency = canonical ? canonical.urgency : hot ? "CRITICAL" : "SCHEDULED";
+                    const unit = d.tenancy?.property
+                      ? `${d.tenancy.property.community}${d.tenancy.property.unitNo ? ` · ${d.tenancy.property.unitNo}` : ""}`
+                      : "—";
+                    return (
+                      <tr key={d.id}>
+                        <Td label="Due" className="figure whitespace-nowrap">{formatDubaiDate(d.dueAt)}</Td>
+                        <Td label="Item" className="whitespace-nowrap">
+                          <Link href={href} title={reason} className="font-medium text-navy-900 hover:underline">
+                            {label}
+                          </Link>
+                        </Td>
+                        <Td label="Unit" className="whitespace-nowrap text-navy-700">{unit}</Td>
+                        <Td label="Urgency"><Badge value={urgency} /></Td>
+                      </tr>
+                    );
+                  })}
+                </Table>
+              )}
+            </Panel>
+          )}
+          {canReadRisk && (
+            <Panel
+              title="Open risk flags"
+              meta={flags.length > 0 ? String(flags.length) : undefined}
+              actions={<Link href="/risk" className="text-[12.5px] font-medium text-navy-700 hover:underline">All flags</Link>}
+            >
+              {flags.length === 0 ? (
+                <div className="p-3">
+                  <EmptyState message="No open risk flags." />
+                </div>
+              ) : (
+                <Table bare headers={["Raised", "Code", "Scope", "Severity"]}>
+                  {flags.slice(0, 8).map((f) => (
+                    <tr key={f.id}>
+                      <Td className="figure whitespace-nowrap">{formatDubaiDate(f.raisedAt)}</Td>
+                      <Td className="whitespace-nowrap font-medium">
+                        {f.code.charAt(0) + f.code.slice(1).toLowerCase().replace(/_/g, " ")}
+                      </Td>
+                      <Td className="whitespace-nowrap"><ScopeLink scopeType={f.scopeType} scopeId={f.scopeId} /></Td>
+                      <Td><Badge value={f.severity} /></Td>
+                    </tr>
+                  ))}
+                </Table>
+              )}
+            </Panel>
+          )}
+        </div>
+      )}
+
+      <Footnote>
+        Seneschal keeps the record and the evidence. It does not hold funds, broker deals, or give legal advice.
+        Figures are rule-based; review before acting.
+      </Footnote>
     </>
   );
 }

@@ -13,7 +13,7 @@ export function ApprovalForm({ token }: { token: string }) {
 
   if (state.status === "done") {
     return (
-      <div className="space-y-2 rounded-md bg-verde-100 p-4 text-sm text-verde-700">
+      <div className="space-y-2 rounded bg-verde-100 p-4 text-sm text-verde-700">
         <p className="font-semibold">
           {state.decision === "APPROVED"
             ? "Thank you — your approval has been recorded."
@@ -40,7 +40,7 @@ export function ApprovalForm({ token }: { token: string }) {
           name="decision"
           value="APPROVED"
           disabled={pending}
-          className="rounded-md bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50"
+          className="rounded bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50"
         >
           {pending ? "Recording…" : "Approve"}
         </button>
@@ -49,7 +49,7 @@ export function ApprovalForm({ token }: { token: string }) {
           name="decision"
           value="REJECTED"
           disabled={pending}
-          className="rounded-md border border-ivory-300 py-3 text-sm font-medium text-navy-700 hover:bg-ivory-100 disabled:opacity-50"
+          className="rounded border border-ivory-300 py-3 text-sm font-medium text-navy-700 hover:bg-ivory-100 disabled:opacity-50"
         >
           Reject
         </button>

@@ -50,7 +50,7 @@ export function Tooltip({
         <span
           role="tooltip"
           id={id}
-          className="absolute bottom-full left-1/2 z-50 mb-1.5 w-max max-w-56 -translate-x-1/2 rounded-lg border border-line bg-navy-900 px-3 py-2 text-xs font-normal leading-normal normal-case tracking-normal text-ivory-50 shadow-md"
+          className="absolute bottom-full left-1/2 z-50 mb-1.5 w-max max-w-56 -translate-x-1/2 rounded border border-line bg-navy-900 px-3 py-2 text-xs font-normal leading-normal normal-case tracking-normal text-ivory-50 shadow-md"
         >
           {label}
         </span>
@@ -65,7 +65,7 @@ export function InfoTooltip({ text }: { text: string }) {
     <Tooltip label={text} triggerLabel="More information">
       <span
         aria-hidden="true"
-        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line bg-ivory-100 text-[10px] font-bold text-muted"
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line bg-ivory-100 text-[10px] font-semibold text-muted"
       >
         i
       </span>

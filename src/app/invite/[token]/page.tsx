@@ -33,16 +33,16 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center justify-center gap-2 text-navy-900">
           <Logo className="h-8 w-8" />
-          <span className="font-display text-2xl">Seneschal</span>
+          <span className="text-xl font-semibold">Seneschal</span>
         </div>
-        <div className="rounded-xl border border-line bg-white p-6 shadow-sm">
+        <div className="rounded border border-line bg-white p-6">
           {!invite || !invite.valid ? (
             <p className="text-sm text-muted">
               This invitation is no longer valid. Ask your workspace admin to send a new one.
             </p>
           ) : (
             <>
-              <h1 className="font-display text-xl text-navy-900">Join {invite.workspaceName}</h1>
+              <h1 className="text-base font-semibold text-navy-900">Join {invite.workspaceName}</h1>
               <p className="mb-4 mt-1 text-sm text-muted">{inviteBlurb(invite.intendedRole, invite.ownerContactName)}</p>
               <AcceptForm token={token} email={invite.email} />
             </>

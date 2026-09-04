@@ -4,7 +4,7 @@
 // risk=claret, ended/void=muted, neutral=navy), so a single flat map is safe.
 // Coverage of all Prisma status enums is enforced by tests/unit/badge-tones.test.ts.
 
-const NEUTRAL = "bg-navy-50 text-navy-500";
+const NEUTRAL = "bg-navy-50 text-navy-700";
 const PROGRESS = "bg-amber-100 text-amber-700";
 const GOOD = "bg-verde-100 text-verde-700";
 const RISK = "bg-claret-100 text-claret-700";
@@ -36,7 +36,7 @@ export const BADGE_TONES: Record<string, string> = {
   CANCELLED: ENDED, CLOSED: ENDED, ARCHIVED: ENDED, SUPERSEDED: ENDED, WITHDRAWN: ENDED,
 };
 
-// A few enum values are too long to read well as a pill; give them a short label.
+// A few enum values are too long to read well as a chip; give them a short label.
 export const BADGE_LABELS: Record<string, string> = {
   SERVICE_RECORDED_PENDING_EVIDENCE: "Service recorded · proof pending",
   PARTIALLY_ACKNOWLEDGED: "Partly acknowledged",

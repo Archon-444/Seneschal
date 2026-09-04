@@ -99,7 +99,7 @@ export default async function PropertyDetailPage({
       {approachingRenewal && (
         <Link
           href={`/renewals/${tenancyFull!.id}`}
-          className="mb-6 inline-flex items-center gap-1 rounded-md border border-gold-300 bg-gold-100/40 px-3 py-1.5 text-sm font-medium text-gold-700 hover:bg-gold-100"
+          className="mb-6 inline-flex items-center gap-1 rounded border border-line bg-ivory-100 px-3 py-1.5 text-sm font-medium text-gold-700 hover:bg-gold-100"
         >
           Approaching renewal · {daysToEnd} days to expiry — view risk report →
         </Link>
@@ -108,7 +108,7 @@ export default async function PropertyDetailPage({
       {tenancyFull && canReadMoveIn && (
         <Card className="mb-6 max-w-3xl">
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="font-display text-lg text-navy-900">Move-in handover</h2>
+            <h2 className="text-[15px] font-semibold text-navy-900">Move-in handover</h2>
             {moveIn ? <Badge value={moveIn.status} /> : null}
           </div>
           {!moveIn && canWriteMoveIn ? (
@@ -157,7 +157,7 @@ export default async function PropertyDetailPage({
       )}
 
       {(property!.usage || property!.makaniNo || property!.dewaPremiseNo || property!.plotNo || property!.sizeSqm) && (
-        <div className="mb-6 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border border-line bg-ivory-100 px-4 py-3 text-sm">
+        <div className="mb-6 flex flex-wrap gap-x-8 gap-y-2 rounded border border-line bg-ivory-100 px-4 py-3 text-sm">
           {property!.usage && <AssetFact label="Usage" value={property!.usage} />}
           {property!.plotNo && <AssetFact label="Plot" value={property!.plotNo} />}
           {property!.makaniNo && <AssetFact label="Makani" value={property!.makaniNo} />}
@@ -196,7 +196,7 @@ export default async function PropertyDetailPage({
               <Detail label="Notice period">
                 <span className="figure">{tenancyFull.noticePeriodDays} days</span>
                 {tenancyFull.noticePeriodDays !== 90 && (
-                  <span className="ml-1 text-xs text-gold-700">(contract override)</span>
+                  <span className="ml-1 text-xs text-amber-700">(contract override)</span>
                 )}
               </Detail>
               <Detail label="Landlord">
@@ -211,8 +211,8 @@ export default async function PropertyDetailPage({
               </Detail>
             </div>
             {pos && (
-              <div className="mt-6 rounded-lg border border-gold-300 bg-gold-100/40 p-4">
-                <h3 className="font-display mb-2 text-lg text-navy-900">Market position</h3>
+              <div className="mt-6 rounded border border-line bg-ivory-100 p-4">
+                <h3 className="font-semibold mb-2 text-lg text-navy-900">Market position</h3>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
                   <MarketFact label="Rent vs market" value={`${Math.abs(rentVsMarketPct)}% ${rentVsMarketPct >= 0 ? "below" : "above"}`} />
                   <MarketFact label="Increase band (Decree 43)" value={`${pos.bandPct}%`} />
@@ -222,11 +222,11 @@ export default async function PropertyDetailPage({
                 <p className="mt-3 text-xs text-muted">
                   Estimated from the captured index{renewalRisk!.latestIndex?.isBenchmark ? " (community benchmark)" : ""} · not
                   legal advice · source captured <DubaiDate value={renewalRisk!.latestIndex!.capturedAt} />.{" "}
-                  <Link href={`/renewals/${tenancyFull.id}`} className="text-gold-700 hover:underline">Full report →</Link>
+                  <Link href={`/renewals/${tenancyFull.id}`} className="text-navy-700 underline underline-offset-2">Full report →</Link>
                 </p>
               </div>
             )}
-            <h3 className="font-display mt-6 mb-2 text-lg text-navy-900">Open deadlines</h3>
+            <h3 className="font-semibold mt-6 mb-2 text-lg text-navy-900">Open deadlines</h3>
             <Table stack headers={["Due", "Kind", "Rule"]}>
               {tenancyFull.deadlines.map((d) => (
                 <tr key={d.id}>
@@ -317,7 +317,7 @@ export default async function PropertyDetailPage({
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-navy-300">{label}</div>
+      <div className="text-[12px] text-muted">{label}</div>
       <div className="mt-0.5 text-navy-900">{children}</div>
     </div>
   );
@@ -326,7 +326,7 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
 function MarketFact({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-[12px] text-muted">{label}</div>
       <div className="figure mt-0.5 text-navy-900">{value}</div>
     </div>
   );
@@ -335,7 +335,7 @@ function MarketFact({ label, value }: { label: string; value: React.ReactNode })
 function AssetFact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <span className="text-xs font-medium uppercase tracking-wide text-muted">{label}</span>
+      <span className="text-[12px] text-muted">{label}</span>
       <div className="figure text-navy-900">{value}</div>
     </div>
   );

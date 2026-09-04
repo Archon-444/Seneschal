@@ -7,14 +7,14 @@ export function SkeletonLine({ className = "" }: { className?: string }) {
   return <div className={`skeleton h-4 ${className}`} />;
 }
 
-export function SkeletonKpiRow({ count = 4 }: { count?: number }) {
+/** Matches <StatStrip>: one bordered row of figures divided by hairlines. */
+export function SkeletonKpiRow({ count = 6 }: { count?: number }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 divide-y divide-line overflow-hidden rounded border border-line bg-white sm:grid-cols-3 sm:divide-y-0 sm:divide-x lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-xl border border-line bg-white p-5 shadow-sm">
-          <div className="skeleton h-3 w-20" />
-          <div className="skeleton mt-3 h-8 w-2/3" />
-          <div className="mt-3 h-px w-7 bg-gold-500/40" />
+        <div key={i} className="px-3.5 py-2.5">
+          <div className="skeleton h-3 w-24" />
+          <div className="skeleton mt-2 h-5 w-10" />
         </div>
       ))}
     </div>
@@ -23,13 +23,13 @@ export function SkeletonKpiRow({ count = 4 }: { count?: number }) {
 
 export function SkeletonTable({ rows = 6, cols = 4 }: { rows?: number; cols?: number }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-      <div className="border-b border-line bg-ivory-100 px-4 py-3">
+    <div className="overflow-hidden rounded border border-line bg-white">
+      <div className="border-b border-line bg-ivory-100 px-3 py-2.5">
         <div className="skeleton h-3 w-32" />
       </div>
       <div className="divide-y divide-line">
         {Array.from({ length: rows }).map((_, r) => (
-          <div key={r} className="flex gap-4 px-4 py-3">
+          <div key={r} className="flex gap-4 px-3 py-2.5">
             {Array.from({ length: cols }).map((_, c) => (
               <div key={c} className="skeleton h-3 flex-1" />
             ))}
@@ -40,32 +40,17 @@ export function SkeletonTable({ rows = 6, cols = 4 }: { rows?: number; cols?: nu
   );
 }
 
-/** Timeline placeholder matching the dashboard "Upcoming" ribbon (an <ol>
- *  with a left rule and date-chipped rows) so the skeleton holds the real
- *  layout instead of flashing a generic table. */
+/** Kept for callers that still import it; the dashboard now lists deadlines in
+ *  a table, so this renders the same shape as SkeletonTable. */
 export function SkeletonTimeline({ rows = 5 }: { rows?: number }) {
-  return (
-    <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
-      <div className="relative ml-1 space-y-4 border-l border-line pl-5">
-        {Array.from({ length: rows }).map((_, i) => (
-          <div key={i} className="space-y-1.5">
-            <div className="skeleton h-3 w-16" />
-            <div className="skeleton h-4 w-3/4" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <SkeletonTable rows={rows} cols={4} />;
 }
 
 /** Generic page skeleton: a header line, an optional KPI row, then a table. */
 export function SkeletonPage({ kpis = true, children }: { kpis?: boolean; children?: ReactNode }) {
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <div className="skeleton h-3 w-24" />
-        <div className="skeleton h-7 w-64" />
-      </div>
+    <div className="space-y-4">
+      <div className="skeleton h-6 w-56" />
       {kpis && <SkeletonKpiRow />}
       {children ?? <SkeletonTable />}
     </div>

@@ -105,20 +105,20 @@ export function CommandPalette({ search }: { search: (q: string) => Promise<Sear
       <button
         type="button"
         onClick={open}
-        className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-ivory-200 hover:bg-navy-800 hover:text-ivory-50"
+        className="flex h-8 w-full max-w-sm items-center gap-2 rounded border border-line bg-ivory-100 px-2.5 text-[12.5px] text-muted hover:border-navy-300 hover:bg-white"
       >
         <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.5-3.5" />
         </svg>
-        <span className="hidden sm:inline">Search</span>
-        <kbd className="hidden rounded border border-navy-700 px-1 text-[10px] text-ivory-200/70 md:inline">⌘K</kbd>
+        <span className="hidden flex-1 text-left sm:inline">Search properties, contacts, clients</span>
+        <kbd className="figure hidden rounded-sm border border-line bg-white px-1 text-[10px] text-muted md:inline">⌘K</kbd>
       </button>
       <dialog
         ref={dialogRef}
         onClose={reset}
         aria-label="Search records"
-        className="seneschal-dialog mx-auto mt-[12vh] w-full max-w-lg rounded-xl border border-line bg-white p-0 shadow-lg"
+        className="seneschal-dialog mx-auto mt-[12vh] w-full max-w-lg rounded border border-line bg-white p-0 shadow-lg"
       >
         <div className="border-b border-line p-3">
           <input
@@ -159,7 +159,7 @@ export function CommandPalette({ search }: { search: (q: string) => Promise<Sear
                       aria-selected={index === active}
                       onMouseEnter={() => setActive(index)}
                       onClick={() => go(hit)}
-                      className={`flex w-full items-baseline justify-between gap-3 rounded-lg px-2 py-2 text-left text-sm ${
+                      className={`flex w-full items-baseline justify-between gap-3 rounded px-2 py-1.5 text-left text-[13px] ${
                         index === active ? "bg-ivory-100 text-navy-900" : "text-navy-700"
                       }`}
                     >

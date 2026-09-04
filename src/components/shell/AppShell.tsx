@@ -15,6 +15,15 @@ import { CloseIcon, MenuIcon, PanelLeftIcon } from "../icons";
 import { Logo } from "../Logo";
 
 const SIDEBAR_COOKIE = "seneschal_sidebar";
+const ZONE_LABEL: Record<string, string> = { WORK: "Work", MANAGE: "Manage" };
+
+/** The nav item whose href is the longest prefix of the current path — what the
+ *  header names as the current section. */
+function currentSection(nav: NavItem[], pathname: string): NavItem | undefined {
+  return nav
+    .filter((i) => pathname === i.href || pathname.startsWith(`${i.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+}
 
 export function AppShell({
   nav,
@@ -47,6 +56,7 @@ export function AppShell({
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const drawerTitleId = useId();
   const pathname = usePathname();
+  const section = currentSection(nav, pathname);
 
   const closeDrawer = useCallback(() => {
     if (drawerRef.current?.open) drawerRef.current.close();
@@ -100,10 +110,15 @@ export function AppShell({
     <Link
       href="/dashboard"
       onClick={onNavigate}
-      className={`flex items-center text-ivory-50 ${full ? "gap-2" : "justify-center"}`}
+      className={`flex min-w-0 items-center text-white ${full ? "gap-2" : "justify-center"}`}
     >
-      <Logo className="h-8 w-8 shrink-0" />
-      {full && <span className="font-display text-2xl">Seneschal</span>}
+      <Logo className="h-6 w-6 shrink-0" />
+      {full && (
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] font-semibold leading-tight">Seneschal</span>
+          {workspaceName && <span className="block truncate text-[11px] leading-tight text-navy-300">{workspaceName}</span>}
+        </span>
+      )}
     </Link>
   );
 
@@ -112,20 +127,20 @@ export function AppShell({
       {/* Keyboard users: first Tab lands here and jumps past the chrome. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-navy-900 focus:shadow-md"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-navy-900 focus:shadow-md"
       >
         Skip to content
       </a>
       {/* Desktop sidebar */}
       <aside
         aria-label="Primary navigation"
-        className={`hidden shrink-0 flex-col border-r border-navy-800 bg-navy-900 text-ivory-100 md:flex ${
-          collapsed ? "w-16" : "w-60"
+        className={`hidden shrink-0 flex-col bg-navy-900 text-navy-100 md:flex ${
+          collapsed ? "w-14" : "w-56"
         }`}
       >
         <div
-          className={`flex h-14 items-center border-b border-navy-700 ${
-            collapsed ? "justify-center px-3" : "px-5"
+          className={`flex h-12 items-center border-b border-navy-800 ${
+            collapsed ? "justify-center px-2" : "px-3.5"
           }`}
         >
           {brand(!collapsed)}
@@ -153,18 +168,18 @@ export function AppShell({
         onClick={(event) => {
           if (event.target === event.currentTarget) closeDrawer();
         }}
-        className="mobile-nav-drawer fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-64 max-w-[calc(100vw-3rem)] border-0 bg-transparent p-0 text-ivory-100 md:hidden"
+        className="mobile-nav-drawer fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-64 max-w-[calc(100vw-3rem)] border-0 bg-transparent p-0 text-navy-100 md:hidden"
       >
         <h2 id={drawerTitleId} className="sr-only">Navigation menu</h2>
-        <aside className="flex h-full flex-col bg-navy-900 text-ivory-100 shadow-xl">
-          <div className="flex min-h-14 items-center justify-between border-b border-navy-700 px-3 py-1.5 pl-5">
+        <aside className="flex h-full flex-col bg-navy-900 text-navy-100 shadow-xl">
+          <div className="flex min-h-12 items-center justify-between border-b border-navy-800 px-3 py-1.5 pl-3.5">
             {brand(true, closeDrawer)}
             <button
               autoFocus
               type="button"
               aria-label="Close navigation menu"
               onClick={closeDrawer}
-              className="grid h-11 w-11 place-items-center rounded-md text-ivory-200 hover:bg-navy-800 hover:text-ivory-50"
+              className="grid h-11 w-11 place-items-center rounded text-navy-100 hover:bg-navy-800 hover:text-white"
             >
               <CloseIcon />
             </button>
@@ -174,7 +189,7 @@ export function AppShell({
       </dialog>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center gap-2 border-b border-navy-800 bg-navy-900 px-3 text-ivory-100">
+        <header className="flex h-12 items-center gap-2 border-b border-line bg-white px-3 text-navy-900 sm:px-4">
           <button
             ref={menuTriggerRef}
             type="button"
@@ -182,7 +197,7 @@ export function AppShell({
             aria-controls="mobile-navigation-drawer"
             aria-expanded={drawerOpen}
             onClick={openDrawer}
-            className="grid h-11 w-11 place-items-center rounded-md hover:bg-navy-800 md:hidden"
+            className="grid h-10 w-10 place-items-center rounded text-navy-700 hover:bg-ivory-100 md:hidden"
           >
             <MenuIcon />
           </button>
@@ -191,18 +206,30 @@ export function AppShell({
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-pressed={collapsed}
             onClick={toggleCollapsed}
-            className="hidden h-9 w-9 place-items-center rounded-md text-ivory-200 hover:bg-navy-800 hover:text-ivory-50 md:grid"
+            className="hidden h-8 w-8 place-items-center rounded text-muted hover:bg-ivory-100 hover:text-navy-900 md:grid"
           >
             <PanelLeftIcon />
           </button>
-          <div className="flex-1" />
-          {search && <CommandPalette search={search} />}
+          {section && (
+            <div className="hidden min-w-0 items-center gap-1.5 text-[12.5px] sm:flex" aria-label="Current section">
+              {section.zone && (
+                <>
+                  <span className="text-muted">{ZONE_LABEL[section.zone]}</span>
+                  <span className="text-muted">/</span>
+                </>
+              )}
+              <span className="truncate font-medium text-navy-900">{section.label}</span>
+            </div>
+          )}
+          <div className="flex flex-1 justify-center px-2">
+            {search && <CommandPalette search={search} />}
+          </div>
           {creates.length > 0 && (
             <Dropdown
               label="Create new"
               align="right"
-              buttonClassName="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ivory-100 hover:bg-navy-800"
-              panelClassName="w-56 overflow-hidden rounded-lg border border-line bg-white py-1 shadow-lg"
+              buttonClassName="flex h-8 items-center gap-1.5 rounded border border-navy-900 bg-navy-900 px-2.5 text-[13px] font-medium text-white hover:bg-navy-800"
+              panelClassName="w-56 overflow-hidden rounded border border-line bg-white py-1 shadow-md"
               button={
                 <>
                   <span className="text-base leading-none" aria-hidden="true">+</span>
@@ -219,7 +246,7 @@ export function AppShell({
                       href={c.href}
                       role="menuitem"
                       onClick={close}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-navy-700 hover:bg-ivory-100"
+                      className="flex items-center gap-2 px-3 py-1.5 text-[13px] text-navy-700 hover:bg-ivory-100"
                     >
                       <Glyph className="shrink-0 text-navy-500" /> {c.label}
                     </Link>
@@ -237,7 +264,7 @@ export function AppShell({
             signOut={signOut}
           />
         </header>
-        <main id="main-content" tabIndex={-1} className="flex-1 px-6 py-8 outline-none sm:px-8">
+        <main id="main-content" tabIndex={-1} className="flex-1 px-4 py-5 outline-none sm:px-6">
           {children}
         </main>
       </div>

@@ -21,21 +21,21 @@ export default async function ImportsPage() {
 
       <ol className="mb-8 max-w-3xl space-y-2 text-sm text-navy-700">
         <li>
-          <span className="figure text-xs text-gold-700">1</span>
+          <span className="figure text-xs text-navy-700">1</span>
           <span className="ml-2">Upload the tenancy contract or Ejari (extract is on by default).</span>
         </li>
         <li>
-          <span className="figure text-xs text-gold-700">2</span>
+          <span className="figure text-xs text-navy-700">2</span>
           <span className="ml-2">Review the proposed landlord and tenant — match someone already on file, or take them as new contacts.</span>
         </li>
         <li>
-          <span className="figure text-xs text-gold-700">3</span>
+          <span className="figure text-xs text-navy-700">3</span>
           <span className="ml-2">Confirm. That writes the property, tenancy, parties, cheques and deadlines together.</span>
         </li>
       </ol>
       <p className="mb-6 max-w-3xl text-xs text-muted">
         Prefer to type it?{" "}
-        <Link href="/onboarding/new" className="text-gold-700 underline-offset-2 hover:underline">
+        <Link href="/onboarding/new" className="text-navy-700 underline underline-offset-2">
           Onboard a tenancy by hand
         </Link>
         .
@@ -43,7 +43,7 @@ export default async function ImportsPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Extract from document (OCR)</h2>
+          <h2 className="mb-3 text-[15px] font-semibold text-navy-900">Extract from document (OCR)</h2>
           <p className="mb-3 text-xs text-navy-500">
             Upload a contract or Ejari certificate. The model proposes landlord, tenant, unit and
             term with per-field confidence; you review every field — and decide whether each party
@@ -59,7 +59,7 @@ export default async function ImportsPage() {
           />
         </Card>
         <Card>
-          <h2 className="font-display mb-3 text-lg text-navy-900">Excel / CSV import</h2>
+          <h2 className="mb-3 text-[15px] font-semibold text-navy-900">Excel / CSV import</h2>
           <p className="mb-2 text-xs text-navy-500">
             Column headers must match the template exactly — there is no mapping step. Rows are
             staged into a batch for per-row review before anything commits.
@@ -99,7 +99,7 @@ export default async function ImportsPage() {
 
       {reviewable.length > 0 && (
         <>
-          <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Awaiting review</h2>
+          <h2 className="font-semibold mt-8 mb-3 text-xl text-navy-900">Awaiting review</h2>
           <Table headers={["Created", "Model", "Status", ""]}>
             {reviewable.map((j) => (
               <tr key={j.id}>
@@ -117,7 +117,7 @@ export default async function ImportsPage() {
         </>
       )}
 
-      <h2 className="font-display mt-8 mb-3 text-xl text-navy-900">Batches</h2>
+      <h2 className="font-semibold mt-8 mb-3 text-xl text-navy-900">Batches</h2>
       {batches.length === 0 ? (
         <EmptyState message="No import batches yet." />
       ) : (

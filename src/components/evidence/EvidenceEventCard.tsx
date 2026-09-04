@@ -4,10 +4,10 @@ import type { PresentedEvidenceEvent } from "@/server/services/evidencePresenter
 
 export function EvidenceEventCard({ event, print = false }: { event: PresentedEvidenceEvent; print?: boolean }) {
   return (
-    <article id={`event-${event.id}`} className="scroll-mt-28 rounded-xl border border-line bg-white p-5 shadow-sm print:break-inside-avoid print:shadow-none">
+    <article id={`event-${event.id}`} className="scroll-mt-28 rounded border border-line bg-white p-5 print:break-inside-avoid print:shadow-none">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-display text-lg text-navy-900">{event.title}</h2>
+          <h2 className="text-[15px] font-semibold text-navy-900">{event.title}</h2>
           <p className="mt-1 text-sm text-navy-700">{event.summary}</p>
         </div>
         <time dateTime={event.occurredAt.toISOString()} className="figure whitespace-nowrap text-xs font-semibold text-navy-500">
@@ -17,17 +17,17 @@ export function EvidenceEventCard({ event, print = false }: { event: PresentedEv
 
       <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
         <div>
-          <dt className="font-bold uppercase tracking-wide text-muted">Actor</dt>
+          <dt className="font-medium text-muted">Actor</dt>
           <dd className="mt-0.5 text-navy-700">{event.actorLabel}</dd>
         </div>
         {event.onBehalfOfLabel && (
           <div>
-            <dt className="font-bold uppercase tracking-wide text-muted">On behalf of</dt>
+            <dt className="font-medium text-muted">On behalf of</dt>
             <dd className="mt-0.5 text-navy-700">{event.onBehalfOfLabel}</dd>
           </div>
         )}
         <div>
-          <dt className="font-bold uppercase tracking-wide text-muted">Scope</dt>
+          <dt className="font-medium text-muted">Scope</dt>
           <dd className="mt-0.5">
             {event.scopeHref ? <Link href={event.scopeHref} className="font-semibold text-navy-500 hover:underline">{event.scopeLabel}</Link> : <span className="text-navy-700">{event.scopeLabel}</span>}
           </dd>
@@ -38,7 +38,7 @@ export function EvidenceEventCard({ event, print = false }: { event: PresentedEv
         <div className="mt-4 grid gap-3 border-t border-line pt-3 text-xs lg:grid-cols-2">
           {event.relatedLinks.length > 0 && (
             <div>
-              <div className="font-bold uppercase tracking-wide text-muted">Related records</div>
+              <div className="font-medium text-muted">Related records</div>
               <ul className="mt-1 space-y-1">
                 {event.relatedLinks.map((item, index) => (
                   <li key={`${item.label}-${index}`} className="text-navy-700">
@@ -51,7 +51,7 @@ export function EvidenceEventCard({ event, print = false }: { event: PresentedEv
           )}
           {event.provenance.length > 0 && (
             <div>
-              <div className="font-bold uppercase tracking-wide text-muted">Provenance</div>
+              <div className="font-medium text-muted">Provenance</div>
               <ul className="mt-1 space-y-1 text-navy-700">
                 {event.provenance.map((item) => <li key={item} className="break-words">{item}</li>)}
               </ul>
@@ -61,7 +61,7 @@ export function EvidenceEventCard({ event, print = false }: { event: PresentedEv
       )}
 
       {event.correctionState.map((correction) => (
-        <div key={`${correction.kind}-${correction.eventIds.join("-")}`} className="mt-3 rounded-lg border border-amber-500/40 bg-amber-100/40 p-3 text-xs text-amber-700">
+        <div key={`${correction.kind}-${correction.eventIds.join("-")}`} className="mt-3 rounded border border-amber-500/40 bg-amber-100/40 p-3 text-xs text-amber-700">
           <div className="font-semibold">{correction.label}</div>
           <div className="mt-1 flex flex-wrap gap-3">
             {correction.eventIds.map((id) => <Link key={id} href={`/evidence?event=${encodeURIComponent(id)}#event-${id}`} className="hover:underline">Event {id.slice(0, 8)}…</Link>)}
@@ -70,7 +70,7 @@ export function EvidenceEventCard({ event, print = false }: { event: PresentedEv
       ))}
 
       {!print && (
-        <details className="mt-4 rounded-lg border border-line bg-ivory-100/60 print:hidden">
+        <details className="mt-4 rounded border border-line bg-ivory-100/60 print:hidden">
           <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold text-navy-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500 [&::-webkit-details-marker]:hidden">
             Technical details <span aria-hidden className="ml-1 text-muted">⌄</span>
           </summary>

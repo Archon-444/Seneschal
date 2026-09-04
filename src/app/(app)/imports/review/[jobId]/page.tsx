@@ -24,7 +24,7 @@ function confidenceTone(c: number | undefined): string {
   if (c == null) return "text-navy-300";
   const pct = Math.round(c * 100);
   if (pct >= 95) return "text-verde-700";
-  if (pct >= 85) return "text-gold-700";
+  if (pct >= 85) return "text-amber-700";
   return "text-claret-500";
 }
 
@@ -66,7 +66,7 @@ function ProposedField({
         <span>
           {label}
           {required && (
-            <span className="ml-0.5 text-gold-700" aria-hidden="true">
+            <span className="ml-0.5 text-claret-500" aria-hidden="true">
               *
             </span>
           )}
@@ -185,21 +185,21 @@ export default async function ExtractionReviewPage({
 
       <ol className="mb-8 max-w-3xl space-y-2 border-b border-line pb-6 text-sm text-navy-700">
         <li>
-          <span className="figure text-xs text-gold-700">1</span>
+          <span className="figure text-xs text-navy-700">1</span>
           <span className="ml-2">
             Scan — proposed from{" "}
-            <Link href={`/vault/${doc.id}`} className="text-gold-700 underline-offset-2 hover:underline">
+            <Link href={`/vault/${doc.id}`} className="text-navy-700 underline underline-offset-2">
               {doc.fileName}
             </Link>
             {job!.model ? ` · ${job!.model}` : ""}
           </span>
         </li>
         <li>
-          <span className="figure text-xs text-gold-700">2</span>
+          <span className="figure text-xs text-navy-700">2</span>
           <span className="ml-2">Review — match or create the landlord and tenant, then check the asset and term (this screen).</span>
         </li>
         <li>
-          <span className="figure text-xs text-gold-700">3</span>
+          <span className="figure text-xs text-navy-700">3</span>
           <span className="ml-2">Commit — writes the property, tenancy, parties, cheques and deadlines together.</span>
         </li>
       </ol>
@@ -211,7 +211,7 @@ export default async function ExtractionReviewPage({
           ≥95% — reads clean, verify at a glance
         </span>
         <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-gold-500" />
+          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-navy-500" />
           85–94% — check against the source snippet
         </span>
         <span className="flex items-center gap-1.5">
