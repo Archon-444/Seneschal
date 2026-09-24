@@ -30,6 +30,27 @@ describe("runSeed — access-model gallery", () => {
     expect(memberships[0].role).toBe("WORKSPACE_ADMIN");
   });
 
+  it("shifts every fixed demo date by shiftDays, and leaves them as written by default", async () => {
+    const marinaEnd = async () =>
+      (
+        await prisma.tenancy.findFirstOrThrow({
+          where: { property: { building: "Marina Heights Tower", unitNo: "1204" } },
+        })
+      ).endDate.toISOString();
+
+    await runSeed({ adminEmail: "pilot@example.com" });
+    expect(await marinaEnd()).toBe("2026-09-15T00:00:00.000Z");
+
+    await resetDb();
+    await runSeed({ adminEmail: "pilot@example.com", shiftDays: 30 });
+    expect(await marinaEnd()).toBe("2026-10-15T00:00:00.000Z");
+
+    // The shift does not leak into the next unshifted run.
+    await resetDb();
+    await runSeed({ adminEmail: "pilot@example.com" });
+    expect(await marinaEnd()).toBe("2026-09-15T00:00:00.000Z");
+  });
+
   it("the tenant is a LINK-PARTY: a Contact with secure links, but NO user and NO membership", async () => {
     await runSeed({ adminEmail: "pilot@example.com" });
 

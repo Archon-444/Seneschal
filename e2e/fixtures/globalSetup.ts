@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import type { FullConfig } from "@playwright/test";
 import { Prisma, PrismaClient, type Role } from "@prisma/client";
 import { runSeed } from "../../src/server/seed";
+import { daysBetween, todayInDubai } from "../../src/server/calculators/dates";
 import { contextFromMembership } from "../../src/server/authz";
 import { sha256Hex } from "../../src/server/crypto";
 import {
@@ -185,7 +186,11 @@ async function advanceRenewal(
 export async function resetAndSeedE2E(baseURL: string) {
   await mkdir(authDir, { recursive: true });
   await resetTestDatabase();
-  await runSeed({ adminEmail: "operator@example.com" });
+  // The Linux visual baselines were captured on 22 Aug 2026. The demo seed uses
+  // fixed calendar dates, so shift them to keep today at that same distance;
+  // otherwise units drift into or out of the renewal window as time passes.
+  const shiftDays = daysBetween(new Date("2026-08-22"), todayInDubai());
+  await runSeed({ adminEmail: "operator@example.com", shiftDays });
 
   const workspace = await prisma.workspace.findFirstOrThrow({ where: { name: "Example", type: "FIDUCIARY" } });
   const client = await prisma.clientPrincipal.findFirstOrThrow({

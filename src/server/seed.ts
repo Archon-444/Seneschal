@@ -16,8 +16,14 @@ import { offerApprovalSnapshot } from "./services/approvals";
 // (SEED_ADMIN_EMAIL), carries no fabricated display name (the UI falls back to the
 // email), and the workspace name is derived from the login domain.
 
+// Days added to every fixed seed date. Real seeding leaves it at 0; the E2E
+// setup sets it so the demo portfolio keeps the same distance from today as on
+// the day the visual baselines were captured.
+let dateShiftDays = 0;
+
 function date(iso: string): Date {
-  return toUtcDateOnly(new Date(iso));
+  const d = toUtcDateOnly(new Date(iso));
+  return new Date(d.getTime() + dateShiftDays * 86_400_000);
 }
 
 async function findOrCreate<T>(find: () => Promise<T | null>, create: () => Promise<T>): Promise<T> {
@@ -160,7 +166,8 @@ export interface SeedResult {
   workspaces: { name: string; type: WorkspaceType }[];
 }
 
-export async function runSeed(opts?: { adminEmail?: string }): Promise<SeedResult> {
+export async function runSeed(opts?: { adminEmail?: string; shiftDays?: number }): Promise<SeedResult> {
+  dateShiftDays = opts?.shiftDays ?? 0;
   let proofLinkUrl: string | null = null;
   // ── Plan + workspace + users
   const plan = await prisma.plan.upsert({
