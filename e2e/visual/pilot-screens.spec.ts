@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { resetAndSeedE2E } from "../fixtures/globalSetup";
 import { readManifest } from "../fixtures/manifest";
@@ -42,21 +41,6 @@ async function snapshot(page: Page, name: string, options: { fullPage?: boolean 
   await stableDates(page);
   await expect(page).toHaveScreenshot(name, { ...options, mask: dynamicDateMasks(page) });
 }
-
-// TEMPORARY: print this run's actual renders into the job log so the Linux
-// baselines can be refreshed from CI's own browser. Removed in the next commit.
-test.afterEach(async ({}, testInfo) => {
-  if (testInfo.retry > 0) return;
-  for (const attachment of testInfo.attachments) {
-    if (!attachment.name.endsWith("-actual.png") || !attachment.path) continue;
-    const b64 = readFileSync(attachment.path).toString("base64");
-    const size = 50_000;
-    const total = Math.ceil(b64.length / size);
-    for (let i = 0; i < total; i++) {
-      console.log(`@@SNAP ${attachment.name} ${i + 1}/${total} ${b64.slice(i * size, (i + 1) * size)}`);
-    }
-  }
-});
 
 /** Wait until the route has painted real content, not the segment skeleton. */
 async function settled(page: Page, marker: string | RegExp) {
