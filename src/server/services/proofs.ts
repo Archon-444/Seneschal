@@ -10,6 +10,8 @@ import { inIds, resolveClientScopeIds } from "./clientScope";
 import { assertReadable, contactScopedWhere } from "./contactScope";
 import { assertDelegatePropertyId, clientSetScopedWhere, propertyIdOfScope } from "./delegateScope";
 import { todayInDubai } from "../calculators/dates";
+import type { LinkLang } from "@/lib/linkCopy";
+import { localizedNoticeVersion } from "@/lib/noticeLocale";
 
 // Proof requests (E7) — the core verb: ask an external party for evidence,
 // receive it without an account, keep the proof.
@@ -320,7 +322,7 @@ export async function submitProofViaLink(
   link: SecureLink,
   files: { fileName: string; mime: string; data: Buffer; kind?: DocumentKind }[],
   note?: string,
-  meta?: { ip?: string; device?: string },
+  meta?: { ip?: string; device?: string; noticeLang?: LinkLang },
 ) {
   if (link.purpose !== "PROOF_UPLOAD" || link.scopeType !== "PROOF_REQUEST") {
     throw new Error("Link is not a proof-upload link");
@@ -365,13 +367,15 @@ export async function submitProofViaLink(
   });
 
   if (link.contactId) {
+    // The notice version names the language the privacy notice was shown in.
+    const noticeVersion = localizedNoticeVersion(PRIVACY_NOTICE_VERSION, meta?.noticeLang);
     await prisma.consentRecord.create({
       data: {
         workspaceId: link.workspaceId,
         contactId: link.contactId,
         purpose: "LINK_INTERACTION",
         source: "SECURE_LINK",
-        noticeVersion: PRIVACY_NOTICE_VERSION,
+        noticeVersion,
         secureLinkId: link.id,
       },
     });
@@ -381,7 +385,7 @@ export async function submitProofViaLink(
       actorType: "TENANT_LINK",
       scopeType: "PROOF_REQUEST",
       scopeId: request.id,
-      payload: { contactId: link.contactId, noticeVersion: PRIVACY_NOTICE_VERSION },
+      payload: { contactId: link.contactId, noticeVersion },
     });
   }
 

@@ -1,5 +1,24 @@
 import { expect, test } from "@playwright/test";
 import { readManifest } from "../fixtures/manifest";
+import { expectNoSeriousA11yViolations } from "../fixtures/a11y";
+
+// Runs before the upload test below, which uses up the same link.
+test("proof link is bilingual by default and fully right-to-left in Arabic", async ({ page }) => {
+  const manifest = await readManifest();
+  await page.goto(manifest.links.validProof);
+  await expect(page.getByRole("heading", { name: "E2E proof of delivery" })).toBeVisible();
+  await expect(page.getByLabel("Photo or document")).toBeVisible();
+  await expect(page.getByText("صورة أو مستند")).toBeVisible();
+  await expectNoSeriousA11yViolations(page);
+
+  await page.getByRole("link", { name: "العربية" }).click();
+  await expect(page).toHaveURL(/lang=ar/);
+  await expect(page.locator('div[lang="ar"][dir="rtl"]').first()).toBeVisible();
+  await expect(page.getByLabel("صورة أو مستند")).toBeVisible();
+  await expect(page.getByRole("button", { name: "إرسال الإثبات" })).toBeVisible();
+  await expect(page.getByText("Photo or document")).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page);
+});
 
 test("valid proof link records a user-visible receipt without exposing its token", async ({ page }) => {
   const manifest = await readManifest();

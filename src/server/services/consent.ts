@@ -2,6 +2,8 @@ import type { ConsentSource, SecureLink } from "@prisma/client";
 import { prisma } from "../db";
 import { type AuthzContext, AuthzError, assertSameWorkspace, require_ } from "../authz";
 import { recordEvidence } from "../evidence";
+import type { LinkLang } from "@/lib/linkCopy";
+import { localizedNoticeVersion } from "@/lib/noticeLocale";
 
 // Messaging consent (PR4). MESSAGING consent gates WhatsApp delivery — nothing
 // reaches a recipient over WhatsApp without an active grant. Both subjects —
@@ -96,16 +98,19 @@ export async function hasActiveMessagingConsent(
   return rec != null;
 }
 
-/** Public — a tenant self-opts-in to messaging from a secure link. */
-export async function recordLinkMessagingOptIn(link: SecureLink): Promise<void> {
+/** Public — a tenant self-opts-in to messaging from a secure link. `lang` is
+ *  the language the opt-in text was shown in; it is recorded in the notice
+ *  version so the record names the exact wording agreed to. */
+export async function recordLinkMessagingOptIn(link: SecureLink, lang: LinkLang = "en"): Promise<void> {
   if (!link.contactId) return;
+  const noticeVersion = localizedNoticeVersion(MESSAGING_NOTICE_VERSION, lang);
   await prisma.consentRecord.create({
     data: {
       workspaceId: link.workspaceId,
       contactId: link.contactId,
       purpose: "MESSAGING",
       source: "WHATSAPP_OPTIN",
-      noticeVersion: MESSAGING_NOTICE_VERSION,
+      noticeVersion,
       secureLinkId: link.id,
     },
   });
@@ -115,6 +120,6 @@ export async function recordLinkMessagingOptIn(link: SecureLink): Promise<void> 
     actorType: "TENANT_LINK",
     scopeType: "WORKSPACE",
     scopeId: link.workspaceId,
-    payload: { purpose: "MESSAGING", contactId: link.contactId, viaLink: true },
+    payload: { purpose: "MESSAGING", contactId: link.contactId, viaLink: true, noticeVersion },
   });
 }

@@ -90,6 +90,26 @@ describe("proof request lifecycle", () => {
     expect(updated!.status).toBe("SUBMITTED");
   });
 
+  it("records which language the privacy notice was shown in", async () => {
+    const { request, token } = await makeRequestWithLink();
+    const v = await secureLinks.validateLinkToken(token);
+    if (!v.ok) throw new Error("link invalid");
+    await proofs.submitProofViaLink(
+      v.link,
+      [{ fileName: "slip.jpg", mime: "image/jpeg", data: Buffer.from("x") }],
+      undefined,
+      { noticeLang: "ar" },
+    );
+    const consent = await prisma.consentRecord.findFirst({ where: { contactId } });
+    expect(consent!.noticeVersion).toBe(`${proofs.PRIVACY_NOTICE_VERSION}+ar`);
+    const evidence = await prisma.evidenceEvent.findFirst({
+      where: { type: "CONSENT_GRANTED", scopeId: request.id },
+    });
+    expect((evidence!.payload as { noticeVersion: string }).noticeVersion).toBe(
+      `${proofs.PRIVACY_NOTICE_VERSION}+ar`,
+    );
+  });
+
   it("approve writes PROOF_APPROVED; reject re-opens with PROOF_REJECTED", async () => {
     const { request, token } = await makeRequestWithLink();
     const v = await secureLinks.validateLinkToken(token);

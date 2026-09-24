@@ -1,11 +1,24 @@
 "use client";
 
 import { useActionState } from "react";
-import { Field, FormStatus, inputClass } from "@/components/ui";
-import { decideApprovalAction, type ApprovalDecisionState } from "./actions";
 import { APPROVAL_COMMENT_MAX } from "@/lib/approvalLimits";
+import { COPY, errorPair, type LinkLang } from "@/lib/linkCopy";
+import { formatDubaiDateTime } from "@/server/calculators/dates";
+import { decideApprovalAction, type ApprovalDecisionState } from "./actions";
+import {
+  Bi,
+  ButtonLabel,
+  FieldLabel,
+  LinkError,
+  ReceiptBox,
+  ReceiptRow,
+  linkInputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  valueLocale,
+} from "./parts";
 
-export function ApprovalForm({ token }: { token: string }) {
+export function ApprovalForm({ token, lang }: { token: string; lang: LinkLang }) {
   const [state, formAction, pending] = useActionState(
     decideApprovalAction,
     { status: "idle" } as ApprovalDecisionState,
@@ -13,45 +26,41 @@ export function ApprovalForm({ token }: { token: string }) {
 
   if (state.status === "done") {
     return (
-      <div className="space-y-2 rounded-md bg-verde-100 p-4 text-sm text-verde-700">
-        <p className="font-semibold">
-          {state.decision === "APPROVED"
-            ? "Thank you — your approval has been recorded."
-            : "Thank you — your decision to reject has been recorded."}
+      <ReceiptBox>
+        <p className="font-semibold text-onfile">
+          <Bi pair={state.decision === "APPROVED" ? COPY.approvedTitle : COPY.rejectedTitle} lang={lang} />
         </p>
-        {state.comment && (
-          <p className="border-l-2 border-verde-500/40 pl-2 italic">“{state.comment}”</p>
-        )}
-        <p>The managing office will see this on the record. You can close this page.</p>
-      </div>
+        <div className="space-y-1.5">
+          <ReceiptRow label={COPY.receiptRecorded} lang={lang}>
+            <span className="figure">{formatDubaiDateTime(new Date(state.recordedAt), valueLocale(lang))}</span>
+          </ReceiptRow>
+          {state.comment && (
+            <ReceiptRow label={COPY.receiptNote} lang={lang}>
+              <span dir="auto">“{state.comment}”</span>
+            </ReceiptRow>
+          )}
+        </div>
+        <p>
+          <Bi pair={COPY.approvalAfter} lang={lang} />
+        </p>
+      </ReceiptBox>
     );
   }
 
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="token" value={token} />
-      <Field label="Note (optional)">
-        <textarea name="comment" rows={2} maxLength={APPROVAL_COMMENT_MAX} className={inputClass} />
-      </Field>
-      {state.status === "error" && <FormStatus error={state.message} />}
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="submit"
-          name="decision"
-          value="APPROVED"
-          disabled={pending}
-          className="rounded-md bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50"
-        >
-          {pending ? "Recording…" : "Approve"}
+      <div>
+        <FieldLabel pair={COPY.noteOptional} lang={lang} htmlFor="approval-comment" />
+        <textarea id="approval-comment" name="comment" rows={3} maxLength={APPROVAL_COMMENT_MAX} className={linkInputClass} />
+      </div>
+      {state.status === "error" && <LinkError pair={errorPair(state.message)} lang={lang} />}
+      <div className="space-y-2.5">
+        <button type="submit" name="decision" value="APPROVED" disabled={pending} className={primaryButtonClass}>
+          <ButtonLabel pair={pending ? COPY.recording : COPY.approve} lang={lang} />
         </button>
-        <button
-          type="submit"
-          name="decision"
-          value="REJECTED"
-          disabled={pending}
-          className="rounded-md border border-ivory-300 py-3 text-sm font-medium text-navy-700 hover:bg-ivory-100 disabled:opacity-50"
-        >
-          Reject
+        <button type="submit" name="decision" value="REJECTED" disabled={pending} className={secondaryButtonClass}>
+          <ButtonLabel pair={COPY.reject} lang={lang} />
         </button>
       </div>
     </form>

@@ -292,6 +292,23 @@ describe("tenant secure-response link", () => {
     expect(after?.indexCapturedAt?.getTime()).toBe(citedAt); // same captured date
   });
 
+  it("carries the frozen index-indicated maximum and the current lease end to the tenant view", async () => {
+    // 72,000 against an index average of 96,000 is 25% below: Decree 43 band 10%, maximum 79,200.
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 96_000 });
+    const { offer } = await landlordOffer();
+    const { linkId } = await createSecureLink(W.ctx, { purpose: "TENANT_OFFER", scopeType: "OFFER", scopeId: offer.id });
+    const link = await prisma.secureLink.findUnique({ where: { id: linkId } });
+
+    const view = await getOfferForLink(link!);
+    expect(view?.permittedMax).toBe(79_200);
+    const tenancy = await prisma.tenancy.findUniqueOrThrow({ where: { id: tenancyId } });
+    expect(view?.currentEndDate.getTime()).toBe(tenancy.endDate.getTime());
+
+    // A later capture that would raise the maximum does not move the offer's frozen figure.
+    await captureRentIndex(W.ctx, { tenancyId, marketRentAvg: 130_000 });
+    expect((await getOfferForLink(link!))?.permittedMax).toBe(79_200);
+  });
+
   it("lets a tenant counter via the link — a real versioned TENANT offer", async () => {
     const { rc, offer } = await landlordOffer();
     const { linkId } = await createSecureLink(W.ctx, { purpose: "TENANT_OFFER", scopeType: "OFFER", scopeId: offer.id });
