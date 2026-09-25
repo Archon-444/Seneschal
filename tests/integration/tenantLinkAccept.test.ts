@@ -5,6 +5,7 @@ import * as contacts from "@/server/services/contacts";
 import * as properties from "@/server/services/properties";
 import * as tenancies from "@/server/services/tenancies";
 import * as renewals from "@/server/services/renewals";
+import * as consent from "@/server/services/consent";
 
 // F2 (audit) — the anonymous tenant-link ACCEPT must not resurrect a superseded
 // offer. respondToOfferViaLink is pinned to the offer version the link was minted
@@ -108,5 +109,25 @@ describe("anonymous tenant-link ACCEPT hardening (F2)", () => {
     });
     const accepted = await prisma.offer.count({ where: { renewalCaseId, status: "ACCEPTED" } });
     expect(accepted).toBe(1);
+  });
+});
+
+describe("WhatsApp opt-in from the tenant link records the language shown", () => {
+  it("keeps the bare notice version for English and suffixes Arabic and bilingual renditions", async () => {
+    const { link } = await openCaseAndSend();
+    await consent.recordLinkMessagingOptIn(link);
+    await consent.recordLinkMessagingOptIn(link, "both");
+    await consent.recordLinkMessagingOptIn(link, "ar");
+    const records = await prisma.consentRecord.findMany({
+      where: { secureLinkId: link.id, purpose: "MESSAGING" },
+      orderBy: { grantedAt: "asc" },
+    });
+    expect(records.map((r) => r.noticeVersion).sort()).toEqual(
+      [
+        consent.MESSAGING_NOTICE_VERSION,
+        `${consent.MESSAGING_NOTICE_VERSION}+ar`,
+        `${consent.MESSAGING_NOTICE_VERSION}+en-ar`,
+      ].sort(),
+    );
   });
 });

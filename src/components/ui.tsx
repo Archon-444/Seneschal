@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatDubaiDate, formatDubaiDateTime } from "@/server/calculators/dates";
+import { formatAed } from "@/lib/money";
 import { badgeTone, BADGE_LABELS } from "./badgeTones";
 
 // Shared UI primitives — Seneschal design language: ivory surfaces, navy ink,
@@ -312,9 +313,8 @@ export function Field({
 export const inputClass =
   "w-full rounded-lg border border-line bg-ivory-100 px-3 py-2.5 text-sm text-navy-900 focus:border-gold-500 focus:bg-white focus:outline-none";
 
-export function Money({ amount }: { amount: string | number }) {
-  const n = typeof amount === "string" ? Number(amount) : amount;
-  return <span className="figure">AED {n.toLocaleString("en-AE", { minimumFractionDigits: 0 })}</span>;
+export function Money({ amount, locale = "en" }: { amount: string | number; locale?: "en" | "ar" }) {
+  return <span className="figure">{formatAed(amount, locale)}</span>;
 }
 
 /** Server-rendered search box: a GET form that sets ?q= on the current page. */

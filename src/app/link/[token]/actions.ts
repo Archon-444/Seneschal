@@ -20,6 +20,7 @@ import {
   MAX_UPLOAD_TOTAL_LABEL,
 } from "@/lib/uploadLimits";
 import { APPROVAL_COMMENT_MAX } from "@/lib/approvalLimits";
+import { parseLinkLang } from "@/lib/linkCopy";
 
 // Success states echo back WHAT was submitted so the external party gets a
 // concrete receipt, not a generic thank-you. They must never carry the link
@@ -37,12 +38,14 @@ export type OfferResponseState =
       annualRent?: number;
       paymentSchedule?: string;
       note?: string;
+      /** Server time the answer was recorded, for the receipt. */
+      recordedAt: string;
     }
   | { status: "error"; message: string };
 
 export type ApprovalDecisionState =
   | { status: "idle" }
-  | { status: "done"; decision: "APPROVED" | "REJECTED"; comment?: string }
+  | { status: "done"; decision: "APPROVED" | "REJECTED"; comment?: string; recordedAt: string }
   | { status: "error"; message: string };
 
 export async function decideApprovalAction(
@@ -77,7 +80,7 @@ export async function decideApprovalAction(
     if (status === 409) return { status: "error", message: "This decision has already been recorded." };
     return { status: "error", message: "This link is no longer available." };
   }
-  return { status: "done", decision, comment };
+  return { status: "done", decision, comment, recordedAt: new Date().toISOString() };
 }
 
 export async function respondToOfferAction(
@@ -108,7 +111,8 @@ export async function respondToOfferAction(
   }
   if (String(formData.get("optIn") ?? "") === "on") {
     try {
-      await recordLinkMessagingOptIn(validation.link);
+      // Record the opt-in against the wording the tenant was shown.
+      await recordLinkMessagingOptIn(validation.link, parseLinkLang(formData.get("lang")));
     } catch {
       /* opt-in is best-effort; never fail the response on it */
     }
@@ -119,6 +123,7 @@ export async function respondToOfferAction(
     annualRent: rent ? Number(rent) : undefined,
     paymentSchedule,
     note,
+    recordedAt: new Date().toISOString(),
   };
 }
 
@@ -192,6 +197,8 @@ export async function submitProofAction(_prev: SubmitState, formData: FormData):
     {
       ip: h.get("x-forwarded-for") ?? undefined,
       device: h.get("user-agent") ?? undefined,
+      // The privacy notice consented to is the one in the language shown.
+      noticeLang: parseLinkLang(formData.get("lang")),
     },
   );
   return { status: "done", fileNames: files.map((f) => f.name) };

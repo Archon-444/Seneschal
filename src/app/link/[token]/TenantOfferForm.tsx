@@ -1,98 +1,140 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Field, FormStatus, inputClass, Money } from "@/components/ui";
+import { COPY, errorPair, type LinkLang } from "@/lib/linkCopy";
+import { formatAed } from "@/lib/money";
+import { formatDubaiDateTime } from "@/server/calculators/dates";
 import { respondToOfferAction, type OfferResponseState } from "./actions";
+import {
+  Bi,
+  ButtonLabel,
+  FieldLabel,
+  LinkError,
+  ReceiptBox,
+  ReceiptRow,
+  linkInputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  valueLocale,
+} from "./parts";
 
-export function TenantOfferForm({ token }: { token: string }) {
+export function TenantOfferForm({ token, lang, version }: { token: string; lang: LinkLang; version: number }) {
   const [state, formAction, pending] = useActionState(
     respondToOfferAction,
     { status: "idle" } as OfferResponseState,
   );
   const [mode, setMode] = useState<"choose" | "counter" | "ask">("choose");
+  const loc = valueLocale(lang);
 
   if (state.status === "done") {
-    // Echo the response back as a receipt — the tenant should see exactly
-    // what was recorded, not just that "something" was.
+    // Echo the response back as a receipt: the tenant sees exactly what was
+    // recorded, when, and against which offer version.
+    const title =
+      state.action === "ACCEPT" ? COPY.acceptedTitle : state.action === "COUNTER" ? COPY.counteredTitle : COPY.askedTitle;
+    const answer =
+      state.action === "ACCEPT" ? COPY.answerAccepted : state.action === "COUNTER" ? COPY.answerCountered : COPY.answerAsked;
     return (
-      <div className="space-y-2 rounded-md bg-verde-100 p-4 text-sm text-verde-700">
-        <p className="font-semibold">
-          {state.action === "ACCEPT"
-            ? "Thank you — your acceptance has been recorded."
-            : state.action === "COUNTER"
-              ? "Thank you — your counter-proposal has been sent and recorded."
-              : "Thank you — your question has been sent to the managing office."}
+      <ReceiptBox>
+        <p className="font-semibold text-onfile">
+          <Bi pair={title} lang={lang} />
         </p>
-        {state.action === "COUNTER" && state.annualRent != null && (
-          <p>
-            You proposed <Money amount={state.annualRent} />
-            {state.paymentSchedule ? ` · ${state.paymentSchedule}` : ""}.
-          </p>
-        )}
-        {state.note && (
-          <p className="border-l-2 border-verde-500/40 pl-2 italic">“{state.note}”</p>
-        )}
+        <div className="space-y-1.5">
+          <ReceiptRow label={COPY.receiptAnswer} lang={lang}>
+            <Bi pair={answer} lang={lang === "both" ? "en" : lang} />
+          </ReceiptRow>
+          <ReceiptRow label={COPY.receiptOffer} lang={lang}>
+            <span className="figure">v{version}</span>
+          </ReceiptRow>
+          <ReceiptRow label={COPY.receiptRecorded} lang={lang}>
+            <span className="figure">{formatDubaiDateTime(new Date(state.recordedAt), loc)}</span>
+          </ReceiptRow>
+          {state.action === "COUNTER" && state.annualRent != null && (
+            <ReceiptRow label={COPY.receiptProposed} lang={lang}>
+              <span className="figure">{formatAed(state.annualRent, loc)}</span>
+              {state.paymentSchedule ? ` · ${state.paymentSchedule}` : ""}
+            </ReceiptRow>
+          )}
+          {state.note && (
+            <ReceiptRow label={COPY.receiptNote} lang={lang}>
+              <span dir="auto">“{state.note}”</span>
+            </ReceiptRow>
+          )}
+        </div>
         <p>
-          {state.action === "ACCEPT"
-            ? "The managing office will be in touch to finalise."
-            : "The managing office will come back to you on this."}
+          <Bi pair={state.action === "ACCEPT" ? COPY.afterAccept : COPY.afterOther} lang={lang} />
         </p>
-      </div>
+        <p className="text-ink-muted">
+          <Bi pair={COPY.receiptKeep} lang={lang} />
+        </p>
+      </ReceiptBox>
     );
   }
 
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="token" value={token} />
+      <input type="hidden" name="lang" value={lang} />
 
       {mode === "counter" && (
-        <div className="space-y-3 rounded-md border border-ivory-300 bg-ivory-100 p-4">
-          <Field label="Your proposed annual rent (AED)" required>
-            <input name="annualRent" type="number" min="1" step="1" required className={inputClass} />
-          </Field>
-          <Field label="Payment schedule" required>
-            <input name="paymentSchedule" required placeholder="e.g. 2 cheques" className={inputClass} />
-          </Field>
+        <div className="space-y-3 rounded-md border border-sheet-line bg-desk/50 p-4">
+          <div>
+            <FieldLabel pair={COPY.counterRent} lang={lang} htmlFor="offer-rent" />
+            <input id="offer-rent" name="annualRent" type="number" min="1" step="1" required inputMode="numeric" className={`${linkInputClass} figure`} />
+          </div>
+          <div>
+            <FieldLabel pair={COPY.paymentSchedule} lang={lang} htmlFor="offer-schedule" />
+            <input
+              id="offer-schedule"
+              name="paymentSchedule"
+              required
+              placeholder={lang === "ar" ? COPY.paymentPlaceholder.ar : COPY.paymentPlaceholder.en}
+              className={linkInputClass}
+            />
+          </div>
         </div>
       )}
 
       {(mode === "counter" || mode === "ask") && (
-        <Field label={mode === "ask" ? "Your question" : "Note (optional)"} required={mode === "ask"}>
-          <textarea name="note" rows={2} required={mode === "ask"} className={inputClass} />
-        </Field>
+        <div>
+          <FieldLabel pair={mode === "ask" ? COPY.yourQuestion : COPY.noteOptional} lang={lang} htmlFor="offer-note" />
+          <textarea id="offer-note" name="note" rows={3} required={mode === "ask"} className={linkInputClass} />
+        </div>
       )}
 
-      <label className="flex items-start gap-2 text-xs text-navy-500">
-        <input type="checkbox" name="optIn" className="mt-0.5" />
-        <span>You may contact me on WhatsApp about this renewal.</span>
+      <label className="flex min-h-11 items-start gap-3 text-sm text-ink-soft">
+        <input type="checkbox" name="optIn" className="mt-0.5 h-5 w-5 shrink-0 accent-ink" />
+        <span>
+          <Bi pair={COPY.whatsappOptIn} lang={lang} />
+        </span>
       </label>
 
-      {state.status === "error" && <FormStatus error={state.message} />}
+      {state.status === "error" && <LinkError pair={errorPair(state.message)} lang={lang} />}
 
       {mode === "choose" ? (
-        <div className="grid grid-cols-3 gap-2">
-          <button type="submit" name="action" value="ACCEPT" disabled={pending}
-            className="rounded-md bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50">
-            Accept
+        <div className="space-y-2.5">
+          <button type="submit" name="action" value="ACCEPT" disabled={pending} className={primaryButtonClass}>
+            <ButtonLabel pair={pending ? COPY.sending : COPY.accept} lang={lang} />
           </button>
-          <button type="button" onClick={() => setMode("counter")}
-            className="rounded-md bg-gold-100 py-3 text-sm font-medium text-gold-700 hover:brightness-95">
-            Counter
+          <button type="button" onClick={() => setMode("counter")} className={secondaryButtonClass}>
+            <ButtonLabel pair={COPY.counter} lang={lang} />
           </button>
-          <button type="button" onClick={() => setMode("ask")}
-            className="rounded-md border border-ivory-300 py-3 text-sm font-medium text-navy-700 hover:bg-ivory-100">
-            Ask
+          <button type="button" onClick={() => setMode("ask")} className={secondaryButtonClass}>
+            <ButtonLabel pair={COPY.ask} lang={lang} />
           </button>
         </div>
       ) : (
-        <div className="flex gap-2">
-          <button type="submit" name="action" value={mode === "counter" ? "COUNTER" : "ASK"} disabled={pending}
-            className="flex-1 rounded-md bg-navy-800 py-3 text-sm font-medium text-ivory-50 hover:bg-navy-700 disabled:opacity-50">
-            {pending ? "Sending…" : mode === "counter" ? "Send counter" : "Send question"}
+        <div className="space-y-2.5">
+          <button
+            type="submit"
+            name="action"
+            value={mode === "counter" ? "COUNTER" : "ASK"}
+            disabled={pending}
+            className={primaryButtonClass}
+          >
+            <ButtonLabel pair={pending ? COPY.sending : mode === "counter" ? COPY.sendCounter : COPY.sendQuestion} lang={lang} />
           </button>
-          <button type="button" onClick={() => setMode("choose")}
-            className="rounded-md border border-ivory-300 px-4 py-3 text-sm text-navy-500 hover:bg-ivory-100">
-            Back
+          <button type="button" onClick={() => setMode("choose")} className={secondaryButtonClass}>
+            <ButtonLabel pair={COPY.back} lang={lang} />
           </button>
         </div>
       )}

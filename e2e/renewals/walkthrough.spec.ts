@@ -65,7 +65,7 @@ test.fixme("operator completes the renewal loop and can inspect the successor ev
   });
 
   await page.goto(`/link/${rawToken}`);
-  await expect(page.getByRole("heading", { name: "Renewal proposal" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Renewal offer" })).toBeVisible();
   await expect(page.getByText("AED 84,000").first()).toBeVisible();
   await page.getByRole("button", { name: "Accept" }).click();
   await expect(page.getByText(/acceptance has been recorded/i)).toBeVisible();

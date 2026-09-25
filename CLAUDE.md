@@ -14,7 +14,9 @@ Use the **`frontend-design`** skill (`.claude/skills/frontend-design`) when buil
   - Ink: `navy-900` (primary) · `navy-500` (secondary) · `muted` (#6b7385)
   - Accent: `gold-500` (accent) / `gold-700` (text on tint) / `gold-100` (tint)
   - Semantic: `verde` = good · `amber` = in-progress/warn · `claret` = risk/danger
-- **Reuse the kit** in `src/components/ui.tsx` (`PageHeader`, `Card`, `KpiCard`, `Badge`, `Table`/`Td`, `Money`, `Field`, `inputClass`, `SearchForm`…) and `formatDubaiDate` / `todayInDubai` from `src/server/calculators/dates.ts`. Don't hand-roll a second money or date formatter.
+- **Direction (Sep 2026)**: the product is moving to the **Record** look: grey-green desk, white sheets, Zilla Slab titles, Public Sans text, IBM Plex Mono figures, one violet seal colour. Custody's Desk becomes the home screen, and Horizon's tenancy lifeline goes on tenancy pages (design canvas "Seneschal UX Directions"). The public secure-link pages (`src/app/link`) use it already: tokens `desk`, `sheet-line`, `rule`, `ink`/`ink-soft`/`ink-muted`, `seal`, `onfile`, `gap` in `globals.css`; shared pieces in `src/app/link/[token]/parts.tsx`. Move operator screens in dedicated PRs, not piecemeal.
+- **Link pages are bilingual** (English + Arabic by default; `?lang=en|ar` narrows). Copy lives in `src/lib/linkCopy.ts` as `{en, ar}` pairs; renewal-figure wording goes through `renderTenantOfferPositionNote` (compliance gate). Consent writes record the language shown via `localizedNoticeVersion`, so keep the English notice text verbatim. The Arabic still needs a native speaker's review.
+- **Reuse the kit** in `src/components/ui.tsx` (`PageHeader`, `Card`, `KpiCard`, `Badge`, `Table`/`Td`, `Money`, `Field`, `inputClass`, `SearchForm`…) and `formatDubaiDate` / `todayInDubai` from `src/server/calculators/dates.ts` (both date formatters take an `"ar"` locale). Money text goes through `formatAed` in `src/lib/money.ts`. Don't hand-roll a second money or date formatter.
 
 ## Engineering non-negotiables (the parts that actually have to be right)
 

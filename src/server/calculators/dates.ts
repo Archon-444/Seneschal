@@ -89,8 +89,18 @@ export function todayInDubai(now: Date = new Date()): Date {
   return toUtcDateOnly(shifted);
 }
 
-/** Display formatting in Dubai local convention (dd MMM yyyy). */
-export function formatDubaiDate(d: Date): string {
+/** Display formatting in Dubai local convention (dd MMM yyyy). `ar` renders the
+ *  Arabic month name with Latin digits, as UAE documents do: "16 يناير 2027". */
+export function formatDubaiDate(d: Date, locale: "en" | "ar" = "en"): string {
+  if (locale === "ar") {
+    return toUtcDateOnly(d).toLocaleDateString("ar-AE", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+      numberingSystem: "latn",
+    });
+  }
   return toUtcDateOnly(d).toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -107,14 +117,9 @@ export function formatDubaiDate(d: Date): string {
  * including when the instant crosses midnight into the next Dubai day.
  * Display-only: never feed this back into date arithmetic.
  */
-export function formatDubaiDateTime(d: Date): string {
+export function formatDubaiDateTime(d: Date, locale: "en" | "ar" = "en"): string {
   const shifted = new Date(d.getTime() + 4 * 60 * 60 * 1000);
-  const datePart = toUtcDateOnly(shifted).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  const datePart = formatDubaiDate(shifted, locale);
   const hh = String(shifted.getUTCHours()).padStart(2, "0");
   const mm = String(shifted.getUTCMinutes()).padStart(2, "0");
   return `${datePart}, ${hh}:${mm}`;

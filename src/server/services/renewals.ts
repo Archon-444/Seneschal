@@ -1028,10 +1028,20 @@ export interface TenantOfferView {
   indexSourceLabel: string | null;
   /** The cited figure is a manual concierge estimate, not an official source. */
   indexProvisional: boolean;
+  /** Which index the citation came from (IndexSource), when recorded. */
+  indexSourceKind: string | null;
+  /** The index-indicated maximum frozen on the offer when it was sent. */
+  permittedMax: number | null;
+  /** Last day of the current tenancy. */
+  currentEndDate: Date;
+  /** Proposed term, when the offer carries dates. */
+  proposedStartDate: Date | null;
+  proposedEndDate: Date | null;
 }
 
 interface OfferIndexCitation {
   source?: string;
+  indexSource?: string;
   capturedAt?: string;
   marketRentAvg?: number;
   provisional?: boolean;
@@ -1069,6 +1079,11 @@ export async function getOfferForLink(link: SecureLink): Promise<TenantOfferView
     indexCapturedAt: citation?.capturedAt ? new Date(citation.capturedAt) : null,
     indexSourceLabel: citation?.source ?? null,
     indexProvisional: citation?.provisional ?? false,
+    indexSourceKind: citation?.indexSource ?? null,
+    permittedMax: offer.permittedMaxSnapshot != null ? Number(offer.permittedMaxSnapshot) : null,
+    currentEndDate: tenancy.endDate,
+    proposedStartDate: offer.proposedStartDate ?? offer.startDate ?? null,
+    proposedEndDate: offer.proposedEndDate ?? null,
   };
 }
 

@@ -4,6 +4,8 @@
 // renewalCopy.test.ts catches a non-compliant addition before it ships.
 
 import { assertRenewalCopyCompliant } from "./renewalCopy";
+import { formatAed } from "@/lib/money";
+import type { Pair } from "@/lib/linkCopy";
 
 export interface NoticeTemplateInput {
   unit: string;
@@ -15,7 +17,7 @@ export interface NoticeTemplateInput {
 }
 
 function aed(n: number): string {
-  return `AED ${n.toLocaleString("en-AE")}`;
+  return formatAed(n);
 }
 
 /**
@@ -66,6 +68,101 @@ export function renderTenantOfferSummary(input: OfferLinkSummaryInput): string {
   return body;
 }
 
+export interface TenantOfferPositionInput {
+  proposedRent: number;
+  currentRent: number;
+  /** The offer's frozen permittedMaxSnapshot, or null when none was attached. */
+  indexIndicatedMaximum: number | null;
+  /** The frozen citation's market average, or null. */
+  indexAverage: number | null;
+  /** Capture date, already formatted per language. */
+  capturedOn: Pair | null;
+  /** Source name per language, e.g. "Smart Rental Index". */
+  sourceName: Pair;
+  /** A manual concierge estimate rather than an official index figure. */
+  provisional: boolean;
+}
+
+/**
+ * The note under the tenant offer's terms: where the offer sits against the
+ * index-indicated maximum, what that figure rests on, and the review cue. The
+ * English is the reference text and runs through the gate; the Arabic mirrors
+ * it sentence for sentence with the same hedges ("استرشادي", "للاسترشاد فقط").
+ */
+export function renderTenantOfferPositionNote(input: TenantOfferPositionInput): Pair {
+  const ar = (n: number) => formatAed(n, "ar");
+  const max = input.indexIndicatedMaximum;
+  const avg = input.indexAverage;
+  const date = input.capturedOn ?? { en: "the recorded date", ar: "التاريخ المسجَّل" };
+  const en: string[] = [];
+  const arabic: string[] = [];
+
+  if (max != null) {
+    const diff = input.proposedRent - max;
+    if (diff < 0) {
+      en.push(`This offer is ${aed(-diff)} below the index-indicated maximum of ${aed(max)} from the Decree 43 band.`);
+      arabic.push(`هذا العرض أقل بمبلغ ${ar(-diff)} من الحد الأقصى الاسترشادي البالغ ${ar(max)} وفق شريحة المرسوم رقم 43.`);
+    } else if (diff === 0) {
+      en.push(`This offer equals the index-indicated maximum of ${aed(max)} from the Decree 43 band.`);
+      arabic.push(`هذا العرض يساوي الحد الأقصى الاسترشادي البالغ ${ar(max)} وفق شريحة المرسوم رقم 43.`);
+    } else {
+      en.push(
+        `This offer is ${aed(diff)} above the index-indicated maximum of ${aed(max)} from the Decree 43 band. ` +
+          `You may want to ask about it before you answer.`,
+      );
+      arabic.push(
+        `هذا العرض أعلى بمبلغ ${ar(diff)} من الحد الأقصى الاسترشادي البالغ ${ar(max)} وفق شريحة المرسوم رقم 43. ` +
+          `قد ترغب في الاستفسار عن ذلك قبل الرد.`,
+      );
+    }
+    if (avg != null && input.provisional) {
+      en.push(
+        `That maximum uses a provisional estimate of ${aed(avg)} recorded by the managing office and captured on ${date.en}, not an official index figure.`,
+      );
+      arabic.push(`يستند هذا الحد إلى تقدير مبدئي بقيمة ${ar(avg)} سجّله مكتب الإدارة بتاريخ ${date.ar}، وليس رقماً رسمياً من المؤشر.`);
+    } else if (avg != null) {
+      const gap = (avg - input.currentRent) / avg;
+      const gapText = (gap * 100).toFixed(1);
+      en.push(
+        gap > 0
+          ? `That maximum uses the ${input.sourceName.en} average of ${aed(avg)}, captured on ${date.en}; your current rent is ${gapText}% below it.`
+          : `That maximum uses the ${input.sourceName.en} average of ${aed(avg)}, captured on ${date.en}; your current rent is at or above that average.`,
+      );
+      arabic.push(
+        gap > 0
+          ? `يستند هذا الحد إلى متوسط ${input.sourceName.ar} البالغ ${ar(avg)}، المسجَّل بتاريخ ${date.ar}، وإيجارك الحالي أقل منه بنسبة ${gapText}%.`
+          : `يستند هذا الحد إلى متوسط ${input.sourceName.ar} البالغ ${ar(avg)}، المسجَّل بتاريخ ${date.ar}، وإيجارك الحالي يساوي هذا المتوسط أو يزيد عليه.`,
+      );
+    } else {
+      en.push(`That maximum comes from an index capture recorded by the managing office.`);
+      arabic.push(`يستند هذا الحد إلى رقم من المؤشر سجّله مكتب الإدارة.`);
+    }
+  } else if (avg != null) {
+    en.push(`The Decree 43 band reference figure is not attached to this offer. The index average shown above was captured on ${date.en}.`);
+    arabic.push(`لم يُرفق بهذا العرض رقم مرجعي لشريحة المرسوم رقم 43. تم تسجيل متوسط المؤشر المعروض أعلاه بتاريخ ${date.ar}.`);
+  } else {
+    en.push(`The Decree 43 band reference figure is not attached to this offer, as no index figure was captured for it.`);
+    arabic.push(`لم يُرفق بهذا العرض رقم مرجعي لشريحة المرسوم رقم 43، إذ لم يُسجَّل له أي رقم من المؤشر.`);
+  }
+
+  en.push(`Based on supplied data and for reference only: review official sources before you answer.`);
+  arabic.push(`مبني على البيانات المقدّمة وللاسترشاد فقط: يرجى مراجعة المصادر الرسمية قبل الرد.`);
+
+  const body = en.join(" ");
+  assertRenewalCopyCompliant(body);
+  return { en: body, ar: arabic.join(" ") };
+}
+
+const POSITION_FIXTURE: TenantOfferPositionInput = {
+  proposedRent: 78_000,
+  currentRent: 72_000,
+  indexIndicatedMaximum: 79_200,
+  indexAverage: 96_000,
+  capturedOn: { en: "28 Aug 2026", ar: "28 أغسطس 2026" },
+  sourceName: { en: "Smart Rental Index", ar: "مؤشر الإيجارات الذكي" },
+  provisional: false,
+};
+
 /** Registry used by the compliance test — every template fixture rendered here
  *  is checked against the gate. */
 export const RENEWAL_TEMPLATE_RENDERERS = [
@@ -90,5 +187,32 @@ export const RENEWAL_TEMPLATE_RENDERERS = [
         indexIndicatedMaximum: 84_000,
         capturedOn: "2026-06-01",
       }),
+  },
+  { code: "tenant_offer_position_below_v1", render: () => renderTenantOfferPositionNote(POSITION_FIXTURE).en },
+  {
+    code: "tenant_offer_position_equal_v1",
+    render: () => renderTenantOfferPositionNote({ ...POSITION_FIXTURE, proposedRent: 79_200 }).en,
+  },
+  {
+    code: "tenant_offer_position_above_v1",
+    render: () => renderTenantOfferPositionNote({ ...POSITION_FIXTURE, proposedRent: 82_000 }).en,
+  },
+  {
+    code: "tenant_offer_position_provisional_v1",
+    render: () => renderTenantOfferPositionNote({ ...POSITION_FIXTURE, provisional: true }).en,
+  },
+  {
+    code: "tenant_offer_position_no_maximum_v1",
+    render: () => renderTenantOfferPositionNote({ ...POSITION_FIXTURE, indexIndicatedMaximum: null }).en,
+  },
+  {
+    code: "tenant_offer_position_no_index_v1",
+    render: () =>
+      renderTenantOfferPositionNote({
+        ...POSITION_FIXTURE,
+        indexIndicatedMaximum: null,
+        indexAverage: null,
+        capturedOn: null,
+      }).en,
   },
 ] as const;
